@@ -1,9 +1,20 @@
-use axum::{Router, routing::post};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
 use super::handlers;
+use crate::{config::Config, state::AppState};
 
 pub async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
-    let router = Router::new().route("/dial", post(handlers::dial));
+    let config = Config::from_env()?;
+    let state = AppState::new(config);
+
+    let router = Router::new()
+        .route("/dial", post(handlers::dial))
+        .route("/audioStream", get(handlers::audio_stream))
+        .route("/twilio/status", post(handlers::twilio_status))
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
     println!("listening on http://{}", listener.local_addr()?);

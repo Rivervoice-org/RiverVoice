@@ -23,23 +23,23 @@ pub struct RetryPolicy {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Validate)]
 pub struct ConfigRules {
     #[garde(skip)]
-    retry_on: RetryOn,
+    pub retry_on: RetryOn,
     #[garde(dive)]
-    retry_policy: RetryPolicy,
+    pub retry_policy: RetryPolicy,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct CallRetryConfig {
     #[garde(length(max = 6), dive)]
-    rules: Vec<ConfigRules>,
+    pub rules: Vec<ConfigRules>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CallPayload {
     #[garde(length(min = 7, max = 20))]
-    phone_number: String,
+    pub phone_number: String,
     #[garde(length(min = 1, max = 4000))]
-    prompt: String,
+    pub prompt: String,
     #[garde(dive)]
-    config: CallRetryConfig,
+    pub config: CallRetryConfig,
 }
