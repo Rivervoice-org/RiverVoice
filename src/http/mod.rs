@@ -1,2 +1,3 @@
-pub mod types;
+pub mod handlers;
 pub mod http;
+pub mod types;

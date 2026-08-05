@@ -1,4 +1,5 @@
 mod http;
+mod retry;
 
 #[tokio::main]
 async fn main() {
