@@ -35,4 +35,6 @@ yarn-error.log*
 
 # editor
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json

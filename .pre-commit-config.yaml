@@ -1,0 +1,29 @@
+repos:
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier (web)
+        entry: prettier --write --ignore-path web/.prettierignore
+        language: node
+        additional_dependencies: ["prettier@3.9.6"]
+        files: ^web/.*\.(ts|tsx|js|jsx|mjs|css|json|md)$
+
+      - id: rustfmt
+        name: rustfmt (shutter)
+        entry: rustfmt --edition 2024
+        language: system
+        files: ^shutter/.*\.rs$
+
+      - id: gofmt
+        name: gofmt (anchor)
+        entry: gofmt -l -w
+        language: system
+        files: ^anchor/.*\.go$
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: check-added-large-files

@@ -69,7 +69,10 @@ impl WsDialect for Sarvam {
             }),
 
             "session.end" => {
-                println!("sarvam session ended, billed {}s", message["audio_duration_s"]);
+                println!(
+                    "sarvam session ended, billed {}s",
+                    message["audio_duration_s"]
+                );
                 DialectEvent::Ended
             }
 

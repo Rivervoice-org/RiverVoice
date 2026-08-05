@@ -151,10 +151,8 @@ impl TelephonyProvider for TwilioProvider {
     }
 
     fn parse_status(&self, raw: &str) -> Option<CallStatus> {
-        let status: TwilioCallStatus = serde_json::from_value(serde_json::Value::String(
-            raw.to_string(),
-        ))
-        .ok()?;
+        let status: TwilioCallStatus =
+            serde_json::from_value(serde_json::Value::String(raw.to_string())).ok()?;
 
         Some(status.into())
     }

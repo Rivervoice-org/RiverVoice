@@ -1,0 +1,20 @@
+{
+  "editor.formatOnSave": true,
+
+  "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[markdown]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+
+  "[rust]": { "editor.defaultFormatter": "rust-lang.rust-analyzer" },
+  "rust-analyzer.linkedProjects": ["shutter/Cargo.toml"],
+
+  "[go]": { "editor.defaultFormatter": "golang.go" },
+  "gopls": { "formatting.local": "github.com/steverogersX/RiverVoice" },
+
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true
+}
