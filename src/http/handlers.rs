@@ -12,7 +12,12 @@ use garde::{Report, Validate};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{http::types::ApiResponse, retry::CallPayload, state::AppState};
+use crate::{
+    http::types::ApiResponse,
+    retry::CallPayload,
+    state::AppState,
+    telephony::provider::{OutboundCall, ProviderError, TelephonyProvider},
+};
 
 fn get_user_friendly_msg_from_garde(report: &Report) -> String {
     report
@@ -46,21 +51,37 @@ pub async fn dial(
 
     println!("dial payload: {call_payload:?}");
 
-    let created = match state.twilio.create_call(&call_payload.phone_number).await {
+    let outbound = OutboundCall {
+        to: call_payload.phone_number.clone(),
+        stream_url: state.config.audio_stream_url(),
+        status_url: state.config.status_url(),
+    };
+
+    let created = match state.provider.create_call(outbound).await {
         Ok(c) => c,
         Err(e) => {
-            println!("twilio create_call failed: {e}");
-            return Err(ApiResponse::error(StatusCode::BAD_GATEWAY, e));
+            println!("create_call failed: {e}");
+
+            let status = match e {
+                ProviderError::InvalidNumber(_) => StatusCode::BAD_REQUEST,
+                ProviderError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+                _ => StatusCode::BAD_GATEWAY,
+            };
+
+            return Err(ApiResponse::error(status, e.to_string()));
         }
     };
 
-    println!("call created: sid={} status={}", created.sid, created.status);
+    println!(
+        "call created: id={} status={:?}",
+        created.id, created.status
+    );
 
     Ok(ApiResponse::ok(
         StatusCode::OK,
         DialResponse {
-            call: created.sid,
-            status: created.status,
+            call: created.id,
+            status: format!("{:?}", created.status),
         },
     ))
 }
@@ -105,7 +126,9 @@ async fn handle_audio_socket(mut socket: WebSocket) {
 
             Some("start") => println!(
                 "ws: start call_sid={} stream_sid={} format={}",
-                event["start"]["callSid"], event["start"]["streamSid"], event["start"]["mediaFormat"]
+                event["start"]["callSid"],
+                event["start"]["streamSid"],
+                event["start"]["mediaFormat"]
             ),
 
             Some("media") => {
@@ -140,7 +163,10 @@ async fn handle_audio_socket(mut socket: WebSocket) {
         }
     }
 
-    println!("ws: closed after {chunks} frames ({bytes} bytes, ~{}s)", chunks / 50);
+    println!(
+        "ws: closed after {chunks} frames ({bytes} bytes, ~{}s)",
+        chunks / 50
+    );
 }
 
 /// Twilio's call-progress callbacks. Form-encoded, not JSON.

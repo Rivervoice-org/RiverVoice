@@ -4,11 +4,10 @@ use axum::{
 };
 
 use super::handlers;
-use crate::{config::Config, state::AppState};
+use crate::state::AppState;
 
 pub async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Config::from_env()?;
-    let state = AppState::new(config);
+    let state = AppState::from_env()?;
 
     let router = Router::new()
         .route("/dial", post(handlers::dial))

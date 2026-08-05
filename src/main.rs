@@ -2,7 +2,6 @@ mod config;
 mod http;
 mod retry;
 mod state;
-mod twilio;
 mod telephony;
 
 #[tokio::main]
