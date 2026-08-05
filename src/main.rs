@@ -2,6 +2,7 @@ mod config;
 mod http;
 mod retry;
 mod state;
+mod stt;
 mod telephony;
 
 #[tokio::main]
