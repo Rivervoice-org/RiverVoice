@@ -1,0 +1,6 @@
+/bin/
+/anchor
+/anchor.exe
+.env
+*.test
+coverage.out
