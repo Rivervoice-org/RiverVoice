@@ -11,14 +11,21 @@ export function Splash() {
       aria-hidden
       className="animate-splash-out fixed inset-0 z-50 flex items-center justify-center bg-canvas"
     >
-      <div className="animate-splash-lift relative flex items-center gap-3">
-        <span className="animate-splash-mark flex size-9 items-center justify-center rounded-xl bg-foreground text-background">
-          <Waves className="size-5" strokeWidth={2} />
-        </span>
+      <div className="animate-splash-lift relative flex flex-col items-center gap-2.5">
+        <div className="flex items-center gap-3">
+          <span className="animate-splash-mark flex size-9 items-center justify-center rounded-xl bg-foreground text-background">
+            <Waves className="size-5" strokeWidth={2} />
+          </span>
 
-        <span className="animate-splash-word text-[28px] leading-none font-semibold tracking-[-0.03em]">
-          Rivervoice
-        </span>
+          <span className="animate-splash-word text-[28px] leading-none font-semibold tracking-[-0.03em]">
+            Rivervoice
+          </span>
+        </div>
+
+        {/* Lands last, once the lockup has settled */}
+        <p className="animate-splash-word text-[13px] text-muted-foreground [animation-delay:0.42s]">
+          Voice agents, built for India
+        </p>
       </div>
     </div>
   );
