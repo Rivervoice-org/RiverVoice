@@ -15,6 +15,13 @@ import {
 import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -34,6 +41,8 @@ declare module "@tanstack/react-table" {
     className?: string;
   }
 }
+
+const PAGE_SIZES = [5, 10, 25, 50];
 
 export type DataTableProps<TData> = {
   columns: ColumnDef<TData, unknown>[];
@@ -73,6 +82,7 @@ export function DataTable<TData>({
   className,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
+  const [size, setSize] = React.useState(pageSize ?? 10);
   const [globalFilter, setGlobalFilter] = React.useState("");
 
   const table = useReactTable({
@@ -93,6 +103,8 @@ export function DataTable<TData>({
   });
 
   const rows = table.getRowModel().rows;
+  const total = table.getFilteredRowModel().rows.length;
+  const pageIndex = table.getState().pagination.pageIndex;
   const showToolbar = Boolean(searchPlaceholder || toolbar || actions);
 
   return (
@@ -199,10 +211,30 @@ export function DataTable<TData>({
 
       {pageSize ? (
         <div className="flex flex-wrap items-center gap-3 px-1 text-xs text-muted-foreground">
+          <span>Rows</span>
+          <Select
+            value={String(size)}
+            onValueChange={(next) => {
+              const parsed = Number(next);
+              setSize(parsed);
+              table.setPageSize(parsed);
+              table.setPageIndex(0);
+            }}
+          >
+            <SelectTrigger size="sm" className="h-7 w-16 rounded-full px-2.5 font-mono text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PAGE_SIZES.map((option) => (
+                <SelectItem key={option} value={String(option)} className="font-mono text-xs">
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <span className="font-mono tabular-nums">
-            {rows.length === 0 ? 0 : table.getState().pagination.pageIndex * pageSize + 1}–
-            {table.getState().pagination.pageIndex * pageSize + rows.length} of{" "}
-            {table.getFilteredRowModel().rows.length}
+            {total === 0 ? 0 : pageIndex * size + 1}–{pageIndex * size + rows.length} of {total}
           </span>
 
           <div className="ml-auto flex items-center gap-1">
@@ -210,17 +242,18 @@ export function DataTable<TData>({
               variant="ghost"
               size="icon-xs"
               aria-label="Previous page"
-              className="cursor-pointer"
               disabled={!table.getCanPreviousPage()}
               onClick={() => table.previousPage()}
             >
               <ChevronLeft />
             </Button>
+            <span className="px-1 font-mono tabular-nums">
+              {pageIndex + 1} / {Math.max(1, table.getPageCount())}
+            </span>
             <Button
               variant="ghost"
               size="icon-xs"
               aria-label="Next page"
-              className="cursor-pointer"
               disabled={!table.getCanNextPage()}
               onClick={() => table.nextPage()}
             >
