@@ -1,0 +1,52 @@
+name: shutter
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "shutter/**"
+      - ".github/workflows/shutter.yml"
+  pull_request:
+    paths:
+      - "shutter/**"
+      - ".github/workflows/shutter.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shutter-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    working-directory: shutter
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shutter
+
+      - name: Rustfmt
+        run: cargo fmt --check
+
+      # Advisory for now: the tree has ~15 outstanding lints (dead code,
+      # module_inception, manual_is_multiple_of). Clear those, then add
+      # `-- -D warnings` here to make clippy blocking.
+      - name: Clippy
+        run: cargo clippy --all-targets
+
+      - name: Test
+        run: cargo test --all-targets

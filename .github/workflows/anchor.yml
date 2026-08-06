@@ -1,0 +1,54 @@
+name: anchor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "anchor/**"
+      - ".github/workflows/anchor.yml"
+  pull_request:
+    paths:
+      - "anchor/**"
+      - ".github/workflows/anchor.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anchor-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: anchor
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: anchor/go.mod
+          # No go.sum yet (no third-party deps), so key the cache off go.mod.
+          cache-dependency-path: anchor/go.mod
+
+      - name: Gofmt
+        # gofmt -l prints unformatted files; fail if the list is non-empty.
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "these files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./...
