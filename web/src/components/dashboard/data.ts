@@ -137,6 +137,8 @@ export const calls: Call[] = [
 ];
 
 export type Agent = {
+  /** Slug + number, used as the route: /build-agent/front-desk-343938430 */
+  id: string;
   name: string;
   number: string;
   calls: number;
@@ -153,6 +155,7 @@ export type Agent = {
 
 export const agents: Agent[] = [
   {
+    id: "front-desk-343938430",
     name: "Front Desk",
     number: "+91 80 4711 0288",
     calls: 612,
@@ -167,6 +170,7 @@ export const agents: Agent[] = [
     owner: "pavan@rivervoice.app",
   },
   {
+    id: "billing-771204558",
     name: "Billing",
     number: "+1 628 555 0100",
     calls: 388,
@@ -181,6 +185,7 @@ export const agents: Agent[] = [
     owner: "pavan@rivervoice.app",
   },
   {
+    id: "order-status-908331276",
     name: "Order status",
     number: "+44 20 7946 0800",
     calls: 284,
@@ -195,6 +200,7 @@ export const agents: Agent[] = [
     owner: "pavan@rivervoice.app",
   },
   {
+    id: "after-hours-455190822",
     name: "After hours",
     number: "Not assigned",
     calls: 0,
@@ -209,6 +215,7 @@ export const agents: Agent[] = [
     owner: "pavan@rivervoice.app",
   },
   {
+    id: "renewals-620774193",
     name: "Renewals",
     number: "Not assigned",
     calls: 0,
