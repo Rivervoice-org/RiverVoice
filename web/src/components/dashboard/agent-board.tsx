@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -67,6 +68,7 @@ const columns: ColumnDef<Agent, unknown>[] = [
 
 /** The agents you already have, read as lines on a switchboard. */
 export function AgentBoard() {
+  const router = useRouter();
   const live = agents.filter((agent) => agent.status === "live").length;
 
   return (
@@ -85,7 +87,7 @@ export function AgentBoard() {
           </>
         }
         empty="No agents yet. Describe one above to get started."
-        onRowClick={() => {}}
+        onRowClick={(agent) => router.push(`/build-agent/${agent.id}`)}
       />
     </section>
   );
