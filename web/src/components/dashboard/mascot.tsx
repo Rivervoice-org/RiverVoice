@@ -14,8 +14,7 @@ import { cn } from "@/lib/utils";
  * croodles (CC BY 4.0 — those two need attribution).
  */
 
-/** Soft grounds pulled from the app's own warm neutrals. */
-const BACKGROUNDS = ["f0efec", "e7efee", "efeaf3", "f5ece5", "e9eef5", "f4ece9"];
+/** The ground comes from the theme, so faces stay right in dark mode. */
 
 /** Two mouths from the set's own `lips` options: open, then closed. */
 const MOUTH_OPEN = "variant19";
@@ -29,8 +28,6 @@ function draw(seed: string, size: number, lips?: string) {
     radius: 50,
     scale: 130,
     translateY: 6,
-    backgroundColor: BACKGROUNDS,
-    backgroundType: ["solid"],
   }).toString();
 }
 
@@ -58,7 +55,11 @@ export function Mascot({
         role="img"
         aria-label={`${seed} mascot`}
         style={{ width: size, height: size }}
-        className={cn("inline-block shrink-0 overflow-hidden rounded-full", hoverLean, className)}
+        className={cn(
+          "inline-block shrink-0 overflow-hidden rounded-full bg-muted",
+          hoverLean,
+          className,
+        )}
         dangerouslySetInnerHTML={{ __html: draw(seed, size) }}
       />
     );
@@ -69,7 +70,11 @@ export function Mascot({
       role="img"
       aria-label={`${seed} mascot, speaking`}
       style={{ width: size, height: size }}
-      className={cn("relative inline-block shrink-0 rounded-full", hoverLean, className)}
+      className={cn(
+        "relative inline-block shrink-0 overflow-hidden rounded-full bg-muted",
+        hoverLean,
+        className,
+      )}
     >
       <span
         aria-hidden

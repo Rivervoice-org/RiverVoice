@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTheme } from "next-themes";
 import {
   BookOpen,
   Bot,
@@ -18,10 +19,14 @@ import {
   ChevronsRight,
   Coins,
   LogOut,
+  Monitor,
+  Moon,
+  MoonStar,
   Phone,
   PhoneIncoming,
   Search,
   Settings,
+  Sun,
   Sparkles,
   Users,
   Waves,
@@ -134,8 +139,15 @@ function SectionHeader({ title, collapsed }: { title: string; collapsed?: boolea
   );
 }
 
+const THEMES = [
+  { value: "system", label: "Match system", icon: Monitor },
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+];
+
 export function Sidebar() {
   const [collapsed, setCollapsed] = React.useState(false);
+  const { theme, setTheme } = useTheme();
   const minutesLeft = usage.minutes.included - usage.minutes.used;
 
   return (
@@ -276,6 +288,31 @@ export function Sidebar() {
               <Settings className="size-4 text-muted-foreground" strokeWidth={1.75} />
               Settings
             </DropdownMenuItem>
+
+            {/* Theme lives with the account, the way Notion and Linear do it */}
+            <div className="flex items-center gap-2.5 px-2 py-2">
+              <MoonStar className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+              <span className="flex-1 text-[13px]">Theme</span>
+              <div className="flex items-center gap-0.5 rounded-full bg-muted p-0.5">
+                {THEMES.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-label={option.label}
+                    title={option.label}
+                    onClick={() => setTheme(option.value)}
+                    className={cn(
+                      "flex size-6 cursor-pointer items-center justify-center rounded-full transition-colors",
+                      theme === option.value
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <option.icon className="size-3.5" strokeWidth={1.75} />
+                  </button>
+                ))}
+              </div>
+            </div>
             <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
               <Users className="size-4 text-muted-foreground" strokeWidth={1.75} />
               Members

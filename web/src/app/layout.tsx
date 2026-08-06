@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Inter, Newsreader } from "next/font/google";
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 const inter = Inter({
@@ -32,12 +33,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      // next-themes sets the class before paint, which the server cannot know
+      suppressHydrationWarning
       className={`${inter.variable} ${newsreader.variable} ${geistMono.variable} h-full antialiased`}
     >
       {/* Extensions add their own attributes to <body> before React loads,
           which otherwise reports as a hydration mismatch. */}
       <body suppressHydrationWarning className="flex min-h-full flex-col">
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

@@ -111,7 +111,7 @@ export function ComposerCrowd() {
             {member.lines.map((line, index) => (
               <span
                 key={line}
-                className="animate-phrase col-start-1 row-start-1 rounded-full border border-border bg-card px-2.5 py-1 text-xs whitespace-nowrap text-foreground/70 opacity-0 shadow-(--shadow-float)"
+                className="animate-phrase col-start-1 row-start-1 rounded-full bg-card px-2.5 py-1 text-xs whitespace-nowrap text-foreground/70 opacity-0 shadow-(--shadow-float)"
                 style={{
                   animationDuration: `${member.cycle}s`,
                   animationDelay: `${member.offset + (index * member.cycle) / member.lines.length}s`,
