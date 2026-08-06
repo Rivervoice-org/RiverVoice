@@ -12,7 +12,7 @@ import {
   type RowData,
   type SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,8 @@ export type DataTableProps<TData> = {
   searchPlaceholder?: string;
   /** Extra controls, shown at the start of the toolbar. */
   toolbar?: React.ReactNode;
+  /** Controls shown at the end of the toolbar, after the search field. */
+  actions?: React.ReactNode;
   /** Shown in place of rows when there is nothing to list. */
   empty?: string;
   initialSorting?: SortingState;
@@ -62,6 +64,7 @@ export function DataTable<TData>({
   data,
   searchPlaceholder,
   toolbar,
+  actions,
   empty = "Nothing here yet.",
   initialSorting = [],
   pageSize,
@@ -90,7 +93,7 @@ export function DataTable<TData>({
   });
 
   const rows = table.getRowModel().rows;
-  const showToolbar = Boolean(searchPlaceholder || toolbar);
+  const showToolbar = Boolean(searchPlaceholder || toolbar || actions);
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-3", className)}>
@@ -110,6 +113,7 @@ export function DataTable<TData>({
               />
             </div>
           ) : null}
+          {actions}
         </div>
       ) : null}
 
@@ -138,6 +142,7 @@ export function DataTable<TData>({
                           className="inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-foreground"
                         >
                           {flexRender(header.column.columnDef.header, header.getContext())}
+                          {/* Only the column actually being sorted shows a marker */}
                           {sorted ? (
                             <ChevronDown
                               className={cn(
@@ -145,9 +150,7 @@ export function DataTable<TData>({
                                 sorted === "asc" && "rotate-180",
                               )}
                             />
-                          ) : (
-                            <ChevronsUpDown className="size-3 opacity-50" />
-                          )}
+                          ) : null}
                         </button>
                       ) : (
                         flexRender(header.column.columnDef.header, header.getContext())
@@ -174,11 +177,7 @@ export function DataTable<TData>({
                 <TableRow
                   key={row.id}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                  className={cn(
-                    "group relative",
-                    onRowClick && "cursor-pointer",
-                    rowClassName?.(row.original),
-                  )}
+                  className={cn("group relative cursor-pointer", rowClassName?.(row.original))}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
