@@ -6,6 +6,8 @@ import { AgentTemplates } from "@/components/dashboard/agent-templates";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
 
+export const metadata = { title: "Agents" };
+
 export default function AgentsPage() {
   return (
     <>

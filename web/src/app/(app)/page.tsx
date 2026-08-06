@@ -4,6 +4,8 @@ import { Metrics } from "@/components/dashboard/metrics";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { RightRail } from "@/components/dashboard/right-rail";
 
+export const metadata = { title: "Home" };
+
 export default function DashboardPage() {
   return (
     <>
