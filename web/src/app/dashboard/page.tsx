@@ -3,10 +3,12 @@ import { LiveCall } from "@/components/dashboard/live-call";
 import { Metrics } from "@/components/dashboard/metrics";
 import { RightRail } from "@/components/dashboard/right-rail";
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { Splash } from "@/components/dashboard/splash";
 
 export default function DashboardPage() {
   return (
     <div className="flex h-svh gap-2 overflow-hidden bg-canvas p-2">
+      <Splash />
       <Sidebar />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">

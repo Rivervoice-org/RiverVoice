@@ -140,6 +140,61 @@
     }
   }
 
+  --animate-splash-out: splash-out 1.7s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  --animate-splash-mark: splash-mark 0.75s cubic-bezier(0.34, 1.4, 0.5, 1) both;
+  --animate-splash-word: splash-word 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both;
+  --animate-splash-lift: splash-lift 1.7s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+
+  /* Holds full opacity while the page paints, then clears itself away. */
+  @keyframes splash-out {
+    0%,
+    68% {
+      opacity: 1;
+      visibility: visible;
+    }
+    100% {
+      opacity: 0;
+      visibility: hidden;
+    }
+  }
+
+  /* The mark overshoots slightly, like a switch settling. */
+  @keyframes splash-mark {
+    from {
+      opacity: 0;
+      transform: scale(0.4) rotate(-12deg);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* The wordmark wipes in left to right, the way a level meter fills. */
+  @keyframes splash-word {
+    from {
+      opacity: 0;
+      clip-path: inset(0 100% -20% 0);
+      transform: translateX(-6px);
+    }
+    to {
+      opacity: 1;
+      clip-path: inset(0 0 -20% 0);
+      transform: none;
+    }
+  }
+
+  /* The whole lockup drifts up as the screen clears. */
+  @keyframes splash-lift {
+    0%,
+    68% {
+      transform: none;
+    }
+    100% {
+      transform: translateY(-10px);
+    }
+  }
+
   @keyframes rise {
     from {
       opacity: 0;
