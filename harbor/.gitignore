@@ -1,6 +1,6 @@
 /bin/
-/anchor
-/anchor.exe
+/harbor
+/harbor.exe
 .env
 *.test
 coverage.out

@@ -9,16 +9,16 @@ repos:
         files: ^web/.*\.(ts|tsx|js|jsx|mjs|css|json|md)$
 
       - id: rustfmt
-        name: rustfmt (shutter)
+        name: rustfmt (ferry)
         entry: rustfmt --edition 2024
         language: system
-        files: ^shutter/.*\.rs$
+        files: ^ferry/.*\.rs$
 
       - id: gofmt
-        name: gofmt (anchor)
+        name: gofmt (harbor)
         entry: gofmt -l -w
         language: system
-        files: ^anchor/.*\.go$
+        files: ^harbor/.*\.go$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
