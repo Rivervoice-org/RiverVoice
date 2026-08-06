@@ -6,10 +6,10 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 
 export default function DashboardPage() {
   return (
-    <div className="flex h-svh gap-3 overflow-hidden bg-canvas p-3">
+    <div className="flex h-svh gap-2 overflow-hidden bg-canvas p-2">
       <Sidebar />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
         <main className="panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-4">
           {/* Page header — Notion's quiet title block */}
           <div className="animate-rise px-1 pt-2 pb-1">
