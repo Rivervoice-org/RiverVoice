@@ -85,6 +85,11 @@ export function DataTable<TData>({
   const [size, setSize] = React.useState(pageSize ?? 10);
   const [globalFilter, setGlobalFilter] = React.useState("");
 
+  // TanStack Table hands back functions that read mutable internal state, so the
+  // compiler bails on this component rather than memoize them and serve stale
+  // rows. Nothing derived from `table` leaves this file — it is all consumed by
+  // the JSX below — so opting out here costs us nothing beyond this render.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

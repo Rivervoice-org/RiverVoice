@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
 /**
  * Nothing is gated. There is no auth provider wired up yet, so the session
@@ -8,7 +8,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * When a real provider lands, gate on a verified session here rather than on
  * the presence of a cookie.
  */
-export function middleware(_request: NextRequest) {
+export function middleware() {
   return NextResponse.next();
 }
 
