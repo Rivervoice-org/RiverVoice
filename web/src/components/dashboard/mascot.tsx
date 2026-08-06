@@ -1,20 +1,21 @@
+import { notionists } from "@dicebear/collection";
+import { createAvatar } from "@dicebear/core";
+
 import { cn } from "@/lib/utils";
 
 /**
- * Every agent gets its own mascot: a small pixel creature derived from its
- * name. Same name always draws the same shape and hue, so an agent is
- * recognisable at a glance without anyone picking an avatar.
+ * Every agent gets its own mascot, drawn from its name — the same name always
+ * produces the same character, so nobody has to pick an avatar.
+ *
+ * Style: DiceBear "notionists" (CC0, no attribution required), rendered on the
+ * server as inline SVG so there are no image requests at runtime. To change the
+ * look, swap both the import and the first argument to createAvatar: bottts
+ * (robots), thumbs (abstract, CC0), icons (pictograms, MIT), funEmoji or
+ * croodles (CC BY 4.0 — those two need attribution).
  */
-function hash(seed: string) {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
 
-const GRID = 5;
+/** Soft grounds pulled from the app's own warm neutrals. */
+const BACKGROUNDS = ["f0efec", "e7efee", "efeaf3", "f5ece5", "e9eef5", "f4ece9"];
 
 export function Mascot({
   seed,
@@ -25,36 +26,23 @@ export function Mascot({
   className?: string;
   size?: number;
 }) {
-  const h = hash(seed);
-  const hue = h % 360;
-  const fill = `oklch(0.58 0.16 ${hue})`;
-  const shade = `oklch(0.72 0.11 ${hue})`;
-
-  const cells: { x: number; y: number; tone: string }[] = [];
-  for (let y = 0; y < GRID; y++) {
-    for (let x = 0; x < Math.ceil(GRID / 2); x++) {
-      // Two bits per cell: one decides fill, one picks the lighter tone.
-      const bit = (h >> ((y * 3 + x) % 29)) & 1;
-      const tone = (h >> ((y * 5 + x * 2 + 3) % 29)) & 1;
-      if (!bit) continue;
-      const color = tone ? shade : fill;
-      cells.push({ x, y, tone: color });
-      if (x !== GRID - 1 - x) cells.push({ x: GRID - 1 - x, y, tone: color });
-    }
-  }
+  const svg = createAvatar(notionists, {
+    seed,
+    size,
+    radius: 50,
+    scale: 130,
+    translateY: 6,
+    backgroundColor: BACKGROUNDS,
+    backgroundType: ["solid"],
+  }).toString();
 
   return (
-    <svg
+    <span
       role="img"
       aria-label={`${seed} mascot`}
-      viewBox={`0 0 ${GRID} ${GRID}`}
-      width={size}
-      height={size}
-      className={cn("shrink-0", className)}
-    >
-      {cells.map((cell, i) => (
-        <rect key={i} x={cell.x} y={cell.y} width={1.02} height={1.02} rx={0.18} fill={cell.tone} />
-      ))}
-    </svg>
+      style={{ width: size, height: size }}
+      className={cn("inline-block shrink-0 overflow-hidden rounded-full", className)}
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
   );
 }

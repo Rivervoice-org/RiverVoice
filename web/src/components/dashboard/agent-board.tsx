@@ -1,16 +1,9 @@
-import { MoreHorizontal, Search } from "lucide-react";
+import { ChevronDown, MoreHorizontal, Search } from "lucide-react";
 
 import { agents, type Agent } from "@/components/dashboard/data";
 import { Mascot } from "@/components/dashboard/mascot";
-import { Waveform } from "@/components/dashboard/waveform";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-const statusLabels: Record<Agent["status"], string> = {
-  live: "On the line",
-  paused: "Paused",
-  draft: "Draft",
-};
 
 function Line({ agent }: { agent: Agent }) {
   const live = agent.status === "live";
@@ -33,44 +26,11 @@ function Line({ agent }: { agent: Agent }) {
         <span className="block truncate text-xs text-muted-foreground">{agent.purpose}</span>
       </span>
 
-      {/* Level: moving while the agent is answering, flat when it is not */}
-      <span className="hidden w-28 shrink-0 lg:block">
-        {live ? (
-          <Waveform className="h-5" bars={18} />
-        ) : (
-          <span aria-hidden className="block h-px w-full bg-border" />
-        )}
+      <span className="hidden w-44 shrink-0 truncate text-xs text-muted-foreground sm:block">
+        {agent.owner}
       </span>
 
-      <span
-        className={cn(
-          "hidden w-40 shrink-0 truncate font-mono text-xs sm:block",
-          agent.number === "Not assigned" && "text-muted-foreground",
-        )}
-      >
-        {agent.number}
-      </span>
-
-      <span className="flex w-28 shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-        <span
-          aria-hidden
-          className={cn("size-1.5 rounded-full", live ? "bg-river" : "bg-border")}
-        />
-        {statusLabels[agent.status]}
-      </span>
-
-      <span className="hidden w-24 shrink-0 text-right text-xs text-muted-foreground xl:block">
-        {agent.calls > 0 ? (
-          <>
-            <span className="font-mono text-foreground tabular-nums">
-              {agent.calls.toLocaleString()}
-            </span>{" "}
-            calls
-          </>
-        ) : (
-          "—"
-        )}
-      </span>
+      <span className="w-28 shrink-0 text-right text-xs text-muted-foreground">{agent.edited}</span>
 
       <Button
         variant="ghost"
@@ -107,11 +67,28 @@ export function AgentBoard() {
         </div>
       </div>
 
-      <ul className="surface flex flex-col divide-y divide-border overflow-hidden">
-        {agents.map((agent) => (
-          <Line key={agent.name} agent={agent} />
-        ))}
-      </ul>
+      <div className="surface overflow-hidden">
+        {/* Column heads, matched to the widths in Line */}
+        <div className="flex items-center gap-4 border-b border-border py-2 pr-3 pl-5 text-[11px] text-muted-foreground">
+          <span className="w-[30px] shrink-0" />
+          <span className="min-w-0 flex-1">Agent</span>
+          <span className="hidden w-44 shrink-0 sm:block">Edited by</span>
+          <button
+            type="button"
+            className="flex w-28 shrink-0 cursor-pointer items-center justify-end gap-1 hover:text-foreground"
+          >
+            Last modified
+            <ChevronDown className="size-3" />
+          </button>
+          <span className="w-6 shrink-0" />
+        </div>
+
+        <ul className="flex flex-col divide-y divide-border">
+          {agents.map((agent) => (
+            <Line key={agent.name} agent={agent} />
+          ))}
+        </ul>
+      </div>
     </section>
   );
 }
