@@ -10,7 +10,7 @@ const tabs = [
   { label: "Instructions", icon: Type, segment: "" },
   { label: "Variables", icon: Braces, segment: "variables" },
   { label: "Tools", icon: Wrench },
-  { label: "Settings", icon: Settings },
+  { label: "Settings", icon: Settings, segment: "settings" },
   { label: "Tests", icon: CircleCheck },
 ];
 
