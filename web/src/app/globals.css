@@ -210,6 +210,55 @@
     }
   }
 
+  --animate-drift: drift 6s ease-in-out infinite alternate;
+  /* Two mouths from the icon set, swapped on a beat. step-end keeps them from
+     cross-fading into a blur. */
+  --animate-mouth-open: mouth-open 0.56s step-end infinite;
+  --animate-mouth-shut: mouth-shut 0.56s step-end infinite;
+
+  @keyframes mouth-open {
+    0%,
+    45% {
+      opacity: 1;
+    }
+    46%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes mouth-shut {
+    0%,
+    45% {
+      opacity: 0;
+    }
+    46%,
+    100% {
+      opacity: 1;
+    }
+  }
+
+  /* Each bubble holds a line for a beat, then hands over to the next. */
+  --animate-phrase: phrase 12s ease-in-out infinite;
+
+  @keyframes phrase {
+    0%,
+    2% {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    5%,
+    28% {
+      opacity: 1;
+      transform: none;
+    }
+    31%,
+    100% {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+
   @keyframes rise {
     from {
       opacity: 0;

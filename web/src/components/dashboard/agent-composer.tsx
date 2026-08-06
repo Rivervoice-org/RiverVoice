@@ -1,5 +1,6 @@
 import { ArrowUp, Phone } from "lucide-react";
 
+import { ComposerCrowd } from "@/components/dashboard/composer-crowd";
 import { Input } from "@/components/ui/input";
 
 /** "Create an agent" holds still; only the job it is given changes. */
@@ -13,13 +14,14 @@ const JOBS = [
 
 export function AgentComposer() {
   return (
-    <section className="animate-rise flex flex-col items-center px-4 py-10 sm:py-14">
-      <p className="text-[11px] font-medium tracking-wide text-muted-foreground">New agent</p>
-      <h2 className="mt-2 text-center font-serif text-3xl leading-tight font-light tracking-tight sm:text-4xl">
+    <section className="animate-rise relative isolate flex flex-col items-center overflow-hidden px-4 py-14 sm:py-20">
+      <ComposerCrowd />
+
+      <h2 className="relative text-center font-serif text-3xl leading-tight font-light tracking-tight sm:text-4xl">
         What should this agent do?
       </h2>
 
-      <form className="panel mt-7 flex w-full max-w-2xl items-center gap-3 rounded-full py-2 pr-2 pl-4">
+      <form className="panel relative mt-7 flex w-full max-w-2xl items-center gap-3 rounded-full py-2 pr-2 pl-4">
         <Phone className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
 
         <div className="relative min-w-0 flex-1">

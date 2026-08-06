@@ -71,7 +71,10 @@ export function AgentBoard() {
   const router = useRouter();
 
   return (
-    <section className="animate-rise" style={{ animationDelay: "80ms" }}>
+    <section
+      className="animate-rise mx-auto mt-8 w-full max-w-4xl min-w-0"
+      style={{ animationDelay: "80ms" }}
+    >
       <DataTable
         columns={columns}
         data={agents}
