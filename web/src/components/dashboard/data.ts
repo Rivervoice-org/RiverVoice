@@ -280,6 +280,45 @@ export const agentTemplates: AgentTemplate[] = [
   },
 ];
 
+/** Values carried into a call, and values pulled back out of it. */
+export type InputVariable = {
+  name: string;
+  fallback: string;
+  inContext: boolean;
+};
+
+export type OutputVariable = {
+  name: string;
+  type: "string" | "number" | "boolean";
+  prompt: string;
+  isGoal?: boolean;
+};
+
+export const inputVariables: InputVariable[] = [
+  { name: "caller_name", fallback: "there", inContext: true },
+  { name: "clinic_name", fallback: "Riverside Dental", inContext: true },
+  { name: "account_tier", fallback: "standard", inContext: false },
+];
+
+export const outputVariables: OutputVariable[] = [
+  {
+    name: "call_summary",
+    type: "string",
+    prompt: "A short 1–2 line description of what happened on the call.",
+    isGoal: true,
+  },
+  {
+    name: "appointment_booked",
+    type: "boolean",
+    prompt: "True when the caller left with a confirmed slot.",
+  },
+  {
+    name: "callback_minutes",
+    type: "number",
+    prompt: "If they asked to be called back, how many minutes from now.",
+  },
+];
+
 export const usage = {
   minutes: { used: 8420, included: 12000 },
   transcription: { used: 6310, included: 12000 },
