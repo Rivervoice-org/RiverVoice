@@ -5,9 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
-  BookOpen,
-  Bot,
-  ChartLine,
   ChevronsUpDown,
   Code,
   CreditCard,
@@ -32,6 +29,7 @@ import {
   Waves,
 } from "lucide-react";
 
+import { AnalyticsIcon, KnowledgeIcon } from "@/components/icons";
 import { usage } from "@/components/dashboard/data";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -43,7 +41,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-type NavItem = { label: string; icon: LucideIcon; badge?: string; href?: string };
+type NavItem = {
+  label: string;
+  icon?: LucideIcon | React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  badge?: string;
+  href?: string;
+  /** Rendered on the server and passed in, so DiceBear stays out of this bundle. */
+  mark?: React.ReactNode;
+};
 
 const home: NavItem = { label: "Home", icon: House, href: "/" };
 
@@ -51,8 +56,8 @@ const sections: { title: string; items: NavItem[] }[] = [
   {
     title: "Build",
     items: [
-      { label: "Agents", icon: Bot, href: "/agents" },
-      { label: "Knowledge base", icon: BookOpen },
+      { label: "Agents", href: "/agents" },
+      { label: "Knowledge base", icon: KnowledgeIcon },
       { label: "Phone numbers", icon: Phone },
     ],
   },
@@ -66,7 +71,7 @@ const sections: { title: string; items: NavItem[] }[] = [
   },
   {
     title: "Monitor",
-    items: [{ label: "Agent analytics", icon: ChartLine }],
+    items: [{ label: "Agent analytics", icon: AnalyticsIcon }],
   },
 ];
 
@@ -77,7 +82,14 @@ const footerNav: NavItem[] = [
 
 /** One 32px Notion row: icon, label, and an optional badge. Routed items
     render as links; the rest are inert buttons until their page exists. */
-function Row({ icon: Icon, label, badge, href, collapsed }: NavItem & { collapsed?: boolean }) {
+function Row({
+  icon: Icon,
+  label,
+  badge,
+  href,
+  mark,
+  collapsed,
+}: NavItem & { collapsed?: boolean }) {
   const pathname = usePathname();
   const active = href ? pathname === href : false;
 
@@ -96,10 +108,13 @@ function Row({ icon: Icon, label, badge, href, collapsed }: NavItem & { collapse
 
   const content = (
     <>
-      <Icon
-        className={cn("size-4 shrink-0 text-muted-foreground", active && "text-foreground")}
-        strokeWidth={1.75}
-      />
+      {mark ??
+        (Icon ? (
+          <Icon
+            className={cn("size-4 shrink-0 text-muted-foreground", active && "text-foreground")}
+            strokeWidth={1.75}
+          />
+        ) : null)}
       {collapsed ? null : (
         <>
           {/* leading-5 keeps descenders (the g in "Agents") inside the clipped box */}
@@ -145,7 +160,7 @@ const THEMES = [
   { value: "dark", label: "Dark", icon: Moon },
 ];
 
-export function Sidebar() {
+export function Sidebar({ agentsMark }: { agentsMark?: React.ReactNode }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const { theme, setTheme } = useTheme();
   const minutesLeft = usage.minutes.included - usage.minutes.used;
@@ -229,7 +244,12 @@ export function Sidebar() {
           >
             <SectionHeader title={section.title} collapsed={collapsed} />
             {section.items.map((item) => (
-              <Row key={item.label} {...item} collapsed={collapsed} />
+              <Row
+                key={item.label}
+                {...item}
+                mark={item.label === "Agents" ? agentsMark : undefined}
+                collapsed={collapsed}
+              />
             ))}
           </div>
         ))}
