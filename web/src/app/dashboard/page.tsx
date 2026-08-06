@@ -3,7 +3,6 @@ import { LiveCall } from "@/components/dashboard/live-call";
 import { Metrics } from "@/components/dashboard/metrics";
 import { RightRail } from "@/components/dashboard/right-rail";
 import { Sidebar } from "@/components/dashboard/sidebar";
-import { Topbar } from "@/components/dashboard/topbar";
 
 export default function DashboardPage() {
   return (
@@ -11,8 +10,6 @@ export default function DashboardPage() {
       <Sidebar />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-        <Topbar />
-
         <main className="panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-4 [scrollbar-width:thin]">
           {/* Page header — Notion's quiet title block */}
           <div className="animate-rise px-1 pt-2 pb-1">
