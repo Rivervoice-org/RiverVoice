@@ -10,7 +10,7 @@ export default function DashboardPage() {
       <Sidebar />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-        <main className="panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-4 [scrollbar-width:thin]">
+        <main className="panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-4">
           {/* Page header — Notion's quiet title block */}
           <div className="animate-rise px-1 pt-2 pb-1">
             <p className="text-[11px] font-medium tracking-wide text-muted-foreground">

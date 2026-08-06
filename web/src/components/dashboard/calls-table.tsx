@@ -89,7 +89,7 @@ function CallList({ items, empty }: { items: Call[]; empty: string }) {
     return <p className="px-3 py-10 text-center text-sm text-muted-foreground">{empty}</p>;
   }
   return (
-    <div className="overflow-x-auto [scrollbar-width:thin]">
+    <div className="overflow-x-auto">
       <ul className="flex min-w-[30rem] flex-col">
         {items.map((call) => (
           <CallRow key={call.id} call={call} />

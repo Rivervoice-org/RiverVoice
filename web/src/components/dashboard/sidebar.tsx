@@ -172,7 +172,7 @@ export function Sidebar() {
       </div>
 
       {/* Scrollable nav — everything above the pinned footer */}
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-1.5 pt-1 pb-2 [scrollbar-width:thin]">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-1.5 pt-1 pb-2">
         <div className="flex flex-col gap-px">
           <Row icon={Search} label="Search" collapsed={collapsed} />
           <Row icon={Sparkles} label="Ask Rivervoice" collapsed={collapsed} />
