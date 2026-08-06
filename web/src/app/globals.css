@@ -189,6 +189,27 @@
     }
   }
 
+  /* Each word in the placeholder holds for a beat, then hands over. */
+  --animate-word-cycle: word-cycle 15s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+
+  @keyframes word-cycle {
+    0%,
+    1% {
+      opacity: 0;
+      transform: translateY(5px);
+    }
+    3%,
+    18% {
+      opacity: 1;
+      transform: none;
+    }
+    20%,
+    100% {
+      opacity: 0;
+      transform: translateY(-5px);
+    }
+  }
+
   @keyframes rise {
     from {
       opacity: 0;
