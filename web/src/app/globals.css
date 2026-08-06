@@ -261,6 +261,27 @@
     }
   }
 
+  /* One sixth of the cycle visible, so six greetings never overlap. */
+  --animate-greeting: greeting-cycle 15.6s ease-in-out infinite;
+
+  @keyframes greeting-cycle {
+    0%,
+    1% {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    3%,
+    14% {
+      opacity: 1;
+      transform: none;
+    }
+    16%,
+    100% {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+  }
+
   @keyframes rise {
     from {
       opacity: 0;
