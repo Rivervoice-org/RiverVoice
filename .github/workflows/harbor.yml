@@ -1,26 +1,26 @@
-name: anchor
+name: harbor
 
 on:
   push:
     branches: [main]
     paths:
-      - "anchor/**"
-      - ".github/workflows/anchor.yml"
+      - "harbor/**"
+      - ".github/workflows/harbor.yml"
   pull_request:
     paths:
-      - "anchor/**"
-      - ".github/workflows/anchor.yml"
+      - "harbor/**"
+      - ".github/workflows/harbor.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: anchor-${{ github.ref }}
+  group: harbor-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:
   run:
-    working-directory: anchor
+    working-directory: harbor
 
 jobs:
   check:
@@ -30,9 +30,9 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: anchor/go.mod
+          go-version-file: harbor/go.mod
           # No go.sum yet (no third-party deps), so key the cache off go.mod.
-          cache-dependency-path: anchor/go.mod
+          cache-dependency-path: harbor/go.mod
 
       - name: Gofmt
         # gofmt -l prints unformatted files; fail if the list is non-empty.

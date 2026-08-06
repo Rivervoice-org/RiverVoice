@@ -1,21 +1,21 @@
-name: shutter
+name: ferry
 
 on:
   push:
     branches: [main]
     paths:
-      - "shutter/**"
-      - ".github/workflows/shutter.yml"
+      - "ferry/**"
+      - ".github/workflows/ferry.yml"
   pull_request:
     paths:
-      - "shutter/**"
-      - ".github/workflows/shutter.yml"
+      - "ferry/**"
+      - ".github/workflows/ferry.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: shutter-${{ github.ref }}
+  group: ferry-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -23,7 +23,7 @@ env:
 
 defaults:
   run:
-    working-directory: shutter
+    working-directory: ferry
 
 jobs:
   check:
@@ -37,7 +37,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: shutter
+          workspaces: ferry
 
       - name: Rustfmt
         run: cargo fmt --check

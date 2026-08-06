@@ -10,7 +10,7 @@
   "[markdown]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
 
   "[rust]": { "editor.defaultFormatter": "rust-lang.rust-analyzer" },
-  "rust-analyzer.linkedProjects": ["shutter/Cargo.toml"],
+  "rust-analyzer.linkedProjects": ["ferry/Cargo.toml"],
 
   "[go]": { "editor.defaultFormatter": "golang.go" },
   "gopls": { "formatting.local": "github.com/steverogersX/RiverVoice" },
