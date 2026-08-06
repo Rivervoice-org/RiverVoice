@@ -43,8 +43,8 @@ const columns: ColumnDef<Agent, unknown>[] = [
   {
     accessorKey: "edited",
     header: "Last modified",
-    size: 140,
-    meta: { className: "text-right text-xs text-muted-foreground" },
+    size: 130,
+    meta: { className: "text-xs text-muted-foreground" },
   },
   {
     id: "actions",
