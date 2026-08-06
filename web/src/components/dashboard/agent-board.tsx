@@ -76,6 +76,7 @@ export function AgentBoard() {
         columns={columns}
         data={agents}
         searchPlaceholder="Find an agent"
+        pageSize={10}
         initialSorting={[{ id: "edited", desc: false }]}
         toolbar={<h2 className="text-sm font-medium">On the board</h2>}
         empty="No agents yet. Describe one above to get started."

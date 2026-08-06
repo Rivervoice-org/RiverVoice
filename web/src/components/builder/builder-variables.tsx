@@ -157,6 +157,7 @@ export function BuilderVariables() {
                 columns={outputColumns}
                 data={outputVariables}
                 searchPlaceholder="Search"
+                pageSize={10}
                 toolbar={segments}
                 actions={addButton}
                 empty="No output variables yet."
@@ -167,6 +168,7 @@ export function BuilderVariables() {
                 columns={inputColumns}
                 data={inputVariables}
                 searchPlaceholder="Search"
+                pageSize={10}
                 toolbar={segments}
                 actions={addButton}
                 empty="No input variables yet."
