@@ -17,7 +17,7 @@ const SUGGESTIONS = [
 export function BuilderAssistant({ agent, onClose }: { agent: Agent; onClose: () => void }) {
   return (
     <aside className="panel flex h-full w-96 flex-col overflow-hidden">
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
+      <header className="flex h-14 shrink-0 items-center gap-2 px-4">
         <Sparkles className="size-4 text-muted-foreground" strokeWidth={1.75} />
         <span className="text-sm font-medium">Ask Rivervoice</span>
 

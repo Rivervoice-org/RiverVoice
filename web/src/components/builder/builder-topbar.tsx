@@ -51,7 +51,7 @@ export function BuilderTopbar({
     : [{ label: "v1", state: "Draft", when: agent.edited, current: true }];
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-3">
+    <header className="flex h-14 shrink-0 items-center gap-2 px-3">
       <Button
         variant="ghost"
         size="icon-sm"

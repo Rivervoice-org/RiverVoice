@@ -17,7 +17,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export function BuilderInstructions({ agent }: { agent: Agent }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-6 py-6 lg:px-10">
+      <div className="mx-auto flex w-full max-w-4xl min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-6 py-6 lg:px-10">
         {/* Greeting */}
         <section className="flex flex-col gap-3">
           <SectionLabel>Greeting</SectionLabel>
