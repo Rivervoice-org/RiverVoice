@@ -34,9 +34,6 @@
   --amber: oklch(0.62 0.13 70);
   --amber-tint: oklch(0.96 0.035 80);
 
-  --scrollbar-thumb: oklch(0.29 0.008 75 / 0.16);
-  --scrollbar-thumb-hover: oklch(0.29 0.008 75 / 0.32);
-
   --shadow-float:
     0 0 0 1px oklch(0.29 0.008 75 / 0.05), 0 1px 2px oklch(0.29 0.008 75 / 0.04),
     0 6px 16px -6px oklch(0.29 0.008 75 / 0.08);
@@ -71,9 +68,6 @@
   --river-tint: oklch(0.72 0.09 195 / 14%);
   --amber: oklch(0.78 0.12 75);
   --amber-tint: oklch(0.78 0.12 75 / 14%);
-
-  --scrollbar-thumb: oklch(1 0 0 / 0.16);
-  --scrollbar-thumb-hover: oklch(1 0 0 / 0.32);
 
   --shadow-float: 0 0 0 1px oklch(1 0 0 / 0.07), 0 4px 12px -4px oklch(0 0 0 / 0.5);
   --shadow-lift: 0 0 0 1px oklch(1 0 0 / 0.09), 0 20px 40px -16px oklch(0 0 0 / 0.65);
@@ -219,42 +213,16 @@
     background: var(--river-tint);
   }
 
-  /* One scrollbar treatment everywhere: no track, a hairline thumb that
-     darkens on hover. Firefox gets the standard properties, Chromium/Safari
-     the ::-webkit rules. */
+  /* Scrollbars are hidden everywhere; scrolling itself is untouched
+     (wheel, trackpad, keyboard, and touch all still work). */
   * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb) transparent;
+    scrollbar-width: none;
   }
 
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-
-  ::-webkit-scrollbar-track,
-  ::-webkit-scrollbar-corner {
-    background: transparent;
-  }
-
-  /* No stepper arrows at either end of the bar. */
-  ::-webkit-scrollbar-button {
     display: none;
     width: 0;
     height: 0;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    /* Transparent border + background-clip keeps the thumb 4px wide
-       with breathing room on both sides. */
-    background-color: var(--scrollbar-thumb);
-    border: 3px solid transparent;
-    background-clip: content-box;
-    border-radius: 9999px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: var(--scrollbar-thumb-hover);
   }
 }
 
