@@ -282,6 +282,19 @@
     }
   }
 
+  /* The greeting rail. The track holds two copies of the list and travels
+     exactly half its width, so the loop has no seam. */
+  --animate-marquee: marquee 48s linear infinite;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
   @keyframes rise {
     from {
       opacity: 0;
@@ -319,6 +332,21 @@
   }
 }
 
+/* The marigold stroke paints itself in under the headline, left to right. */
+@keyframes swash-draw {
+  from {
+    stroke-dashoffset: 220;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@utility swash-draw {
+  stroke-dasharray: 220;
+  animation: swash-draw 0.9s cubic-bezier(0.65, 0, 0.35, 1) 0.5s both;
+}
+
 @utility panel {
   background: var(--card);
   border-radius: var(--radius-2xl);
@@ -354,6 +382,10 @@
   *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
+    /* Without this, a staggered entrance keeps its delay and the content stays
+       invisible for as long as the stagger ran — the animation is skipped, so
+       the wait buys nothing. */
+    animation-delay: 0ms !important;
     transition-duration: 0.001ms !important;
   }
 }
