@@ -69,7 +69,6 @@ const columns: ColumnDef<Agent, unknown>[] = [
 /** The agents you already have, read as lines on a switchboard. */
 export function AgentBoard() {
   const router = useRouter();
-  const live = agents.filter((agent) => agent.status === "live").length;
 
   return (
     <section className="animate-rise" style={{ animationDelay: "80ms" }}>
@@ -78,14 +77,7 @@ export function AgentBoard() {
         data={agents}
         searchPlaceholder="Find an agent"
         initialSorting={[{ id: "edited", desc: false }]}
-        toolbar={
-          <>
-            <h2 className="text-sm font-medium">On the board</h2>
-            <span className="text-xs text-muted-foreground">
-              {live} of {agents.length} answering
-            </span>
-          </>
-        }
+        toolbar={<h2 className="text-sm font-medium">On the board</h2>}
         empty="No agents yet. Describe one above to get started."
         onRowClick={(agent) => router.push(`/build-agent/${agent.id}`)}
       />
