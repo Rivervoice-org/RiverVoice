@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsIndicator, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Editing =
   { kind: "input"; variable: InputVariable } | { kind: "output"; variable: OutputVariable };
@@ -116,10 +116,14 @@ export function BuilderVariables() {
 
   const segments = (
     <TabsList className="h-9 w-fit shrink-0 rounded-lg p-1">
-      <TabsTrigger value="input" className="flex-none cursor-pointer rounded-md px-4 text-[13px]">
+      <TabsIndicator />
+      <TabsTrigger value="input" className="flex-none cursor-pointer rounded-md px-3.5 text-[13px]">
         Input variables
       </TabsTrigger>
-      <TabsTrigger value="output" className="flex-none cursor-pointer rounded-md px-4 text-[13px]">
+      <TabsTrigger
+        value="output"
+        className="flex-none cursor-pointer rounded-md px-3.5 text-[13px]"
+      >
         Output variables
       </TabsTrigger>
     </TabsList>
