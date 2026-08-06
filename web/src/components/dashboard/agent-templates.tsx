@@ -49,7 +49,10 @@ function Roster({ items }: { items: typeof agentTemplates }) {
 /** Ready-made agents, waiting to be put on a line. */
 export function AgentTemplates() {
   return (
-    <section className="animate-rise flex flex-col gap-3 pb-2" style={{ animationDelay: "120ms" }}>
+    <section
+      className="animate-rise mx-auto mt-8 flex w-full max-w-4xl min-w-0 flex-col gap-3 pb-2"
+      style={{ animationDelay: "120ms" }}
+    >
       <Tabs defaultValue="all" className="flex w-full min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
           <h2 className="text-sm font-medium">Hire from the roster</h2>

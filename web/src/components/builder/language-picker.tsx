@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
@@ -11,14 +12,26 @@ import { cn } from "@/lib/utils";
 export const LANGUAGES = [
   { name: "Hindi", glyph: "अ" },
   { name: "Bengali", glyph: "অ" },
-  { name: "Kannada", glyph: "ಕ" },
-  { name: "Tamil", glyph: "அ" },
   { name: "Telugu", glyph: "త" },
   { name: "Marathi", glyph: "म" },
+  { name: "Tamil", glyph: "அ" },
   { name: "Gujarati", glyph: "ગ" },
+  { name: "Kannada", glyph: "ಕ" },
   { name: "Malayalam", glyph: "മ" },
-  { name: "Punjabi", glyph: "ਪ" },
   { name: "Odia", glyph: "ଓ" },
+  { name: "Punjabi", glyph: "ਪ" },
+  { name: "Assamese", glyph: "অ" },
+  { name: "Urdu", glyph: "ا" },
+  { name: "Maithili", glyph: "म" },
+  { name: "Sanskrit", glyph: "स" },
+  { name: "Konkani", glyph: "क" },
+  { name: "Nepali", glyph: "न" },
+  { name: "Sindhi", glyph: "س" },
+  { name: "Kashmiri", glyph: "ک" },
+  { name: "Manipuri", glyph: "ꯃ" },
+  { name: "Santali", glyph: "ᱥ" },
+  { name: "Bodo", glyph: "ब" },
+  { name: "Dogri", glyph: "ड" },
   { name: "English", glyph: "A" },
 ];
 
@@ -51,6 +64,7 @@ function Chip({ label, onRemove }: { label: string; onRemove?: () => void }) {
 /** Many languages at once, shown as chips you can drop from the trigger. */
 export function LanguagesPicker({ defaultValue }: { defaultValue: string[] }) {
   const [selected, setSelected] = React.useState(defaultValue);
+  const [query, setQuery] = React.useState("");
 
   const toggle = (name: string) =>
     setSelected((current) =>
@@ -82,8 +96,21 @@ export function LanguagesPicker({ defaultValue }: { defaultValue: string[] }) {
       </PopoverTrigger>
 
       <PopoverContent align="end" className="w-64 p-1">
-        <div className="flex max-h-72 flex-col overflow-y-auto">
-          {LANGUAGES.map((language) => {
+        <div className="relative p-1">
+          <Search className="pointer-events-none absolute top-1/2 left-3.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search languages"
+            aria-label="Search languages"
+            className="h-8 rounded-md pr-2 pl-8"
+          />
+        </div>
+
+        <div className="mt-1 flex max-h-72 flex-col overflow-y-auto">
+          {LANGUAGES.filter((language) =>
+            language.name.toLowerCase().includes(query.trim().toLowerCase()),
+          ).map((language) => {
             const checked = selected.includes(language.name);
             return (
               <button

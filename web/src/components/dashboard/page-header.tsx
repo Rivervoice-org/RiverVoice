@@ -7,7 +7,7 @@ export function PageHeader({
 }: {
   eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
   action?: React.ReactNode;
 }) {
   return (
@@ -19,7 +19,7 @@ export function PageHeader({
         <h1 className="font-serif text-3xl leading-tight font-light tracking-tight sm:text-4xl">
           {title}
         </h1>
-        <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
+        {description ? <p className="mt-1.5 text-sm text-muted-foreground">{description}</p> : null}
       </div>
       {action ? <div className="shrink-0 pb-1">{action}</div> : null}
     </div>

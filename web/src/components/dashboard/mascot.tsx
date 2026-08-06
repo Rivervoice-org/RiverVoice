@@ -17,32 +17,72 @@ import { cn } from "@/lib/utils";
 /** Soft grounds pulled from the app's own warm neutrals. */
 const BACKGROUNDS = ["f0efec", "e7efee", "efeaf3", "f5ece5", "e9eef5", "f4ece9"];
 
-export function Mascot({
-  seed,
-  className,
-  size = 28,
-}: {
-  seed: string;
-  className?: string;
-  size?: number;
-}) {
-  const svg = createAvatar(notionists, {
+/** Two mouths from the set's own `lips` options: open, then closed. */
+const MOUTH_OPEN = "variant19";
+const MOUTH_SHUT = "variant10";
+
+function draw(seed: string, size: number, lips?: string) {
+  return createAvatar(notionists, {
     seed,
     size,
+    ...(lips ? { lips: [lips as "variant10"] } : {}),
     radius: 50,
     scale: 130,
     translateY: 6,
     backgroundColor: BACKGROUNDS,
     backgroundType: ["solid"],
   }).toString();
+}
+
+const hoverLean =
+  "transition-transform duration-200 ease-[cubic-bezier(0.34,1.4,0.5,1)] hover:-rotate-6 hover:scale-110 group-hover:-rotate-6 group-hover:scale-110";
+
+export function Mascot({
+  seed,
+  className,
+  size = 28,
+  talking = false,
+  talkDelay = "0s",
+}: {
+  seed: string;
+  className?: string;
+  size?: number;
+  /** Alternates the set's own two mouths so the agent looks mid-sentence. */
+  talking?: boolean;
+  /** Offsets the mouth, so a crowd does not speak in unison. */
+  talkDelay?: string;
+}) {
+  if (!talking) {
+    return (
+      <span
+        role="img"
+        aria-label={`${seed} mascot`}
+        style={{ width: size, height: size }}
+        className={cn("inline-block shrink-0 overflow-hidden rounded-full", hoverLean, className)}
+        dangerouslySetInnerHTML={{ __html: draw(seed, size) }}
+      />
+    );
+  }
 
   return (
     <span
       role="img"
-      aria-label={`${seed} mascot`}
+      aria-label={`${seed} mascot, speaking`}
       style={{ width: size, height: size }}
-      className={cn("inline-block shrink-0 overflow-hidden rounded-full", className)}
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+      className={cn("relative inline-block shrink-0 rounded-full", hoverLean, className)}
+    >
+      <span
+        aria-hidden
+        style={{ animationDelay: talkDelay }}
+        className="animate-mouth-open absolute inset-0 overflow-hidden rounded-full"
+        dangerouslySetInnerHTML={{ __html: draw(seed, size, MOUTH_OPEN) }}
+      />
+      <span
+        aria-hidden
+        style={{ animationDelay: talkDelay }}
+        className="animate-mouth-shut absolute inset-0 overflow-hidden rounded-full"
+        dangerouslySetInnerHTML={{ __html: draw(seed, size, MOUTH_SHUT) }}
+      />
+    </span>
   );
 }
