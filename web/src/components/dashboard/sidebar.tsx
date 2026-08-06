@@ -16,15 +16,26 @@ import {
   Megaphone,
   ChevronsLeft,
   ChevronsRight,
+  Coins,
+  LogOut,
   Phone,
   PhoneIncoming,
   Search,
   Settings,
   Sparkles,
+  Users,
   Waves,
 } from "lucide-react";
 
+import { usage } from "@/components/dashboard/data";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 type NavItem = { label: string; icon: LucideIcon; badge?: string; href?: string };
@@ -55,7 +66,6 @@ const sections: { title: string; items: NavItem[] }[] = [
 ];
 
 const footerNav: NavItem[] = [
-  { label: "Settings", icon: Settings },
   { label: "Pricing", icon: CreditCard },
   { label: "Documentation", icon: FileText },
 ];
@@ -126,6 +136,7 @@ function SectionHeader({ title, collapsed }: { title: string; collapsed?: boolea
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = React.useState(false);
+  const minutesLeft = usage.minutes.included - usage.minutes.used;
 
   return (
     <aside
@@ -215,36 +226,71 @@ export function Sidebar() {
       {/* Pinned footer */}
       <div className="border-t border-border p-1.5">
         <div className="flex flex-col gap-px">
+          <Row
+            icon={Coins}
+            label="Credits"
+            badge={minutesLeft.toLocaleString()}
+            collapsed={collapsed}
+          />
           {footerNav.map((item) => (
             <Row key={item.label} {...item} collapsed={collapsed} />
           ))}
         </div>
 
-        <button
-          type="button"
-          title={collapsed ? "Pavan · Free plan" : undefined}
-          className={cn(
-            "group/user mt-1 flex h-11 w-full cursor-pointer items-center gap-2 rounded-md text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
-            collapsed ? "justify-center px-0" : "px-2",
-          )}
-        >
-          <Avatar size="sm">
-            <AvatarFallback className="bg-river-tint text-[11px] text-river">PN</AvatarFallback>
-          </Avatar>
-          {collapsed ? null : (
-            <>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm">Pavan</span>
-                <span className="block truncate text-[11px] text-muted-foreground">
-                  Free plan · 4 seats
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                title={collapsed ? "Pavan · Free plan" : undefined}
+                className={cn(
+                  "group/user mt-1 flex h-11 w-full cursor-pointer items-center gap-2 rounded-md text-left transition-colors hover:bg-accent aria-expanded:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                  collapsed ? "justify-center px-0" : "px-2",
+                )}
+              />
+            }
+          >
+            <Avatar size="sm">
+              <AvatarFallback className="bg-muted text-[11px]">PN</AvatarFallback>
+            </Avatar>
+            {collapsed ? null : (
+              <>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm">Pavan</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    Free plan · 4 seats
+                  </span>
                 </span>
-              </span>
-              <span className="shrink-0 text-[11px] font-medium text-river opacity-0 transition-opacity group-hover/user:opacity-100">
-                Upgrade
-              </span>
-            </>
-          )}
-        </button>
+                <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/user:opacity-100" />
+              </>
+            )}
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent align="start" side="top" className="w-56 p-1">
+            <div className="px-2 pt-1.5 pb-2">
+              <p className="truncate text-[13px] font-medium">Pavan</p>
+              <p className="truncate text-[11px] text-muted-foreground">pavan@rivervoice.app</p>
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
+              <Settings className="size-4 text-muted-foreground" strokeWidth={1.75} />
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
+              <Users className="size-4 text-muted-foreground" strokeWidth={1.75} />
+              Members
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
+              <Sparkles className="size-4 text-muted-foreground" strokeWidth={1.75} />
+              Upgrade plan
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
+              <LogOut className="size-4 text-muted-foreground" strokeWidth={1.75} />
+              Log out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </aside>
   );

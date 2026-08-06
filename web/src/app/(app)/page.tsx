@@ -1,27 +1,23 @@
-import { CallsTable } from "@/components/dashboard/calls-table";
-import { LiveCall } from "@/components/dashboard/live-call";
-import { Metrics } from "@/components/dashboard/metrics";
-import { PageHeader } from "@/components/dashboard/page-header";
-import { RightRail } from "@/components/dashboard/right-rail";
+import { HomeAgents } from "@/components/dashboard/home-agents";
+import { HomeCalls } from "@/components/dashboard/home-calls";
+import { HomeUsage } from "@/components/dashboard/home-usage";
 
 export const metadata = { title: "Home" };
 
-export default function DashboardPage() {
+export default function HomePage() {
   return (
-    <>
-      <PageHeader
-        eyebrow="Wednesday, 6 August"
-        title="Good afternoon, Pavan"
-        description="Three agents are answering. One call is on the line right now."
-      />
+    <div className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-10 px-2 py-6">
+      <div className="animate-rise">
+        <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] sm:text-[28px]">
+          Good afternoon, Pavan
+        </h1>
 
-      <LiveCall />
-      <Metrics />
-
-      <div className="grid min-w-0 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <CallsTable />
-        <RightRail />
+        <p className="mt-1.5 text-sm text-muted-foreground">Wednesday, 6 August</p>
       </div>
-    </>
+
+      <HomeUsage />
+      <HomeAgents />
+      <HomeCalls />
+    </div>
   );
 }
