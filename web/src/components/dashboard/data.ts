@@ -136,11 +136,141 @@ export const calls: Call[] = [
   },
 ];
 
-export const agents = [
-  { name: "Front Desk", number: "+91 80 4711 0288", calls: 612, status: "live" as const },
-  { name: "Billing", number: "+1 628 555 0100", calls: 388, status: "live" as const },
-  { name: "Order status", number: "+44 20 7946 0800", calls: 284, status: "live" as const },
-  { name: "After hours", number: "Not assigned", calls: 0, status: "paused" as const },
+export type Agent = {
+  name: string;
+  number: string;
+  calls: number;
+  status: "live" | "paused" | "draft";
+  purpose: string;
+  voice: string;
+  languages: string[];
+  model: string;
+  avgDuration: string;
+  resolved: number;
+  edited: string;
+  owner: string;
+};
+
+export const agents: Agent[] = [
+  {
+    name: "Front Desk",
+    number: "+91 80 4711 0288",
+    calls: 612,
+    status: "live",
+    purpose: "Books appointments and answers opening hours.",
+    voice: "Meera",
+    languages: ["Kannada", "Hindi", "English"],
+    model: "Sarvam STT · Twilio",
+    avgDuration: "2:41",
+    resolved: 0.81,
+    edited: "2 days ago",
+    owner: "pavan@rivervoice.app",
+  },
+  {
+    name: "Billing",
+    number: "+1 628 555 0100",
+    calls: 388,
+    status: "live",
+    purpose: "Explains invoices and takes payment details.",
+    voice: "Arden",
+    languages: ["English"],
+    model: "Sarvam STT · Twilio",
+    avgDuration: "4:12",
+    resolved: 0.64,
+    edited: "6 hours ago",
+    owner: "pavan@rivervoice.app",
+  },
+  {
+    name: "Order status",
+    number: "+44 20 7946 0800",
+    calls: 284,
+    status: "live",
+    purpose: "Looks up a shipment and reads back the ETA.",
+    voice: "Nell",
+    languages: ["English"],
+    model: "Sarvam STT · Twilio",
+    avgDuration: "1:58",
+    resolved: 0.92,
+    edited: "yesterday",
+    owner: "pavan@rivervoice.app",
+  },
+  {
+    name: "After hours",
+    number: "Not assigned",
+    calls: 0,
+    status: "paused",
+    purpose: "Takes a message when the office is closed.",
+    voice: "Meera",
+    languages: ["English"],
+    model: "Sarvam STT · Twilio",
+    avgDuration: "—",
+    resolved: 0,
+    edited: "3 weeks ago",
+    owner: "pavan@rivervoice.app",
+  },
+  {
+    name: "Renewals",
+    number: "Not assigned",
+    calls: 0,
+    status: "draft",
+    purpose: "Calls out to customers whose plan lapses this month.",
+    voice: "Arden",
+    languages: ["English", "Hindi"],
+    model: "Sarvam STT · Twilio",
+    avgDuration: "—",
+    resolved: 0,
+    edited: "just now",
+    owner: "pavan@rivervoice.app",
+  },
+];
+
+/** Starting points on the Agents page. Each one draws its own mascot. */
+export type TemplateCategory = "Booking" | "Reminders" | "Recovery" | "Lead qualification";
+
+export type AgentTemplate = {
+  name: string;
+  description: string;
+  category: TemplateCategory;
+};
+
+export const templateCategories: TemplateCategory[] = [
+  "Booking",
+  "Reminders",
+  "Recovery",
+  "Lead qualification",
+];
+
+export const agentTemplates: AgentTemplate[] = [
+  {
+    name: "Appointment management",
+    description: "Turns calls into bookings, reschedules, and confirmations without a handoff.",
+    category: "Booking",
+  },
+  {
+    name: "Sales discovery",
+    description: "Asks the three questions that decide whether sales should call back.",
+    category: "Lead qualification",
+  },
+  {
+    name: "EMI collection",
+    description: "Runs payment reminders and walks customers through settling an instalment.",
+    category: "Recovery",
+  },
+  {
+    name: "Front desk",
+    description: "Greets callers, reads back opening hours, and takes a message after hours.",
+    category: "Booking",
+  },
+  {
+    name: "Renewal nudge",
+    description: "Calls customers whose plan lapses this month and offers to extend it.",
+    category: "Reminders",
+  },
+  {
+    name: "Order status",
+    description: "Looks up a shipment and reads back where it is and when it lands.",
+    category: "Reminders",
+  },
 ];
 
 export const usage = {
