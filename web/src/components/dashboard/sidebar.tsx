@@ -50,7 +50,7 @@ type NavItem = {
   mark?: React.ReactNode;
 };
 
-const home: NavItem = { label: "Home", icon: House, href: "/" };
+const home: NavItem = { label: "Home", icon: House, href: "/home" };
 
 const sections: { title: string; items: NavItem[] }[] = [
   {
