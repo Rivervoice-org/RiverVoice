@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 const tabs = [
   { label: "Instructions", icon: Type, segment: "" },
   { label: "Variables", icon: Braces, segment: "variables" },
-  { label: "Tools", icon: Wrench },
+  { label: "Tools", icon: Wrench, segment: "tools" },
   { label: "Settings", icon: Settings, segment: "settings" },
   { label: "Tests", icon: CircleCheck },
 ];
