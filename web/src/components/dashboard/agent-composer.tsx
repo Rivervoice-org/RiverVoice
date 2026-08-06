@@ -1,5 +1,7 @@
 import { ArrowUp, Phone } from "lucide-react";
 
+import { Input } from "@/components/ui/input";
+
 /** "Create an agent" holds still; only the job it is given changes. */
 const JOBS = [
   "to call and follow up on overdue payments",
@@ -23,11 +25,11 @@ export function AgentComposer() {
         <div className="relative min-w-0 flex-1">
           {/* A single space keeps :placeholder-shown true while the field is
               empty, which is what hides the animated line once you type. */}
-          <input
+          <Input
             type="text"
             aria-label="Describe the agent"
             placeholder=" "
-            className="peer h-9 w-full bg-transparent text-sm outline-none"
+            className="peer h-9 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:border-0 focus-visible:ring-0 md:text-sm dark:bg-transparent"
           />
 
           <span

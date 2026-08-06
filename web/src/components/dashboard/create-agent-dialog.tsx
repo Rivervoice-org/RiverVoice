@@ -4,6 +4,7 @@ import * as React from "react";
 import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogClose,
@@ -35,13 +36,13 @@ export function CreateAgentDialog() {
         </DialogHeader>
 
         <div className="px-6 pt-4 pb-5">
-          <input
+          <Input
             autoFocus
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="e.g. Sales bot"
             aria-label="Agent name"
-            className="h-10 w-full rounded-lg border border-border bg-transparent px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-foreground/40"
+            className="h-10 px-3"
           />
         </div>
 
