@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   BookOpen,
   Bot,
@@ -25,15 +27,15 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
-type NavItem = { label: string; icon: LucideIcon; badge?: string; active?: boolean };
+type NavItem = { label: string; icon: LucideIcon; badge?: string; href?: string };
 
-const home: NavItem = { label: "Home", icon: House, active: true };
+const home: NavItem = { label: "Home", icon: House, href: "/" };
 
 const sections: { title: string; items: NavItem[] }[] = [
   {
     title: "Build",
     items: [
-      { label: "Agents", icon: Bot },
+      { label: "Agents", icon: Bot, href: "/agents" },
       { label: "Knowledge base", icon: BookOpen },
       { label: "Phone numbers", icon: Phone },
     ],
@@ -58,22 +60,27 @@ const footerNav: NavItem[] = [
   { label: "Documentation", icon: FileText },
 ];
 
-/** One 32px Notion row: icon, label, and an optional badge. */
-function Row({ icon: Icon, label, active, badge, collapsed }: NavItem & { collapsed?: boolean }) {
-  return (
-    <button
-      type="button"
-      aria-current={active ? "page" : undefined}
-      aria-label={collapsed ? label : undefined}
-      title={collapsed ? label : undefined}
-      className={cn(
-        "group/row flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-md text-left text-sm",
-        "text-foreground transition-colors hover:bg-accent",
-        "focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
-        collapsed ? "justify-center px-0" : "px-2",
-        active && "bg-accent font-medium",
-      )}
-    >
+/** One 32px Notion row: icon, label, and an optional badge. Routed items
+    render as links; the rest are inert buttons until their page exists. */
+function Row({ icon: Icon, label, badge, href, collapsed }: NavItem & { collapsed?: boolean }) {
+  const pathname = usePathname();
+  const active = href ? pathname === href : false;
+
+  const shared = {
+    "aria-current": active ? ("page" as const) : undefined,
+    "aria-label": collapsed ? label : undefined,
+    title: collapsed ? label : undefined,
+    className: cn(
+      "group/row flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-md text-left text-sm",
+      "text-foreground transition-colors hover:bg-accent",
+      "focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+      collapsed ? "justify-center px-0" : "px-2",
+      active && "bg-accent font-medium",
+    ),
+  };
+
+  const content = (
+    <>
       <Icon
         className={cn("size-4 shrink-0 text-muted-foreground", active && "text-foreground")}
         strokeWidth={1.75}
@@ -89,6 +96,16 @@ function Row({ icon: Icon, label, active, badge, collapsed }: NavItem & { collap
           ) : null}
         </>
       )}
+    </>
+  );
+
+  return href ? (
+    <Link href={href} {...shared}>
+      {content}
+    </Link>
+  ) : (
+    <button type="button" {...shared}>
+      {content}
     </button>
   );
 }
