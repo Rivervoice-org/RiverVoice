@@ -1,3 +1,6 @@
+"use client";
+
+import * as React from "react";
 import {
   BookOpen,
   Bot,
@@ -9,6 +12,8 @@ import {
   House,
   type LucideIcon,
   Megaphone,
+  ChevronsLeft,
+  ChevronsRight,
   Phone,
   PhoneIncoming,
   Search,
@@ -62,7 +67,7 @@ function Row({ icon: Icon, label, active, badge, collapsed }: NavItem & { collap
       aria-label={collapsed ? label : undefined}
       title={collapsed ? label : undefined}
       className={cn(
-        "group/row flex h-8 w-full items-center gap-2.5 rounded-md text-left text-sm",
+        "group/row flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-md text-left text-sm",
         "text-foreground transition-colors hover:bg-accent",
         "focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
         collapsed ? "justify-center px-0" : "px-2",
@@ -103,40 +108,88 @@ function SectionHeader({ title, collapsed }: { title: string; collapsed?: boolea
 }
 
 export function Sidebar() {
+  const [collapsed, setCollapsed] = React.useState(false);
+
   return (
-    <aside className="panel hidden h-full w-60 shrink-0 flex-col overflow-hidden md:flex">
-      {/* Workspace */}
-      <div className="p-1.5 pb-0">
+    <aside
+      data-collapsed={collapsed ? "" : undefined}
+      className={cn(
+        "panel hidden h-full shrink-0 flex-col overflow-hidden transition-[width] duration-200 md:flex",
+        collapsed ? "w-14" : "w-60",
+      )}
+    >
+      {/* Workspace + collapse toggle. Collapsed, the mark stays put and the
+          toggle sits directly beneath it. */}
+      <div
+        className={cn(
+          "flex gap-1 p-1.5 pb-0",
+          collapsed ? "flex-col items-center" : "items-center",
+        )}
+      >
+        {collapsed ? (
+          <span
+            aria-label="Rivervoice"
+            className="flex size-8 shrink-0 items-center justify-center"
+          >
+            <span className="flex size-6 items-center justify-center rounded-md bg-foreground text-background">
+              <Waves className="size-3.5" />
+            </span>
+          </span>
+        ) : (
+          <button
+            type="button"
+            // gap-1.5 keeps the label at the same x as the nav rows: 8 + 20 + 6 = 34px
+            className="group/ws flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground text-background">
+              <Waves className="size-3.5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">Rivervoice</span>
+            </span>
+            <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/ws:opacity-100" />
+          </button>
+        )}
+
         <button
           type="button"
-          className="group/ws flex h-10 w-full items-center gap-2.5 rounded-md px-2 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+          onClick={() => setCollapsed((open) => !open)}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={cn(
+            "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground",
+            "transition-colors hover:bg-accent hover:text-foreground",
+            "focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+          )}
         >
-          <span className="flex size-4 shrink-0 items-center justify-center rounded-[5px] bg-foreground text-background">
-            <Waves className="size-2.5" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium">Rivervoice</span>
-          </span>
-          <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/ws:opacity-100" />
+          {collapsed ? (
+            <ChevronsRight className="size-4.5" strokeWidth={2} />
+          ) : (
+            <ChevronsLeft className="size-4.5" strokeWidth={2} />
+          )}
         </button>
       </div>
 
       {/* Scrollable nav — everything above the pinned footer */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-1 pb-2 [scrollbar-width:thin]">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-1.5 pt-1 pb-2 [scrollbar-width:thin]">
         <div className="flex flex-col gap-px">
-          <Row icon={Search} label="Search" />
-          <Row icon={Sparkles} label="Ask Rivervoice" />
+          <Row icon={Search} label="Search" collapsed={collapsed} />
+          <Row icon={Sparkles} label="Ask Rivervoice" collapsed={collapsed} />
         </div>
 
         <div className="mt-3 flex flex-col gap-px">
-          <Row {...home} />
+          <Row {...home} collapsed={collapsed} />
         </div>
 
         {sections.map((section) => (
-          <div key={section.title} className="mt-4 flex flex-col gap-px">
-            <SectionHeader title={section.title} />
+          <div
+            key={section.title}
+            className={cn("flex flex-col gap-px", collapsed ? "mt-2" : "mt-4")}
+          >
+            <SectionHeader title={section.title} collapsed={collapsed} />
             {section.items.map((item) => (
-              <Row key={item.label} {...item} />
+              <Row key={item.label} {...item} collapsed={collapsed} />
             ))}
           </div>
         ))}
@@ -146,26 +199,34 @@ export function Sidebar() {
       <div className="border-t border-border p-1.5">
         <div className="flex flex-col gap-px">
           {footerNav.map((item) => (
-            <Row key={item.label} {...item} />
+            <Row key={item.label} {...item} collapsed={collapsed} />
           ))}
         </div>
 
         <button
           type="button"
-          className="group/user mt-1 flex h-11 w-full items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+          title={collapsed ? "Pavan · Free plan" : undefined}
+          className={cn(
+            "group/user mt-1 flex h-11 w-full cursor-pointer items-center gap-2 rounded-md text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+            collapsed ? "justify-center px-0" : "px-2",
+          )}
         >
           <Avatar size="sm">
             <AvatarFallback className="bg-river-tint text-[11px] text-river">PN</AvatarFallback>
           </Avatar>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm">Pavan</span>
-            <span className="block truncate text-[11px] text-muted-foreground">
-              Free plan · 4 seats
-            </span>
-          </span>
-          <span className="shrink-0 text-[11px] font-medium text-river opacity-0 transition-opacity group-hover/user:opacity-100">
-            Upgrade
-          </span>
+          {collapsed ? null : (
+            <>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm">Pavan</span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  Free plan · 4 seats
+                </span>
+              </span>
+              <span className="shrink-0 text-[11px] font-medium text-river opacity-0 transition-opacity group-hover/user:opacity-100">
+                Upgrade
+              </span>
+            </>
+          )}
         </button>
       </div>
     </aside>
