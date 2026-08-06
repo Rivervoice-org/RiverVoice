@@ -95,7 +95,10 @@ export function BuilderTopbar({
         >
           <span
             aria-hidden
-            className={cn("size-1.5 rounded-full", live ? "bg-river" : "bg-amber")}
+            className={cn(
+              "size-1.5 rounded-full",
+              live ? "bg-foreground" : "bg-muted-foreground/40",
+            )}
           />
           <span className="font-mono tabular-nums">{version}</span>
           <span className="text-muted-foreground">{state}</span>
@@ -111,11 +114,7 @@ export function BuilderTopbar({
                 aria-hidden
                 className={cn(
                   "size-1.5 shrink-0 rounded-full",
-                  entry.state === "Live"
-                    ? "bg-river"
-                    : entry.state === "Draft"
-                      ? "bg-amber"
-                      : "bg-border",
+                  entry.state === "Committed" ? "bg-border" : "bg-foreground",
                 )}
               />
               <span className="min-w-0 flex-1">

@@ -18,7 +18,7 @@ export function BuilderAssistant({ agent, onClose }: { agent: Agent; onClose: ()
   return (
     <aside className="panel flex h-full w-96 flex-col overflow-hidden">
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
-        <Sparkles className="size-4 text-river" strokeWidth={1.75} />
+        <Sparkles className="size-4 text-muted-foreground" strokeWidth={1.75} />
         <span className="text-sm font-medium">Ask Rivervoice</span>
 
         <div className="ml-auto flex items-center gap-0.5">
