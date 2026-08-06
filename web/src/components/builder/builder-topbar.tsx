@@ -57,6 +57,8 @@ export function BuilderTopbar({
         size="icon-sm"
         aria-label="Back to agents"
         className="cursor-pointer text-muted-foreground"
+        // Rendering an anchor, so the primitive must not assume a native button
+        nativeButton={false}
         render={<Link href="/agents" />}
       >
         <ChevronLeft />
