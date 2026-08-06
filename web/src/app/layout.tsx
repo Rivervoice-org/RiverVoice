@@ -20,7 +20,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Rivervoice",
+  // Pages set their own title; this appends the product name to it.
+  title: {
+    default: "Rivervoice",
+    template: "%s · Rivervoice",
+  },
   description: "Voice agents that answer the phone.",
 };
 
