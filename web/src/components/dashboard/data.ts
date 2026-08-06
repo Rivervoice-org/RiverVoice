@@ -280,6 +280,75 @@ export const agentTemplates: AgentTemplate[] = [
   },
 ];
 
+/** Values carried into a call, and values pulled back out of it. */
+export type InputVariable = {
+  name: string;
+  fallback: string;
+  inContext: boolean;
+};
+
+export type OutputVariable = {
+  name: string;
+  type: "string" | "number" | "boolean";
+  prompt: string;
+  isGoal?: boolean;
+};
+
+export const inputVariables: InputVariable[] = [
+  { name: "caller_name", fallback: "there", inContext: true },
+  { name: "clinic_name", fallback: "Riverside Dental", inContext: true },
+  { name: "account_tier", fallback: "standard", inContext: false },
+];
+
+export const outputVariables: OutputVariable[] = [
+  {
+    name: "call_summary",
+    type: "string",
+    prompt: "A short 1–2 line description of what happened on the call.",
+    isGoal: true,
+  },
+  {
+    name: "appointment_booked",
+    type: "boolean",
+    prompt: "True when the caller left with a confirmed slot.",
+  },
+  {
+    name: "callback_minutes",
+    type: "number",
+    prompt: "If they asked to be called back, how many minutes from now.",
+  },
+];
+
+/** Things the agent can do mid-call, beyond talking. */
+export type SystemTool = {
+  name: string;
+  purpose: string;
+  on: boolean;
+  /** Always on — the agent has no way to finish a call without it. */
+  required?: boolean;
+};
+
+export const systemTools: SystemTool[] = [
+  { name: "End the call", purpose: "Hang up once the caller is done.", on: true, required: true },
+  { name: "Transfer to a human", purpose: "Ring a colleague and step aside.", on: true },
+  { name: "Detect voicemail", purpose: "Notice a machine and leave the message.", on: true },
+  {
+    name: "Press keypad tones",
+    purpose: "Send DTMF through an IVR on the caller's behalf.",
+    on: false,
+  },
+  {
+    name: "Search the knowledge base",
+    purpose: "Look up an answer from attached sources.",
+    on: true,
+  },
+  {
+    name: "Take a note",
+    purpose: "Write something to the call record mid-conversation.",
+    on: false,
+  },
+];
+
 export const usage = {
   minutes: { used: 8420, included: 12000 },
   transcription: { used: 6310, included: 12000 },

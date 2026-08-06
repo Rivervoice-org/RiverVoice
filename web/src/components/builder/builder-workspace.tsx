@@ -3,14 +3,13 @@
 import * as React from "react";
 
 import { BuilderAssistant } from "@/components/builder/builder-assistant";
-import { BuilderInstructions } from "@/components/builder/builder-instructions";
 import { BuilderNav } from "@/components/builder/builder-nav";
 import { BuilderTopbar } from "@/components/builder/builder-topbar";
 import type { Agent } from "@/components/dashboard/data";
 import { cn } from "@/lib/utils";
 
 /** Holds the one piece of layout state the builder has: is the panel open. */
-export function BuilderWorkspace({ agent }: { agent: Agent }) {
+export function BuilderWorkspace({ agent, children }: { agent: Agent; children: React.ReactNode }) {
   const [assistantOpen, setAssistantOpen] = React.useState(true);
 
   return (
@@ -23,8 +22,8 @@ export function BuilderWorkspace({ agent }: { agent: Agent }) {
         />
 
         <div className="flex min-h-0 flex-1">
-          <BuilderNav />
-          <BuilderInstructions agent={agent} />
+          <BuilderNav agentId={agent.id} />
+          {children}
         </div>
       </div>
 

@@ -1,21 +1,13 @@
-import { notFound } from "next/navigation";
-
-import { BuilderWorkspace } from "@/components/builder/builder-workspace";
+import { BuilderInstructions } from "@/components/builder/builder-instructions";
 import { agents } from "@/components/dashboard/data";
 
-type Params = { params: Promise<{ agentId: string }> };
-
-export async function generateMetadata({ params }: Params) {
+export default async function InstructionsPage({
+  params,
+}: {
+  params: Promise<{ agentId: string }>;
+}) {
   const { agentId } = await params;
-  const agent = agents.find((item) => item.id === agentId);
-  return { title: agent ? agent.name : "Agent" };
-}
+  const agent = agents.find((item) => item.id === agentId)!;
 
-export default async function BuildAgentPage({ params }: Params) {
-  const { agentId } = await params;
-  const agent = agents.find((item) => item.id === agentId);
-
-  if (!agent) notFound();
-
-  return <BuilderWorkspace agent={agent} />;
+  return <BuilderInstructions agent={agent} />;
 }
