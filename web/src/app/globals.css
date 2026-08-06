@@ -29,8 +29,8 @@
   --ring: oklch(0.55 0.006 75);
 
   /* Rivervoice signal colors — used only for call state. */
-  --river: oklch(0.53 0.075 195);
-  --river-tint: oklch(0.955 0.022 195);
+  --river: oklch(0.52 0.13 258);
+  --river-tint: oklch(0.955 0.025 258);
   --amber: oklch(0.62 0.13 70);
   --amber-tint: oklch(0.96 0.035 80);
 
@@ -64,8 +64,8 @@
   --input: oklch(1 0 0 / 13%);
   --ring: oklch(0.62 0.005 80);
 
-  --river: oklch(0.72 0.09 195);
-  --river-tint: oklch(0.72 0.09 195 / 14%);
+  --river: oklch(0.74 0.12 258);
+  --river-tint: oklch(0.74 0.12 258 / 14%);
   --amber: oklch(0.78 0.12 75);
   --amber-tint: oklch(0.78 0.12 75 / 14%);
 
