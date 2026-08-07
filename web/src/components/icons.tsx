@@ -47,6 +47,39 @@ export function KnowledgeIcon(props: IconProps) {
   );
 }
 
+/**
+ * A contact list with a call leaving it: three rows that shorten as the queue
+ * drains, and an arrow going up and out to the right. Megaphone read as
+ * marketing blast; a campaign here is a list being dialed.
+ */
+export function CampaignIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3.4 6.2h11.4" />
+      <path d="M3.4 11.2h7.6" />
+      <path d="M3.4 16.2h5.4" />
+      <path d="m13.2 18.6 7.4-7.4" />
+      <path d="M15.4 11.2h5.2v5.2" />
+    </Svg>
+  );
+}
+
+/**
+ * A snippet in a rounded frame — the same frame as AnalyticsIcon, so the two
+ * read as one family. The marks sit a touch wider than lucide's SquareCode
+ * would put them, which keeps the gaps open at 16px.
+ */
+export function DeployCodeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2.75" y="2.75" width="18.5" height="18.5" rx="5" />
+      <path d="M9.3 9.3 6.9 12l2.4 2.7" />
+      <path d="m14.7 9.3 2.4 2.7-2.4 2.7" />
+      <path d="M13.2 8.6 10.8 15.4" />
+    </Svg>
+  );
+}
+
 /** Bars in a rounded frame — a report, rather than a loose chart. */
 export function AnalyticsIcon(props: IconProps) {
   return (
