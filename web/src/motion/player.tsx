@@ -1,16 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Pause, Play, RotateCcw, Volume2, VolumeX } from "lucide-react";
+import { Pause, Play, RotateCcw } from "lucide-react";
 
-import { makeAudio, type Audio, type Bed, type Cue } from "@/motion/audio";
 import { FPS, formatTime, seconds } from "@/motion/timeline";
 import { totalFrames, type Scene } from "@/motion/types";
 import { cn } from "@/lib/utils";
-
-/* Scrubbing past a cue should not fire it. Anything further than this from the
-   last frame we drew is a seek, not playback, and its cues are skipped. */
-const SEEK_GAP = seconds(0.5);
 
 const REDUCED = "(prefers-reduced-motion: reduce)";
 
@@ -38,8 +33,6 @@ export function Player<S>({
   viewBox = "0 0 640 324",
   ratio = "640/324",
   autoPlay = true,
-  cues,
-  bed,
   camera,
   className,
 }: {
@@ -48,10 +41,6 @@ export function Player<S>({
   viewBox?: string;
   ratio?: string;
   autoPlay?: boolean;
-  /** One-shots, fired as the playhead crosses them. */
-  cues?: Cue[];
-  /** A sustained layer, held for as long as the clip is playing. */
-  bed?: Bed;
   /**
    * The viewBox to shoot through, as a function of the whole film's frame
    * rather than the scene's. Taking it globally is what keeps the move
@@ -63,10 +52,7 @@ export function Player<S>({
 }) {
   const total = React.useMemo(() => totalFrames(scenes), [scenes]);
   const [frame, setFrame] = React.useState(0);
-  const [muted, setMuted] = React.useState(false);
   const track = React.useRef<HTMLDivElement>(null);
-
-  const hasSound = Boolean(cues?.length || bed);
 
   /* Whether it plays is derived, not stored: nothing autoplays under reduced
      motion, but pressing play still works, and that press is the override. */
@@ -99,57 +85,14 @@ export function Player<S>({
     return () => cancelAnimationFrame(raf);
   }, [playing, total]);
 
-  /* An AudioContext may only be built from a gesture, so it is made on the
-     first click rather than on mount, and every later play reuses it. */
-  const audio = React.useRef<Audio | null>(null);
-  // A ref alone would not re-run the bed effect on the click that builds it.
-  const [ready, setReady] = React.useState(false);
-
-  /* Deliberately not gated on `muted`: the cue and bed effects already check
-     it, and building the context anyway is what lets unmuting mid-clip take
-     effect on the spot rather than on the next gesture. */
-  const openAudio = () => {
-    if (!hasSound) return;
-    if (!audio.current) {
-      audio.current = makeAudio();
-      setReady(true);
-    }
-    void audio.current.ctx.resume();
-  };
-
-  // Held so a cue fires once, on the frame the playhead actually passes it.
-  const cursor = React.useRef(0);
-
-  React.useEffect(() => {
-    const engine = audio.current;
-    const from = cursor.current;
-    cursor.current = frame;
-
-    if (!engine || muted || !cues?.length) return;
-    if (frame <= from || frame - from > SEEK_GAP) return;
-
-    for (const cue of cues) {
-      if (cue.at > from && cue.at <= frame) cue.play(engine);
-    }
-  }, [frame, muted, cues]);
-
-  React.useEffect(() => {
-    if (!playing || muted || !bed || !ready) return;
-    const engine = audio.current;
-    if (!engine) return;
-    return bed(engine);
-  }, [playing, muted, bed, ready]);
-
   const done = frame >= total;
   const scene = scenes.findLast((entry) => frame >= entry.at) ?? scenes[0];
 
   const shot = camera ? camera(frame) : viewBox;
 
   const toggle = () => {
-    openAudio();
     if (done) {
       setFrame(0);
-      cursor.current = 0;
       setOverride(true);
       return;
     }
@@ -244,23 +187,6 @@ export function Player<S>({
             <Play className="size-4" />
           )}
         </button>
-
-        {/* Separate from reduced motion on purpose: wanting the picture without
-            the sound is a different ask from wanting less movement. */}
-        {hasSound ? (
-          <button
-            type="button"
-            aria-label={muted ? "Turn sound on" : "Turn sound off"}
-            aria-pressed={muted}
-            onClick={() => {
-              setMuted((off) => !off);
-              openAudio();
-            }}
-            className="shrink-0 cursor-pointer text-muted-foreground hover:text-foreground"
-          >
-            {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
-          </button>
-        ) : null}
 
         <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
           {scene.caption}
