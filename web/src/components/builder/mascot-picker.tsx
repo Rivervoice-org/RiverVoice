@@ -9,10 +9,11 @@ import {
   type MascotStyleId,
   mascotDataUri,
   mascotRef,
+  invertsInDark,
   mascotStyle,
   parseMascot,
   warmMascots,
-} from "@/components/dashboard/mascot";
+} from "@/mascots";
 import {
   Popover,
   PopoverContent,
@@ -65,6 +66,7 @@ function FaceImage({ face }: { face: string }) {
         onLoad={() => setLoaded(true)}
         className={cn(
           "absolute inset-0 size-9 transition-opacity duration-200",
+          invertsInDark(face) && "dark:invert",
           loaded ? "opacity-100" : "opacity-0",
         )}
       />
