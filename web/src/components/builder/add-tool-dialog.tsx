@@ -55,7 +55,7 @@ export function AddToolDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-6 rounded-2xl p-6 sm:max-w-3xl">
+      <DialogContent className="gap-6 rounded-2xl p-4 sm:max-w-3xl sm:p-6">
         <DialogHeader>
           <DialogTitle className="text-xl font-medium">Add a tool</DialogTitle>
           <DialogDescription className="sr-only">
@@ -69,7 +69,7 @@ export function AddToolDialog({
               key={kind}
               type="button"
               onClick={() => onSelect(kind)}
-              className="flex cursor-pointer flex-col items-start gap-3 rounded-xl border border-border p-5 text-left transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+              className="flex cursor-pointer flex-col items-start gap-3 rounded-xl border border-border p-4 text-left sm:p-5 transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             >
               <span className="flex size-10 items-center justify-center rounded-lg bg-muted">
                 <Icon className="size-5 text-muted-foreground" strokeWidth={1.75} />

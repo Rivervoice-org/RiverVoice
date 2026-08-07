@@ -118,7 +118,7 @@ export function DataTable<TData>({
         <div className="flex flex-wrap items-center gap-3 px-1">
           {toolbar}
           {searchPlaceholder ? (
-            <div className="relative ml-auto w-full max-w-56">
+            <div className="relative ml-auto w-full min-w-40 flex-1 sm:max-w-56">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="search"
@@ -148,7 +148,7 @@ export function DataTable<TData>({
                       key={header.id}
                       style={{ width: header.getSize() ? `${header.getSize()}px` : undefined }}
                       className={cn(
-                        "px-3 text-[11px] font-normal text-muted-foreground first:pl-5 last:pr-3",
+                        "px-2 text-[11px] font-normal text-muted-foreground first:pl-4 last:pr-2 sm:px-3 sm:first:pl-5 sm:last:pr-3",
                         header.column.columnDef.meta?.className,
                       )}
                     >
@@ -200,7 +200,7 @@ export function DataTable<TData>({
                     <TableCell
                       key={cell.id}
                       className={cn(
-                        "px-3 py-3 first:pl-5 last:pr-3",
+                        "px-2 py-3 first:pl-4 last:pr-2 sm:px-3 sm:first:pl-5 sm:last:pr-3",
                         cell.column.columnDef.meta?.className,
                       )}
                     >

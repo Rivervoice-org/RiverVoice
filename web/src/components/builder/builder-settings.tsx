@@ -44,7 +44,7 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-4 py-4">
+    <div className="flex flex-col gap-3 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="text-[13px] font-medium">{label}</p>
@@ -56,7 +56,7 @@ function Row({
         </div>
         <p className="mt-0.5 text-[13px] text-muted-foreground">{hint}</p>
       </div>
-      <div className="flex shrink-0 items-center gap-3">{children}</div>
+      <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto sm:shrink-0">{children}</div>
     </div>
   );
 }
@@ -76,7 +76,7 @@ function ValueSlider({
   const [value, setValue] = React.useState(defaultValue);
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto">
       {/* The primitive counts thumbs from the value, so it has to be an array */}
       <Slider
         value={[value]}
@@ -84,7 +84,7 @@ function ValueSlider({
         min={min}
         max={max}
         step={step}
-        className="w-32"
+        className="min-w-0 flex-1 sm:w-32 sm:flex-none"
         aria-label="Value"
       />
       <span className="flex h-8 w-16 items-center justify-center rounded-full border border-border font-mono text-xs tabular-nums">
@@ -94,7 +94,7 @@ function ValueSlider({
   );
 }
 
-const selectClass = "h-9 w-52 rounded-full px-3";
+const selectClass = "h-9 w-full min-w-0 rounded-full px-3 sm:w-52";
 
 /** A select that shows each option's mark, in the list and in the trigger. */
 function ProviderSelect({ options, defaultValue }: { options: string[]; defaultValue: string }) {
@@ -131,7 +131,7 @@ function SoundSelect() {
   const Mark = SOUNDS.find((option) => option.label === sound)?.icon ?? VolumeX;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
       <Select value={sound} onValueChange={(next) => setSound(String(next))}>
         <SelectTrigger className={cn(selectClass, "gap-2")}>
           <Mark className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
@@ -183,7 +183,7 @@ function StartingLanguage({ defaultValue }: { defaultValue: string }) {
 
 export function BuilderSettings({ agent }: { agent: Agent }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-6 lg:px-10">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-6 lg:px-10">
       <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-8 divide-y divide-border">
         {/* What it sounds like */}
         <Section title="Speaking">
@@ -357,7 +357,7 @@ export function BuilderSettings({ agent }: { agent: Agent }) {
               rows={3}
               defaultValue="Hi, this is Rivervoice calling. I will try you again later."
               aria-label="Voicemail message"
-              className="min-h-20 w-80 resize-none rounded-lg px-3 py-2.5 text-[13px]"
+              className="min-h-20 w-full resize-none rounded-lg px-3 py-2.5 text-[13px] sm:w-80"
             />
           </Row>
 

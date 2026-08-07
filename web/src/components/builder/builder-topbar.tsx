@@ -30,14 +30,16 @@ export function BuilderTopbar({
   agent,
   mascot,
   onMascotChange,
-  assistantOpen,
-  onToggleAssistant,
+  railOpen,
+  onToggleRail,
+  onOpenAssistant,
 }: {
   agent: Agent;
   mascot: string | null;
   onMascotChange: (seed: string | null) => void;
-  assistantOpen: boolean;
-  onToggleAssistant: () => void;
+  railOpen: boolean;
+  onToggleRail: () => void;
+  onOpenAssistant: () => void;
 }) {
   const [editing, setEditing] = React.useState(false);
   const [name, setName] = React.useState(agent.name);
@@ -55,7 +57,7 @@ export function BuilderTopbar({
     : [{ label: "v1", state: "Draft", when: agent.edited, current: true }];
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 px-3">
+    <header className="flex h-14 shrink-0 items-center gap-1.5 px-2 sm:gap-2 sm:px-3">
       <Button
         variant="ghost"
         size="icon-sm"
@@ -80,13 +82,13 @@ export function BuilderTopbar({
             if (event.key === "Enter" || event.key === "Escape") setEditing(false);
           }}
           aria-label="Agent name"
-          className="h-7 w-44 rounded-md border border-foreground/30 bg-transparent px-1.5 text-sm font-medium outline-none"
+          className="h-7 w-32 min-w-0 rounded-md border border-foreground/30 bg-transparent px-1.5 text-sm font-medium outline-none sm:w-44"
         />
       ) : (
-        <span className="truncate text-sm font-medium">{name}</span>
+        <span className="min-w-0 truncate text-sm font-medium">{name}</span>
       )}
 
-      <span aria-hidden className="text-muted-foreground/50">
+      <span aria-hidden className="hidden text-muted-foreground/50 sm:inline">
         /
       </span>
 
@@ -95,7 +97,7 @@ export function BuilderTopbar({
           render={
             <button
               type="button"
-              className="flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-border px-2.5 text-[13px] transition-colors hover:bg-accent aria-expanded:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+              className="hidden h-7 cursor-pointer items-center gap-1.5 rounded-full border border-border px-2.5 text-[13px] transition-colors hover:bg-accent aria-expanded:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:flex"
             />
           }
         >
@@ -150,22 +152,34 @@ export function BuilderTopbar({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <div className="ml-auto flex items-center gap-1.5">
-        {assistantOpen ? null : (
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        {/* The rail only exists from xl up; below it the same panel is a sheet. */}
+        <Button
+          variant="outline"
+          size="icon-lg"
+          aria-label="Improve with Rivervoice"
+          className="cursor-pointer rounded-full xl:hidden"
+          onClick={onOpenAssistant}
+        >
+          <Sparkles className="text-muted-foreground" />
+        </Button>
+
+        {railOpen ? null : (
           <Button
             variant="outline"
             size="lg"
-            className="cursor-pointer rounded-full px-4"
-            onClick={onToggleAssistant}
+            className="hidden cursor-pointer rounded-full px-4 xl:inline-flex"
+            onClick={onToggleRail}
           >
             <Sparkles data-icon="inline-start" className="text-muted-foreground" />
             Improve with Rivervoice
           </Button>
         )}
 
-        <Button size="lg" className="cursor-pointer rounded-full px-4">
+        <Button size="lg" className="cursor-pointer rounded-full px-3 sm:px-4">
           <Phone data-icon="inline-start" />
-          Test agent
+          <span className="hidden sm:inline">Test agent</span>
+          <span className="sm:hidden">Test</span>
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger

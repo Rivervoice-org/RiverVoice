@@ -14,6 +14,7 @@ import {
   ChevronsRight,
   Coins,
   LogOut,
+  Menu,
   Monitor,
   Moon,
   MoonStar,
@@ -37,6 +38,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useMe, useSignOut } from "@/lib/auth/queries";
 import { cn } from "@/lib/utils";
 
@@ -167,12 +169,186 @@ function initials(name: string) {
     .join("");
 }
 
-export function Sidebar({ agentsMark }: { agentsMark?: React.ReactNode }) {
+/** The workspace switcher, sized to match a nav row. */
+function Workspace({ collapsed }: { collapsed?: boolean }) {
+  if (collapsed) {
+    return (
+      <span aria-label="Rivervoice" className="flex size-8 shrink-0 items-center justify-center">
+        <span className="flex size-6 items-center justify-center rounded-md bg-foreground text-background">
+          <Waves className="size-3.5" />
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      // gap-1.5 keeps the label at the same x as the nav rows: 8 + 20 + 6 = 34px
+      className="group/ws flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+    >
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground text-background">
+        <Waves className="size-3.5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">Rivervoice</span>
+      </span>
+      <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/ws:opacity-100" />
+    </button>
+  );
+}
+
+/** Everything between the workspace switcher and the pinned footer. */
+function SidebarSections({
+  agentsMark,
+  collapsed,
+}: {
+  agentsMark?: React.ReactNode;
+  collapsed?: boolean;
+}) {
+  return (
+    <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-1.5 pt-1 pb-2">
+      <div className="flex flex-col gap-px">
+        <Row icon={Search} label="Search" collapsed={collapsed} />
+        <Row icon={Sparkles} label="Ask Rivervoice" collapsed={collapsed} />
+      </div>
+
+      <div className="mt-3 flex flex-col gap-px">
+        <Row {...home} collapsed={collapsed} />
+      </div>
+
+      {sections.map((section) => (
+        <div
+          key={section.title}
+          className={cn("flex flex-col gap-px", collapsed ? "mt-2" : "mt-4")}
+        >
+          <SectionHeader title={section.title} collapsed={collapsed} />
+          {section.items.map((item) => (
+            <Row
+              key={item.label}
+              {...item}
+              mark={item.label === "Agents" ? agentsMark : undefined}
+              collapsed={collapsed}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SidebarFooter({ collapsed }: { collapsed?: boolean }) {
   const { data: me } = useMe();
   const signOut = useSignOut();
-  const [collapsed, setCollapsed] = React.useState(false);
   const { theme, setTheme } = useTheme();
   const minutesLeft = usage.minutes.included - usage.minutes.used;
+
+  return (
+    <div className="border-t border-border p-1.5">
+      <div className="flex flex-col gap-px">
+        <Row
+          icon={Coins}
+          label="Credits"
+          badge={minutesLeft.toLocaleString()}
+          collapsed={collapsed}
+        />
+        {footerNav.map((item) => (
+          <Row key={item.label} {...item} collapsed={collapsed} />
+        ))}
+      </div>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              title={collapsed ? "Pavan · Free plan" : undefined}
+              className={cn(
+                "group/user mt-1 flex h-11 w-full cursor-pointer items-center gap-2 rounded-md text-left transition-colors hover:bg-accent aria-expanded:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                collapsed ? "justify-center px-0" : "px-2",
+              )}
+            />
+          }
+        >
+          <Avatar size="sm">
+            <AvatarFallback className="bg-muted text-[11px]">
+              {me ? initials(me.user.name) : ""}
+            </AvatarFallback>
+          </Avatar>
+          {collapsed ? null : (
+            <>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm">{me?.user.name}</span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {me?.org.name}
+                </span>
+              </span>
+              <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/user:opacity-100" />
+            </>
+          )}
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent align="start" side="top" className="w-56 p-1">
+          <div className="px-2 pt-1.5 pb-2">
+            <p className="truncate text-[13px] font-medium">{me?.user.name}</p>
+            <p className="truncate text-[11px] text-muted-foreground">{me?.user.email}</p>
+          </div>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
+            <Settings className="size-4 text-muted-foreground" strokeWidth={1.75} />
+            Settings
+          </DropdownMenuItem>
+
+          {/* Theme lives with the account, the way Notion and Linear do it */}
+          <div className="flex items-center gap-2.5 px-2 py-2">
+            <MoonStar className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+            <span className="flex-1 text-[13px]">Theme</span>
+            <div className="flex items-center gap-0.5 rounded-full bg-muted p-0.5">
+              {THEMES.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-label={option.label}
+                  title={option.label}
+                  onClick={() => setTheme(option.value)}
+                  className={cn(
+                    "flex size-6 cursor-pointer items-center justify-center rounded-full transition-colors",
+                    theme === option.value
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <option.icon className="size-3.5" strokeWidth={1.75} />
+                </button>
+              ))}
+            </div>
+          </div>
+          <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
+            <Users className="size-4 text-muted-foreground" strokeWidth={1.75} />
+            Members
+          </DropdownMenuItem>
+          <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
+            <Sparkles className="size-4 text-muted-foreground" strokeWidth={1.75} />
+            Upgrade plan
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => signOut.mutate()}
+            disabled={signOut.isPending}
+            className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]"
+          >
+            <LogOut className="size-4 text-muted-foreground" strokeWidth={1.75} />
+            {signOut.isPending ? "Signing out…" : "Log out"}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+/** The fixed rail, from md up. Narrower screens get {@link MobileNav} instead. */
+export function Sidebar({ agentsMark }: { agentsMark?: React.ReactNode }) {
+  const [collapsed, setCollapsed] = React.useState(false);
 
   return (
     <aside
@@ -190,30 +366,7 @@ export function Sidebar({ agentsMark }: { agentsMark?: React.ReactNode }) {
           collapsed ? "flex-col items-center" : "items-center",
         )}
       >
-        {collapsed ? (
-          <span
-            aria-label="Rivervoice"
-            className="flex size-8 shrink-0 items-center justify-center"
-          >
-            <span className="flex size-6 items-center justify-center rounded-md bg-foreground text-background">
-              <Waves className="size-3.5" />
-            </span>
-          </span>
-        ) : (
-          <button
-            type="button"
-            // gap-1.5 keeps the label at the same x as the nav rows: 8 + 20 + 6 = 34px
-            className="group/ws flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-          >
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground text-background">
-              <Waves className="size-3.5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium">Rivervoice</span>
-            </span>
-            <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/ws:opacity-100" />
-          </button>
-        )}
+        <Workspace collapsed={collapsed} />
 
         <button
           type="button"
@@ -235,135 +388,62 @@ export function Sidebar({ agentsMark }: { agentsMark?: React.ReactNode }) {
         </button>
       </div>
 
-      {/* Scrollable nav — everything above the pinned footer */}
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-1.5 pt-1 pb-2">
-        <div className="flex flex-col gap-px">
-          <Row icon={Search} label="Search" collapsed={collapsed} />
-          <Row icon={Sparkles} label="Ask Rivervoice" collapsed={collapsed} />
-        </div>
-
-        <div className="mt-3 flex flex-col gap-px">
-          <Row {...home} collapsed={collapsed} />
-        </div>
-
-        {sections.map((section) => (
-          <div
-            key={section.title}
-            className={cn("flex flex-col gap-px", collapsed ? "mt-2" : "mt-4")}
-          >
-            <SectionHeader title={section.title} collapsed={collapsed} />
-            {section.items.map((item) => (
-              <Row
-                key={item.label}
-                {...item}
-                mark={item.label === "Agents" ? agentsMark : undefined}
-                collapsed={collapsed}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {/* Pinned footer */}
-      <div className="border-t border-border p-1.5">
-        <div className="flex flex-col gap-px">
-          <Row
-            icon={Coins}
-            label="Credits"
-            badge={minutesLeft.toLocaleString()}
-            collapsed={collapsed}
-          />
-          {footerNav.map((item) => (
-            <Row key={item.label} {...item} collapsed={collapsed} />
-          ))}
-        </div>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                title={collapsed ? "Pavan · Free plan" : undefined}
-                className={cn(
-                  "group/user mt-1 flex h-11 w-full cursor-pointer items-center gap-2 rounded-md text-left transition-colors hover:bg-accent aria-expanded:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
-                  collapsed ? "justify-center px-0" : "px-2",
-                )}
-              />
-            }
-          >
-            <Avatar size="sm">
-              <AvatarFallback className="bg-muted text-[11px]">
-                {me ? initials(me.user.name) : ""}
-              </AvatarFallback>
-            </Avatar>
-            {collapsed ? null : (
-              <>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{me?.user.name}</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {me?.org.name}
-                  </span>
-                </span>
-                <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/user:opacity-100" />
-              </>
-            )}
-          </DropdownMenuTrigger>
-
-          <DropdownMenuContent align="start" side="top" className="w-56 p-1">
-            <div className="px-2 pt-1.5 pb-2">
-              <p className="truncate text-[13px] font-medium">{me?.user.name}</p>
-              <p className="truncate text-[11px] text-muted-foreground">{me?.user.email}</p>
-            </div>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
-              <Settings className="size-4 text-muted-foreground" strokeWidth={1.75} />
-              Settings
-            </DropdownMenuItem>
-
-            {/* Theme lives with the account, the way Notion and Linear do it */}
-            <div className="flex items-center gap-2.5 px-2 py-2">
-              <MoonStar className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
-              <span className="flex-1 text-[13px]">Theme</span>
-              <div className="flex items-center gap-0.5 rounded-full bg-muted p-0.5">
-                {THEMES.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-label={option.label}
-                    title={option.label}
-                    onClick={() => setTheme(option.value)}
-                    className={cn(
-                      "flex size-6 cursor-pointer items-center justify-center rounded-full transition-colors",
-                      theme === option.value
-                        ? "bg-card text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    <option.icon className="size-3.5" strokeWidth={1.75} />
-                  </button>
-                ))}
-              </div>
-            </div>
-            <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
-              <Users className="size-4 text-muted-foreground" strokeWidth={1.75} />
-              Members
-            </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
-              <Sparkles className="size-4 text-muted-foreground" strokeWidth={1.75} />
-              Upgrade plan
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => signOut.mutate()}
-              disabled={signOut.isPending}
-              className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]"
-            >
-              <LogOut className="size-4 text-muted-foreground" strokeWidth={1.75} />
-              {signOut.isPending ? "Signing out…" : "Log out"}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      <SidebarSections agentsMark={agentsMark} collapsed={collapsed} />
+      <SidebarFooter collapsed={collapsed} />
     </aside>
+  );
+}
+
+/**
+ * Below md the rail would eat the whole screen, so the same nav lives in a
+ * drawer behind a bar. Navigating closes it — the pathname is the only signal
+ * that reaches here, since the rows are plain links.
+ */
+export function MobileNav({ agentsMark }: { agentsMark?: React.ReactNode }) {
+  const [open, setOpen] = React.useState(false);
+  const pathname = usePathname();
+  const [shownFor, setShownFor] = React.useState(pathname);
+
+  // Adjusted during render rather than in an effect: the drawer has to be shut
+  // before the new page paints, or it covers what you just navigated to.
+  if (pathname !== shownFor) {
+    setShownFor(pathname);
+    setOpen(false);
+  }
+
+  return (
+    <div className="panel flex h-12 shrink-0 items-center gap-1 px-1.5 md:hidden">
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger
+          render={
+            <button
+              type="button"
+              aria-label="Open navigation"
+              className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            />
+          }
+        >
+          <Menu className="size-5" strokeWidth={1.75} />
+        </SheetTrigger>
+
+        <SheetContent side="left">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+
+          <div className="flex items-center gap-1 p-1.5 pb-0">
+            <Workspace />
+          </div>
+
+          <SidebarSections agentsMark={agentsMark} />
+          <SidebarFooter />
+        </SheetContent>
+      </Sheet>
+
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground text-background">
+          <Waves className="size-3.5" />
+        </span>
+        <span className="truncate text-sm font-medium">Rivervoice</span>
+      </span>
+    </div>
   );
 }

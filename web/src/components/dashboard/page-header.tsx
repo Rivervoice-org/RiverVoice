@@ -11,8 +11,8 @@ export function PageHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="animate-rise flex items-end justify-between gap-4 px-1 pt-2 pb-1">
-      <div className="min-w-0">
+    <div className="animate-rise flex flex-wrap items-end justify-between gap-x-4 gap-y-3 px-1 pt-2 pb-1">
+      <div className="min-w-0 flex-1">
         {eyebrow ? (
           <p className="text-[11px] font-medium tracking-wide text-muted-foreground">{eyebrow}</p>
         ) : null}

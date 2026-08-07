@@ -79,7 +79,7 @@ export function LanguagesPicker({ defaultValue }: { defaultValue: string[] }) {
         render={
           <button
             type="button"
-            className="flex h-9 w-64 cursor-pointer items-center gap-1.5 rounded-full border border-input px-2 pr-3 text-sm transition-colors hover:bg-muted/60 focus-visible:border-foreground/30 focus-visible:outline-none"
+            className="flex h-9 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-full border border-input px-2 pr-3 text-sm transition-colors hover:bg-muted/60 focus-visible:border-foreground/30 focus-visible:outline-none sm:w-64"
           />
         }
       >

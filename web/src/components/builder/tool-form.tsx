@@ -109,12 +109,12 @@ export function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-4 px-4 py-3">
+    <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-medium">{label}</p>
         <p className="mt-0.5 text-[13px] text-muted-foreground">{hint}</p>
       </div>
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
+      <div className="flex min-w-0 items-center gap-2 sm:shrink-0">{children}</div>
     </div>
   );
 }
@@ -447,14 +447,16 @@ export function ToolDialogShell({
         form.handleSubmit();
       }}
     >
-      <header className="shrink-0 border-b border-border px-6 py-5">
+      <header className="shrink-0 border-b border-border px-4 py-5 sm:px-6">
         <DialogTitle className="text-base font-medium">{title}</DialogTitle>
         <DialogDescription className="mt-1 text-[13px]">{description}</DialogDescription>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-6 py-6">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-4 py-6 sm:px-6">
+        {children}
+      </div>
 
-      <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-6 py-4">
+      <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-4 py-4 sm:px-6">
         <Button variant="ghost" size="lg" type="button" onClick={onCancel}>
           Cancel
         </Button>
