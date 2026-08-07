@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
-/** Section labels sit on a hairline, so they read as parts of one document. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="w-fit border-b border-border pb-1 text-[13px] font-medium text-muted-foreground">

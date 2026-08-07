@@ -3,11 +3,17 @@
 import * as React from "react";
 import { Plus, Search } from "lucide-react";
 
+import { AddToolDialog, type ToolKind } from "@/components/builder/add-tool-dialog";
+import { ApiToolDialog } from "@/components/builder/api-tool-dialog";
+import { MockToolDialog } from "@/components/builder/mock-tool-dialog";
 import { systemTools } from "@/components/dashboard/data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsIndicator, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { ApiToolValues, MockToolValues } from "@/lib/tools/schemas";
+
+type SavedTool = ApiToolValues | MockToolValues;
 
 /** A page of a spec, half filled in — what a tool is before you write it. */
 function EmptyMark() {
@@ -31,23 +37,41 @@ function EmptyMark() {
   );
 }
 
-function CustomTools() {
+function CustomTools({ tools, onAdd }: { tools: SavedTool[]; onAdd: () => void }) {
+  if (tools.length === 0) {
+    return (
+      <div className="flex flex-col items-center px-6 py-16 text-center">
+        <EmptyMark />
+
+        <h3 className="mt-6 font-serif text-2xl leading-tight font-light tracking-tight">
+          Let your agent take action
+        </h3>
+        <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+          Give it something to call — look up an order, check a booking, verify who is on the line —
+          and it can use the answer mid-conversation.
+        </p>
+
+        <Button size="lg" className="mt-6 rounded-full px-4" onClick={onAdd}>
+          <Plus data-icon="inline-start" />
+          Add tool
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col items-center px-6 py-16 text-center">
-      <EmptyMark />
-
-      <h3 className="mt-6 font-serif text-2xl leading-tight font-light tracking-tight">
-        Let your agent take action
-      </h3>
-      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-        Give it something to call — look up an order, check a booking, verify who is on the line —
-        and it can use the answer mid-conversation.
-      </p>
-
-      <Button size="lg" className="mt-6 rounded-full px-4">
-        <Plus data-icon="inline-start" />
-        Add tool
-      </Button>
+    <div className="surface divide-y divide-border overflow-hidden">
+      {tools.map((tool) => (
+        <div key={tool.name} className="flex items-center gap-4 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-[13px] font-medium">{tool.name}</p>
+            <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{tool.description}</p>
+          </div>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {"url" in tool ? "API" : "Mock"}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -74,6 +98,17 @@ function SystemTools() {
 
 export function BuilderTools() {
   const [kind, setKind] = React.useState<"custom" | "system">("custom");
+  const [adding, setAdding] = React.useState(false);
+  const [building, setBuilding] = React.useState<ToolKind | null>(null);
+  const [tools, setTools] = React.useState<SavedTool[]>([]);
+
+  const pick = (tool: ToolKind) => {
+    setAdding(false);
+    setBuilding(tool);
+  };
+
+  // Held in memory until harbor has a tools endpoint.
+  const save = (values: SavedTool) => setTools((current) => [...current, values]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-6 lg:px-10">
@@ -104,15 +139,33 @@ export function BuilderTools() {
               />
             </div>
 
-            <Button size="lg" className="px-3">
+            <Button size="lg" className="px-3" onClick={() => setAdding(true)}>
               <Plus data-icon="inline-start" />
               Add tool
             </Button>
           </div>
         </Tabs>
 
-        {kind === "custom" ? <CustomTools /> : <SystemTools />}
+        {kind === "custom" ? (
+          <CustomTools tools={tools} onAdd={() => setAdding(true)} />
+        ) : (
+          <SystemTools />
+        )}
       </div>
+
+      <AddToolDialog open={adding} onOpenChange={setAdding} onSelect={pick} />
+      <ApiToolDialog
+        key={building === "api" ? "api-open" : "api-closed"}
+        open={building === "api"}
+        onOpenChange={(next) => setBuilding(next ? "api" : null)}
+        onSubmit={save}
+      />
+      <MockToolDialog
+        key={building === "mock" ? "mock-open" : "mock-closed"}
+        open={building === "mock"}
+        onOpenChange={(next) => setBuilding(next ? "mock" : null)}
+        onSubmit={save}
+      />
     </div>
   );
 }
