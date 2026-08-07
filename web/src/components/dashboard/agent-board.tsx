@@ -7,11 +7,12 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Mascot } from "@/mascots";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { useAgents, type Agent } from "@/lib/agents/queries";
+import { useAgents } from "@/lib/agents/queries";
+import type { AgentSummary } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
-const columns: ColumnDef<Agent, unknown>[] = [
+const columns: ColumnDef<AgentSummary, unknown>[] = [
   {
     accessorKey: "name",
     header: "Agent",

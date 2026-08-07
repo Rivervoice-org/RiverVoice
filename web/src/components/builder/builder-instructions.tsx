@@ -1,6 +1,6 @@
 import { Languages, Sparkles } from "lucide-react";
 
-import type { Agent } from "@/components/dashboard/data";
+import type { Agent } from "@/lib/agents/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";

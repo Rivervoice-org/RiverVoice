@@ -7,7 +7,8 @@ import { AddToolDialog, type ToolKind } from "@/components/builder/add-tool-dial
 import { ApiToolDialog } from "@/components/builder/api-tool-dialog";
 import { MockToolDialog } from "@/components/builder/mock-tool-dialog";
 import { TelegramConnectDialog } from "@/components/builder/telegram-connect-dialog";
-import { systemTools, type Agent } from "@/components/dashboard/data";
+import { systemTools } from "@/components/dashboard/data";
+import type { Agent } from "@/lib/agents/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";

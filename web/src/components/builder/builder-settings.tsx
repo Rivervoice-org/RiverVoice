@@ -7,7 +7,7 @@ import { LANGUAGES, LanguagesPicker, glyphFor } from "@/components/builder/langu
 import { NudgeList } from "@/components/builder/nudge-list";
 import { ProviderIcon } from "@/components/builder/provider-icon";
 import { VoicePicker } from "@/components/builder/voice-picker";
-import type { Agent } from "@/components/dashboard/data";
+import type { Agent } from "@/lib/agents/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {

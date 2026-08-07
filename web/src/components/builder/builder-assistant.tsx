@@ -2,7 +2,7 @@
 
 import { ArrowUp, History, PanelRight, Sparkles } from "lucide-react";
 
-import type { Agent } from "@/components/dashboard/data";
+import type { Agent } from "@/lib/agents/types";
 import { Mascot } from "@/mascots";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";

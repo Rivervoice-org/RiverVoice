@@ -5,7 +5,7 @@ import * as React from "react";
 import { BuilderAssistant } from "@/components/builder/builder-assistant";
 import { BuilderNav } from "@/components/builder/builder-nav";
 import { BuilderTopbar } from "@/components/builder/builder-topbar";
-import type { Agent } from "@/components/dashboard/data";
+import type { Agent } from "@/lib/agents/types";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 

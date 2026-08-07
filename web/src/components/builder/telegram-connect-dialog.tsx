@@ -11,7 +11,7 @@ import { Player } from "@/motion/player";
 import { telegramScenes } from "@/motion/walkthroughs/telegram";
 import { Step, TextField } from "@/components/builder/tool-form";
 import { chatLabel, getMe, pollChats, sendMessage, type Bot, type Chat } from "@/lib/telegram";
-import type { Agent } from "@/components/dashboard/data";
+import type { Agent } from "@/lib/agents/types";
 import { Mascot, mascotDataUri } from "@/mascots";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
