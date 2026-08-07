@@ -4,10 +4,11 @@ import { useRouter } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { agents, type Agent } from "@/components/dashboard/data";
 import { Mascot } from "@/mascots";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { useAgents, type Agent } from "@/lib/agents/queries";
+import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
 const columns: ColumnDef<Agent, unknown>[] = [
@@ -36,15 +37,16 @@ const columns: ColumnDef<Agent, unknown>[] = [
     },
   },
   {
-    accessorKey: "owner",
+    accessorKey: "editedBy",
     header: "Edited by",
     size: 200,
     meta: { className: "hidden sm:table-cell text-xs text-muted-foreground truncate" },
   },
   {
-    accessorKey: "edited",
+    accessorKey: "editedAt",
     header: "Last modified",
     size: 104,
+    cell: ({ row }) => timeAgo(row.original.editedAt),
     meta: { className: "text-xs text-muted-foreground truncate" },
   },
   {
@@ -69,6 +71,7 @@ const columns: ColumnDef<Agent, unknown>[] = [
 /** The agents you already have, read as lines on a switchboard. */
 export function AgentBoard() {
   const router = useRouter();
+  const agents = useAgents();
 
   return (
     <section
@@ -77,12 +80,16 @@ export function AgentBoard() {
     >
       <DataTable
         columns={columns}
-        data={agents}
+        data={agents.data ?? []}
         searchPlaceholder="Find an agent"
         pageSize={10}
-        initialSorting={[{ id: "edited", desc: false }]}
+        initialSorting={[{ id: "editedAt", desc: true }]}
         toolbar={<h2 className="text-sm font-medium">On the board</h2>}
-        empty="No agents yet. Describe one above to get started."
+        empty={
+          agents.isPending
+            ? "Loading…"
+            : (agents.error?.message ?? "No agents yet. Describe one above to get started.")
+        }
         onRowClick={(agent) => router.push(`/build-agent/${agent.id}`)}
       />
     </section>
