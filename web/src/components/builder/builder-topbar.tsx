@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 
 import { MascotPicker } from "@/components/builder/mascot-picker";
-import type { Agent } from "@/components/dashboard/data";
+import type { Agent } from "@/lib/agents/types";
+import { timeAgo } from "@/lib/time";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -43,18 +44,16 @@ export function BuilderTopbar({
 }) {
   const [editing, setEditing] = React.useState(false);
   const [name, setName] = React.useState(agent.name);
-  const live = agent.status === "live";
-  const version = live ? "v3" : "v1";
-  const state = live ? "Live" : "Draft";
+  const version = `v${agent.version}`;
+  const state =
+    agent.state === "draft"
+      ? "Draft"
+      : agent.versionId === agent.liveVersionId
+        ? "Live"
+        : "Committed";
 
-  // Newest first. Only the top one is editable; the rest are committed.
-  const versions = live
-    ? [
-        { label: "v3", state: "Live", when: agent.edited, current: true },
-        { label: "v2", state: "Committed", when: "1 week ago", current: false },
-        { label: "v1", state: "Committed", when: "3 weeks ago", current: false },
-      ]
-    : [{ label: "v1", state: "Draft", when: agent.edited, current: true }];
+  // Only the one being looked at, until there is an endpoint for the rest.
+  const versions = [{ label: version, state, when: timeAgo(agent.editedAt), current: true }];
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-1.5 px-2 sm:gap-2 sm:px-3">
@@ -105,7 +104,7 @@ export function BuilderTopbar({
             aria-hidden
             className={cn(
               "size-1.5 rounded-full",
-              live ? "bg-foreground" : "bg-muted-foreground/40",
+              agent.state === "draft" ? "bg-muted-foreground/40" : "bg-foreground",
             )}
           />
           <span className="font-mono tabular-nums">{version}</span>
@@ -131,7 +130,7 @@ export function BuilderTopbar({
                   <span className="text-xs text-muted-foreground">{entry.state}</span>
                 </span>
                 <span className="block truncate text-[11px] text-muted-foreground">
-                  {agent.owner} · {entry.when}
+                  {agent.editedBy} · {entry.when}
                 </span>
               </span>
               {entry.current ? <Check className="size-3.5 shrink-0 text-muted-foreground" /> : null}
@@ -145,7 +144,7 @@ export function BuilderTopbar({
             <span className="min-w-0 flex-1">
               <span className="block text-[13px]">Commit agent</span>
               <span className="block text-[11px] text-muted-foreground">
-                Freeze this draft as {live ? "v4" : "v2"}
+                Freeze this draft as v{agent.version}
               </span>
             </span>
           </DropdownMenuItem>
