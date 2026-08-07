@@ -30,3 +30,32 @@ alter table orgs force row level security;
 alter table users enable row level security;
 
 alter table users force row level security;
+
+-- SECURITY DEFINER: reads users before that table's own policy applies, which
+-- would otherwise need the org id this function is computing.
+create function app.current_org_id () returns uuid language sql stable security definer
+set
+  search_path = public,
+  pg_temp as $$
+  select org_id from users where id = app.current_user_id();
+$$;
+
+create function app.current_role () returns member_role language sql stable security definer
+set
+  search_path = public,
+  pg_temp as $$
+  select role from users where id = app.current_user_id();
+$$;
+
+grant
+execute on function app.current_org_id,
+app.current_role to app_user,
+app_worker;
+
+create policy orgs_read on orgs for
+select
+  to app_user using (id = app.current_org_id ());
+
+create policy users_read on users for
+select
+  to app_user using (org_id = app.current_org_id ());

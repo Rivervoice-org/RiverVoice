@@ -17,6 +17,11 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
   -- connects as this owns the tenant boundary itself.
   create role app_worker login password '${APP_WORKER_PASSWORD}' bypassrls;
 
+  -- harbor connects once, as app_worker, and drops into app_user per
+  -- transaction for anything on behalf of a signed-in person. SET ROLE needs
+  -- membership; app_user is the weaker role, so this grants nothing extra.
+  grant app_user to app_worker;
+
   grant usage on schema public, app to app_user, app_worker;
 
   -- Migrations run as $POSTGRES_USER, which owns the tables. Everything created
