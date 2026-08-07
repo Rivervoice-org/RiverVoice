@@ -5,9 +5,11 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 
 	"github.com/steverogersX/RiverVoice/harbor/internal/auth"
 	"github.com/steverogersX/RiverVoice/harbor/internal/httpx"
@@ -23,20 +25,31 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Repo root first, so one .env serves compose and every service. Missing is
+	// fine: deployed environments set real variables.
+	_ = godotenv.Load("../.env", ".env")
+
 	pool, err := pgxpool.New(ctx, mustEnv("DATABASE_URL"))
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
-	// Fail at boot rather than on the first request.
 	if err := pool.Ping(ctx); err != nil {
 		return err
 	}
 
-	router := httpx.NewRouter(pool, auth.NewHandler(pool))
+	// Plain http locally, where a Secure cookie would be dropped.
+	secureCookies := envOr("COOKIE_SECURE", "true") != "false"
 
-	return httpx.Serve(ctx, ":"+envOr("PORT", "8080"), router)
+	router := httpx.NewRouter(pool,
+		auth.NewHandler(pool, mustEnv("JWT_SECRET"), secureCookies),
+	)
+
+	origins := strings.Split(envOr("WEB_ORIGIN", "http://localhost:3000"), ",")
+	handler := httpx.CORS(origins)(router)
+
+	return httpx.Serve(ctx, ":"+envOr("PORT", "8080"), handler)
 }
 
 func mustEnv(key string) string {

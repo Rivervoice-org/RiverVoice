@@ -1,28 +1,49 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
+	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/steverogersX/RiverVoice/harbor/internal/httpx"
 	"github.com/steverogersX/RiverVoice/harbor/internal/validate"
 )
 
+const uniqueViolation = "23505"
+
+var (
+	errEmailTaken = errors.New("email already registered")
+	errPhoneTaken = errors.New("phone already registered")
+)
+
 type Handler struct {
-	pool *pgxpool.Pool
+	pool          *pgxpool.Pool
+	jwtSecret     []byte
+	secureCookies bool
 }
 
-func NewHandler(pool *pgxpool.Pool) *Handler {
-	return &Handler{pool: pool}
+func NewHandler(pool *pgxpool.Pool, jwtSecret string, secureCookies bool) *Handler {
+	return &Handler{
+		pool:          pool,
+		jwtSecret:     []byte(jwtSecret),
+		secureCookies: secureCookies,
+	}
 }
 
 func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/auth/signup", httpx.Handle(h.createAccount))
+	mux.HandleFunc("POST /v1/auth/login", httpx.Handle(h.login))
+	mux.Handle("GET /v1/me", h.RequireSession(httpx.Handle(h.me)))
 }
 
-func (h *Handler) createAccount(r *http.Request) httpx.APIResponse[string] {
+func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) httpx.APIResponse[string] {
 	var req CreateAccountRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -33,16 +54,79 @@ func (h *Handler) createAccount(r *http.Request) httpx.APIResponse[string] {
 		return httpx.Fail[string](http.StatusBadRequest, validate.FirstMessage(err))
 	}
 
-	// h.pool is the database handle from here on.
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("hash password: %v", err)
+		return httpx.Fail[string](http.StatusInternalServerError, "Could not create the account")
+	}
 
-	// 1. Have to check the whether email was already in db or not.
-	// if yes then throw err
+	acc, err := h.insertAccount(r.Context(), req, string(hash))
+	switch {
+	case errors.Is(err, errEmailTaken):
+		return httpx.Fail[string](http.StatusConflict, "That email is already registered")
+	case errors.Is(err, errPhoneTaken):
+		return httpx.Fail[string](http.StatusConflict, "That phone number is already registered")
+	case err != nil:
+		log.Printf("create account: %v", err)
+		return httpx.Fail[string](http.StatusInternalServerError, "Could not create the account")
+	}
 
-	// 2. check hte phonumber. if yes, throw error
+	token, err := h.issueToken(acc.userID, acc.orgID, acc.role)
+	if err != nil {
+		// The account exists, so a retry would only collide with their own email.
+		log.Printf("issue token: %v", err)
+		return httpx.Fail[string](http.StatusInternalServerError, "Account created, please sign in")
+	}
 
-	// 3. then save the user into db.
+	http.SetCookie(w, h.sessionCookie(token))
 
-	// 4. creates the jwt and put in res cookies. httponly
+	return httpx.Ok(http.StatusCreated, "Account created")
+}
 
-	return httpx.Ok(http.StatusOK, "OKAY")
+func (h *Handler) insertAccount(ctx context.Context, req CreateAccountRequest, hash string) (account, error) {
+	var out account
+
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op once committed
+
+	if err := tx.QueryRow(ctx,
+		`insert into orgs (name) values ($1) returning id::text`,
+		strings.TrimSpace(req.OrgName),
+	).Scan(&out.orgID); err != nil {
+		return out, err
+	}
+
+	// No pre-check on email or phone: the unique constraints already answer
+	// that, and check-then-insert races two simultaneous signups.
+	if err := tx.QueryRow(ctx,
+		`insert into users (org_id, email, phone, name, role, password_hash)
+		 values ($1, $2, $3, $4, 'owner', $5)
+		 returning id::text, role::text`,
+		out.orgID,
+		strings.TrimSpace(req.Email),
+		req.PhoneNumber,
+		strings.TrimSpace(req.UserName),
+		hash,
+	).Scan(&out.userID, &out.role); err != nil {
+		return out, asTakenError(err)
+	}
+
+	return out, tx.Commit(ctx)
+}
+
+func asTakenError(err error) error {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != uniqueViolation {
+		return err
+	}
+	switch {
+	case strings.Contains(pgErr.ConstraintName, "email"):
+		return errEmailTaken
+	case strings.Contains(pgErr.ConstraintName, "phone"):
+		return errPhoneTaken
+	}
+	return err
 }

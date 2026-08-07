@@ -8,11 +8,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type APIFunc[T any] func(*http.Request) APIResponse[T]
+type APIFunc[T any] func(http.ResponseWriter, *http.Request) APIResponse[T]
 
 func Handle[T any](fn APIFunc[T]) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		res := fn(r)
+		res := fn(w, r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(res.StatusCode)
 		if err := json.NewEncoder(w).Encode(res); err != nil {
@@ -21,8 +21,7 @@ func Handle[T any](fn APIFunc[T]) http.HandlerFunc {
 	}
 }
 
-// RouteGroup is one domain's set of routes. Passing them in keeps httpx from
-// importing auth, agent and the rest, which would be an import cycle.
+// Passing groups in keeps httpx from importing auth, which would be a cycle.
 type RouteGroup interface {
 	Routes(*http.ServeMux)
 }
