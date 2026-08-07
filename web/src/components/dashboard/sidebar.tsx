@@ -6,12 +6,10 @@ import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
   ChevronsUpDown,
-  Code,
   CreditCard,
   FileText,
   House,
   type LucideIcon,
-  Megaphone,
   ChevronsLeft,
   ChevronsRight,
   Coins,
@@ -29,7 +27,7 @@ import {
   Waves,
 } from "lucide-react";
 
-import { AnalyticsIcon, KnowledgeIcon } from "@/components/icons";
+import { AnalyticsIcon, CampaignIcon, DeployCodeIcon, KnowledgeIcon } from "@/components/icons";
 import { usage } from "@/components/dashboard/data";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -39,6 +37,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useMe, useSignOut } from "@/lib/auth/queries";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -65,8 +64,8 @@ const sections: { title: string; items: NavItem[] }[] = [
     title: "Deploy",
     items: [
       { label: "Inbound calls", icon: PhoneIncoming, badge: "3" },
-      { label: "Outbound campaigns", icon: Megaphone },
-      { label: "Deploy with code", icon: Code },
+      { label: "Outbound campaigns", icon: CampaignIcon },
+      { label: "Deploy with code", icon: DeployCodeIcon },
     ],
   },
   {
@@ -160,7 +159,17 @@ const THEMES = [
   { value: "dark", label: "Dark", icon: Moon },
 ];
 
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
 export function Sidebar({ agentsMark }: { agentsMark?: React.ReactNode }) {
+  const { data: me } = useMe();
+  const signOut = useSignOut();
   const [collapsed, setCollapsed] = React.useState(false);
   const { theme, setTheme } = useTheme();
   const minutesLeft = usage.minutes.included - usage.minutes.used;
@@ -283,14 +292,16 @@ export function Sidebar({ agentsMark }: { agentsMark?: React.ReactNode }) {
             }
           >
             <Avatar size="sm">
-              <AvatarFallback className="bg-muted text-[11px]">PN</AvatarFallback>
+              <AvatarFallback className="bg-muted text-[11px]">
+                {me ? initials(me.user.name) : ""}
+              </AvatarFallback>
             </Avatar>
             {collapsed ? null : (
               <>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">Pavan</span>
+                  <span className="block truncate text-sm">{me?.user.name}</span>
                   <span className="block truncate text-[11px] text-muted-foreground">
-                    Free plan · 4 seats
+                    {me?.org.name}
                   </span>
                 </span>
                 <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/user:opacity-100" />
@@ -300,8 +311,8 @@ export function Sidebar({ agentsMark }: { agentsMark?: React.ReactNode }) {
 
           <DropdownMenuContent align="start" side="top" className="w-56 p-1">
             <div className="px-2 pt-1.5 pb-2">
-              <p className="truncate text-[13px] font-medium">Pavan</p>
-              <p className="truncate text-[11px] text-muted-foreground">pavan@rivervoice.app</p>
+              <p className="truncate text-[13px] font-medium">{me?.user.name}</p>
+              <p className="truncate text-[11px] text-muted-foreground">{me?.user.email}</p>
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
@@ -342,9 +353,13 @@ export function Sidebar({ agentsMark }: { agentsMark?: React.ReactNode }) {
               Upgrade plan
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
+            <DropdownMenuItem
+              onClick={() => signOut.mutate()}
+              disabled={signOut.isPending}
+              className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]"
+            >
               <LogOut className="size-4 text-muted-foreground" strokeWidth={1.75} />
-              Log out
+              {signOut.isPending ? "Signing out…" : "Log out"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

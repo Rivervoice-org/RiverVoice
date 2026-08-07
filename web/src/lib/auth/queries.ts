@@ -58,3 +58,18 @@ export function useSignIn() {
     onSuccess,
   });
 }
+
+export function useSignOut() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => api.post<string>("/v1/auth/logout"),
+    // Clear even when the request failed: the cookie may already be gone, and
+    // leaving stale account data on screen is worse than an extra sign-in.
+    onSettled: () => {
+      queryClient.clear();
+      router.replace("/sign-in");
+    },
+  });
+}

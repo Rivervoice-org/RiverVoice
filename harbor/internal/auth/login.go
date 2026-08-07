@@ -73,3 +73,10 @@ func (h *Handler) findByEmail(ctx context.Context, email string) (account, strin
 
 	return acc, hash, err
 }
+
+// Not behind RequireSession: signing out has to work with an expired or
+// missing cookie too, and clearing one is safe to repeat.
+func (h *Handler) logout(w http.ResponseWriter, r *http.Request) httpx.APIResponse[string] {
+	http.SetCookie(w, h.expiredSessionCookie())
+	return httpx.Ok(http.StatusOK, "Signed out")
+}

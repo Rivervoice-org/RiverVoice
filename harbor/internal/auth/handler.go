@@ -40,6 +40,7 @@ func NewHandler(pool *pgxpool.Pool, jwtSecret string, secureCookies bool) *Handl
 func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/auth/signup", httpx.Handle(h.createAccount))
 	mux.HandleFunc("POST /v1/auth/login", httpx.Handle(h.login))
+	mux.HandleFunc("POST /v1/auth/logout", httpx.Handle(h.logout))
 	mux.Handle("GET /v1/me", h.RequireSession(httpx.Handle(h.me)))
 }
 
