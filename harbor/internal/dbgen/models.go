@@ -226,15 +226,17 @@ func (ns NullVersionState) Value() (driver.Value, error) {
 }
 
 type Agent struct {
-	ID            string             `json:"id"`
-	OrgID         string             `json:"orgId"`
-	Name          string             `json:"name"`
-	Mascot        *string            `json:"mascot"`
-	Purpose       string             `json:"purpose"`
-	Status        AgentStatus        `json:"status"`
-	LiveVersionID pgtype.UUID        `json:"liveVersionId"`
-	CreatedBy     pgtype.UUID        `json:"createdBy"`
-	CreatedAt     pgtype.Timestamptz `json:"createdAt"`
+	ID               string             `json:"id"`
+	OrgID            string             `json:"orgId"`
+	Name             string             `json:"name"`
+	Mascot           *string            `json:"mascot"`
+	Purpose          string             `json:"purpose"`
+	Status           AgentStatus        `json:"status"`
+	LiveVersionID    pgtype.UUID        `json:"liveVersionId"`
+	CreatedBy        pgtype.UUID        `json:"createdBy"`
+	CreatedAt        pgtype.Timestamptz `json:"createdAt"`
+	IsTemplate       bool               `json:"isTemplate"`
+	TemplateCategory *string            `json:"templateCategory"`
 }
 
 type AgentTool struct {
@@ -291,6 +293,20 @@ type AgentVersion struct {
 	CreatedBy         pgtype.UUID        `json:"createdBy"`
 	CreatedAt         pgtype.Timestamptz `json:"createdAt"`
 	UpdatedAt         pgtype.Timestamptz `json:"updatedAt"`
+}
+
+type MyAgent struct {
+	ID               string             `json:"id"`
+	OrgID            string             `json:"orgId"`
+	Name             string             `json:"name"`
+	Mascot           *string            `json:"mascot"`
+	Purpose          string             `json:"purpose"`
+	Status           AgentStatus        `json:"status"`
+	LiveVersionID    pgtype.UUID        `json:"liveVersionId"`
+	CreatedBy        pgtype.UUID        `json:"createdBy"`
+	CreatedAt        pgtype.Timestamptz `json:"createdAt"`
+	IsTemplate       bool               `json:"isTemplate"`
+	TemplateCategory *string            `json:"templateCategory"`
 }
 
 type Org struct {

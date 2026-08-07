@@ -223,6 +223,58 @@ func (q *Queries) GetAgent(ctx context.Context, arg GetAgentParams) (GetAgentRow
 	return i, err
 }
 
+const listAgentTemplates = `-- name: ListAgentTemplates :many
+select
+  id,
+  name,
+  purpose,
+  mascot,
+  coalesce(template_category, '')::text as category
+from
+  agents
+where
+  is_template
+order by
+  template_category,
+  name
+`
+
+type ListAgentTemplatesRow struct {
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Purpose  string  `json:"purpose"`
+	Mascot   *string `json:"mascot"`
+	Category string  `json:"category"`
+}
+
+// The roster on the agents page. No org filter: agents_read lets templates
+// through for everyone, which is the point of them.
+func (q *Queries) ListAgentTemplates(ctx context.Context) ([]ListAgentTemplatesRow, error) {
+	rows, err := q.db.Query(ctx, listAgentTemplates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAgentTemplatesRow{}
+	for rows.Next() {
+		var i ListAgentTemplatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Purpose,
+			&i.Mascot,
+			&i.Category,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentTools = `-- name: ListAgentTools :many
 select
   id,
@@ -299,7 +351,9 @@ select
   -- has left the org, and the cast alone would tell sqlc it never is.
   coalesce(u.email::text, '') as edited_by
 from
-  agents a
+  -- The view, not the table: agents_read lets templates through on purpose, so
+  -- selecting from agents here would put the roster on everyone's board.
+  my_agents a
   join lateral (
     select
       updated_at,
