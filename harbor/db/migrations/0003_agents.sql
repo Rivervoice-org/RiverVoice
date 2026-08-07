@@ -1,3 +1,4 @@
+-- +goose Up
 -- An agent is edited constantly, so its settings live in versions rather than
 -- on the agent itself. The agent row only changes on a rename, a pause, or a
 -- publish; every settings write lands in agent_versions.
