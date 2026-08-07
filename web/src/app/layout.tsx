@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Inter, Newsreader } from "next/font/google";
+import { QueryProvider } from "@/components/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -40,7 +41,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       {/* Extensions add their own attributes to <body> before React loads,
           which otherwise reports as a hydration mismatch. */}
       <body suppressHydrationWarning className="flex min-h-full flex-col">
-        <ThemeProvider>{children}</ThemeProvider>
+        <QueryProvider>
+          <ThemeProvider>{children}</ThemeProvider>
+        </QueryProvider>
       </body>
     </html>
   );

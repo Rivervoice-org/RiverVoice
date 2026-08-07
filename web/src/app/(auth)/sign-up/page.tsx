@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { AuthCard, AuthProviders, Field } from "@/components/auth/auth-shell";
-import { Button } from "@/components/ui/button";
+import { AuthCard, AuthProviders } from "@/components/auth/auth-shell";
+import { SignUpForm } from "@/components/auth/sign-up-form";
 
 export const metadata = { title: "Create an account" };
 
@@ -19,18 +19,7 @@ export default function SignUpPage() {
         </>
       }
     >
-      <Field label="Name" autoComplete="name" placeholder="Pavan" />
-      <Field label="Work email" type="email" autoComplete="email" placeholder="you@company.com" />
-      <Field
-        label="Password"
-        type="password"
-        autoComplete="new-password"
-        hint="At least 8 characters."
-      />
-
-      <Button size="lg" className="mt-1 h-10 w-full justify-center">
-        Create account
-      </Button>
+      <SignUpForm />
 
       <AuthProviders />
 

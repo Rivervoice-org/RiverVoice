@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { AuthCard, AuthProviders, Field } from "@/components/auth/auth-shell";
-import { Button } from "@/components/ui/button";
+import { AuthCard, AuthProviders } from "@/components/auth/auth-shell";
+import { SignInForm } from "@/components/auth/sign-in-form";
 
 export const metadata = { title: "Sign in" };
 
@@ -19,25 +19,7 @@ export default function SignInPage() {
         </>
       }
     >
-      <Field label="Work email" type="email" autoComplete="email" placeholder="you@company.com" />
-
-      <Field
-        label="Password"
-        type="password"
-        autoComplete="current-password"
-        aside={
-          <Link
-            href="/verify"
-            className="text-xs font-normal text-muted-foreground hover:text-foreground"
-          >
-            Use a code instead
-          </Link>
-        }
-      />
-
-      <Button size="lg" className="mt-1 h-10 w-full justify-center">
-        Sign in
-      </Button>
+      <SignInForm />
 
       <AuthProviders />
     </AuthCard>
