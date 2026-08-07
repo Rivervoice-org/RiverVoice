@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 
+	"github.com/steverogersX/RiverVoice/harbor/internal/agent"
 	"github.com/steverogersX/RiverVoice/harbor/internal/auth"
 	"github.com/steverogersX/RiverVoice/harbor/internal/httpx"
 )
@@ -42,8 +43,11 @@ func run() error {
 	// Plain http locally, where a Secure cookie would be dropped.
 	secureCookies := envOr("COOKIE_SECURE", "true") != "false"
 
+	sessions := auth.NewHandler(pool, mustEnv("JWT_SECRET"), secureCookies)
+
 	router := httpx.NewRouter(pool,
-		auth.NewHandler(pool, mustEnv("JWT_SECRET"), secureCookies),
+		sessions,
+		agent.NewHandler(pool, sessions),
 	)
 
 	origins := strings.Split(envOr("WEB_ORIGIN", "http://localhost:3000"), ",")
