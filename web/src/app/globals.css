@@ -76,6 +76,9 @@
 }
 
 @theme inline {
+  /* Phones narrower than this cannot hold a list row's secondary columns. */
+  --breakpoint-xs: 30rem;
+
   --font-sans: var(--font-inter);
   --font-serif: var(--font-newsreader);
   --font-mono: var(--font-geist-mono);

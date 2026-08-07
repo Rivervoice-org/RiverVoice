@@ -112,7 +112,7 @@ export function BuilderTools({ agent }: { agent: Agent }) {
   const save = (values: SavedTool) => setTools((current) => [...current, values]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-6 lg:px-10">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-6 lg:px-10">
       <div className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-4">
         <Tabs
           value={kind}
@@ -120,7 +120,7 @@ export function BuilderTools({ agent }: { agent: Agent }) {
           className="flex w-full min-w-0 flex-col gap-4"
         >
           <div className="flex flex-wrap items-center gap-3">
-            <TabsList className="h-9 w-fit shrink-0 rounded-lg p-1">
+            <TabsList className="h-9 w-fit max-w-full shrink-0 overflow-x-auto rounded-lg p-1">
               <TabsIndicator />
               <TabsTrigger value="custom" className="flex-none rounded-md px-4 text-[13px]">
                 Custom tools
@@ -130,7 +130,7 @@ export function BuilderTools({ agent }: { agent: Agent }) {
               </TabsTrigger>
             </TabsList>
 
-            <div className="relative ml-auto w-full max-w-60">
+            <div className="relative ml-auto w-full min-w-0 flex-1 sm:max-w-60">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="search"

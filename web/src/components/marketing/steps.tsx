@@ -1,4 +1,4 @@
-import { Mascot } from "@/components/dashboard/mascot";
+import { Mascot } from "@/mascots";
 import { Reveal } from "@/components/marketing/reveal";
 import { SectionHeading } from "@/components/marketing/section-heading";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +35,7 @@ const STEPS = [
 
 export function Steps() {
   return (
-    <section id="how" className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-20 sm:py-28">
+    <section id="how" className="mx-auto w-full max-w-6xl scroll-mt-20 px-4 py-20 sm:px-6 sm:py-28">
       <Reveal>
         <SectionHeading
           eyebrow="Three steps"
@@ -45,7 +45,7 @@ export function Steps() {
         />
       </Reveal>
 
-      <ol className="mt-14 grid gap-3 md:grid-cols-3">
+      <ol className="mt-10 grid gap-3 sm:mt-14 md:grid-cols-3">
         {STEPS.map((step, index) => (
           <Reveal
             key={step.title}

@@ -16,10 +16,10 @@ const LINKS = [
 export function SiteNav() {
   return (
     <header className="relative z-50">
-      <nav className="mx-auto flex h-20 w-full max-w-6xl items-center px-6">
+      <nav className="mx-auto flex h-16 w-full max-w-6xl items-center px-4 sm:h-20 sm:px-6">
         <Wordmark />
 
-        <div className="ml-auto flex items-center gap-6">
+        <div className="ml-auto flex items-center gap-3 sm:gap-6">
           <ul className="hidden items-center gap-1 md:flex">
             {LINKS.map((link) => (
               <li key={link.href}>

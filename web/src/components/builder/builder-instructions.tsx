@@ -16,17 +16,17 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export function BuilderInstructions({ agent }: { agent: Agent }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="mx-auto flex w-full max-w-4xl min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-6 py-6 lg:px-10">
+      <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col gap-8 overflow-y-auto px-4 py-6 sm:px-6 lg:px-10">
         {/* Greeting */}
         <section className="flex flex-col gap-3">
           <SectionLabel>Greeting</SectionLabel>
 
-          <div className="flex items-start gap-4">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:gap-4">
             <Input
               defaultValue={`Hi, I am ${agent.voice} calling from Rivervoice. How can I help you today?`}
               aria-label="Greeting"
               placeholder="The first thing the caller hears"
-              className="h-9 min-w-0 flex-1 border-0 bg-transparent px-0 text-base shadow-none placeholder:text-muted-foreground/70 focus-visible:border-0 focus-visible:ring-0 md:text-base dark:bg-transparent"
+              className="h-9 w-full min-w-0 flex-1 border-0 bg-transparent px-0 text-base shadow-none placeholder:text-muted-foreground/70 focus-visible:border-0 focus-visible:ring-0 md:text-base dark:bg-transparent"
             />
             <Button
               variant="outline"
@@ -52,7 +52,7 @@ export function BuilderInstructions({ agent }: { agent: Agent }) {
       </div>
 
       {/* One action, centred, out of the way of the writing */}
-      <div className="flex shrink-0 justify-center px-6 pb-6">
+      <div className="flex shrink-0 justify-center px-4 pb-6 sm:px-6">
         <Button
           variant="outline"
           size="lg"

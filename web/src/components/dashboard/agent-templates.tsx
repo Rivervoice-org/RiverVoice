@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react";
 
 import { agentTemplates, templateCategories } from "@/components/dashboard/data";
-import { Mascot } from "@/components/dashboard/mascot";
+import { Mascot } from "@/mascots";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function Roster({ items }: { items: typeof agentTemplates }) {
@@ -57,14 +57,17 @@ export function AgentTemplates() {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
           <h2 className="text-sm font-medium">Hire from the roster</h2>
           <span className="text-xs text-muted-foreground">Start from one and change anything</span>
-          <TabsList variant="line" className="ml-auto h-8">
-            <TabsTrigger value="all">All</TabsTrigger>
-            {templateCategories.map((category) => (
-              <TabsTrigger key={category} value={category}>
-                {category}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          {/* Five categories do not fit a phone, so the strip scrolls instead */}
+          <div className="-mx-1 w-full overflow-x-auto px-1 lg:ml-auto lg:w-auto">
+            <TabsList variant="line" className="h-8">
+              <TabsTrigger value="all">All</TabsTrigger>
+              {templateCategories.map((category) => (
+                <TabsTrigger key={category} value={category}>
+                  {category}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
         </div>
 
         <TabsContent value="all">

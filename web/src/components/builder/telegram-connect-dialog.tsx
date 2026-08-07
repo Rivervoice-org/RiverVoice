@@ -12,7 +12,7 @@ import { telegramScenes } from "@/motion/walkthroughs/telegram";
 import { Step, TextField } from "@/components/builder/tool-form";
 import { chatLabel, getMe, pollChats, sendMessage, type Bot, type Chat } from "@/lib/telegram";
 import type { Agent } from "@/components/dashboard/data";
-import { Mascot, mascotDataUri } from "@/components/dashboard/mascot";
+import { Mascot, mascotDataUri } from "@/mascots";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -64,7 +64,7 @@ function CopyField({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="w-28 shrink-0 text-[13px] text-muted-foreground">{label}</span>
+      <span className="w-16 shrink-0 text-[13px] text-muted-foreground sm:w-28">{label}</span>
       <code className="min-w-0 flex-1 truncate rounded-lg bg-muted/60 px-3 py-1.5 font-mono text-xs">
         {value}
       </code>
@@ -116,7 +116,7 @@ function InviteQr({ link }: { link: string }) {
     <div
       role="img"
       aria-label={`QR code linking to ${link}`}
-      className="flex size-36 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/40 p-2 *:size-full"
+      className="mx-auto flex size-36 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/40 p-2 *:size-full sm:mx-0"
       dangerouslySetInnerHTML={svg ? { __html: svg } : undefined}
     />
   );
@@ -206,15 +206,15 @@ export function TelegramConnectDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[86vh] flex-col gap-0 rounded-2xl p-0 sm:max-w-xl">
-        <header className="shrink-0 border-b border-border px-6 py-5">
+      <DialogContent className="flex max-h-[86svh] flex-col gap-0 rounded-2xl p-0 sm:max-w-xl">
+        <header className="shrink-0 border-b border-border px-4 py-5 sm:px-6">
           <DialogTitle className="text-base font-medium">Message on Telegram</DialogTitle>
           <DialogDescription className="mt-1 text-[13px]">
             {agent.name} gets its own bot, so follow-ups arrive under its name and face.
           </DialogDescription>
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-6 py-6">
+        <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-4 py-6 sm:px-6">
           <Player
             scenes={telegramScenes}
             script={{
@@ -375,7 +375,7 @@ export function TelegramConnectDialog({
           </Step>
         </div>
 
-        <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-6 py-4">
+        <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-4 py-4 sm:px-6">
           {bot ? (
             <Button
               variant="ghost"

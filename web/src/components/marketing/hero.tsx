@@ -11,11 +11,11 @@ import { Button } from "@/components/ui/button";
  */
 export function Hero() {
   return (
-    <section className="relative flex w-full flex-col items-center px-4 pt-28 pb-28 text-center sm:pt-36 sm:pb-36">
+    <section className="relative flex w-full flex-col items-center px-4 pt-20 pb-20 text-center sm:pt-36 sm:pb-36">
       <HeroCrowd />
 
       <div className="relative flex flex-col items-center">
-        <h1 className="animate-rise max-w-3xl text-[44px] leading-[1.04] font-semibold tracking-[-0.04em] text-balance sm:text-[64px] lg:text-[74px]">
+        <h1 className="animate-rise max-w-3xl text-[36px] leading-[1.04] font-semibold tracking-[-0.04em] text-balance xs:text-[44px] sm:text-[64px] lg:text-[74px]">
           Voice agents for
           {/* The inner span hugs the words, so the stroke sits under the
               phrase rather than spanning the whole centred line */}
@@ -28,7 +28,7 @@ export function Hero() {
         </h1>
 
         <p
-          className="animate-rise mt-8 max-w-xl text-base leading-7 text-balance text-muted-foreground sm:text-lg sm:leading-8"
+          className="animate-rise mt-6 max-w-xl text-[15px] leading-7 text-balance text-muted-foreground sm:mt-8 sm:text-lg sm:leading-8"
           style={{ animationDelay: "0.08s" }}
         >
           Your callers ring in from Kanpur, Kochi and Coimbatore — half English, half not, changing
@@ -36,7 +36,7 @@ export function Hero() {
         </p>
 
         <div
-          className="animate-rise mt-10 flex flex-wrap items-center justify-center gap-3"
+          className="animate-rise mt-9 flex w-full flex-col items-stretch justify-center gap-3 xs:w-auto xs:flex-row xs:items-center"
           style={{ animationDelay: "0.16s" }}
         >
           <Button size="lg" className="h-11 px-5 text-[15px]" render={<Link href="/sign-up" />}>

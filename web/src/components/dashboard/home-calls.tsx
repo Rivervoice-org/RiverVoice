@@ -27,14 +27,16 @@ export function HomeCalls() {
         {calls.slice(0, 5).map((call) => (
           <li
             key={call.id}
-            className="flex cursor-pointer items-center gap-4 border-b border-border py-3 text-sm last:border-b-0 hover:bg-muted/40"
+            className="flex cursor-pointer items-center gap-3 border-b border-border py-3 text-sm last:border-b-0 hover:bg-muted/40 sm:gap-4"
           >
-            <span className="w-40 shrink-0 truncate font-mono text-[13px]">{call.caller}</span>
+            <span className="w-28 shrink-0 truncate font-mono text-[13px] sm:w-40">
+              {call.caller}
+            </span>
             <span className="min-w-0 flex-1 truncate text-muted-foreground">{call.agent}</span>
             <span className="hidden w-28 shrink-0 truncate text-muted-foreground sm:block">
               {outcomes[call.outcome]}
             </span>
-            <span className="w-12 shrink-0 text-right font-mono text-[13px] text-muted-foreground tabular-nums">
+            <span className="hidden w-12 shrink-0 text-right font-mono text-[13px] text-muted-foreground tabular-nums xs:block">
               {call.duration}
             </span>
             <span className="w-12 shrink-0 text-right font-mono text-[13px] text-muted-foreground tabular-nums">

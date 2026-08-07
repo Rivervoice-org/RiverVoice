@@ -1,6 +1,6 @@
 import { RequireSession } from "@/components/auth/require-session";
-import { MascotNavIcon } from "@/components/dashboard/mascot";
-import { Sidebar } from "@/components/dashboard/sidebar";
+import { MascotNavIcon } from "@/mascots";
+import { MobileNav, Sidebar } from "@/components/dashboard/sidebar";
 import { Splash } from "@/components/dashboard/splash";
 
 /** The app shell: splash, rail, and the one scrolling content panel. */
@@ -12,9 +12,11 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
         <Sidebar agentsMark={<MascotNavIcon size={18} />} />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+          <MobileNav agentsMark={<MascotNavIcon size={18} />} />
+
           {/* Sections must not shrink: this column scrolls, and a flex item that
             shrinks below its content gets clipped when it also hides overflow. */}
-          <main className="panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-4 *:shrink-0">
+          <main className="panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-3 *:shrink-0 sm:p-4">
             {children}
           </main>
         </div>

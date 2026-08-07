@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Search } from "lucide-react";
 
 import { agents } from "@/components/dashboard/data";
-import { Mascot } from "@/components/dashboard/mascot";
+import { Mascot } from "@/mascots";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -34,7 +34,7 @@ export function AgentRecents() {
           <span className="hidden w-28 shrink-0 sm:block">Status</span>
           <button
             type="button"
-            className="flex w-32 shrink-0 cursor-pointer items-center gap-1 text-left hover:text-foreground"
+            className="flex w-20 shrink-0 cursor-pointer items-center gap-1 text-left hover:text-foreground sm:w-32"
           >
             Last edited
             <ChevronDown className="size-3.5" />
@@ -68,13 +68,15 @@ export function AgentRecents() {
                 </span>
               </span>
 
-              <span className="w-32 shrink-0 text-xs text-muted-foreground">{agent.edited}</span>
+              <span className="w-20 shrink-0 truncate text-xs text-muted-foreground sm:w-32">
+                {agent.edited}
+              </span>
 
               <Button
                 variant="ghost"
                 size="icon-xs"
                 aria-label={`Options for ${agent.name}`}
-                className="w-6 shrink-0 cursor-pointer text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                className="w-6 shrink-0 cursor-pointer text-muted-foreground transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
               >
                 <MoreHorizontal />
               </Button>

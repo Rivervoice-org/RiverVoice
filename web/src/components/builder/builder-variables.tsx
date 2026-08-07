@@ -115,7 +115,7 @@ export function BuilderVariables() {
   const [editing, setEditing] = React.useState<Editing | null>(null);
 
   const segments = (
-    <TabsList className="h-9 w-fit shrink-0 rounded-lg p-1">
+    <TabsList className="h-9 w-fit max-w-full shrink-0 overflow-x-auto rounded-lg p-1">
       <TabsIndicator />
       <TabsTrigger value="input" className="flex-none cursor-pointer rounded-md px-3.5 text-[13px]">
         Input variables
@@ -144,7 +144,7 @@ export function BuilderVariables() {
 
   return (
     <EditContext.Provider value={setEditing}>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-6 lg:px-10">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-6 lg:px-10">
         {/* Keeps the tables readable when the side panel is closed */}
         <div className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-4">
           <Tabs

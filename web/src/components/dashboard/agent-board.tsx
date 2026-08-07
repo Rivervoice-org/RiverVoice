@@ -5,7 +5,7 @@ import { MoreHorizontal } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { agents, type Agent } from "@/components/dashboard/data";
-import { Mascot } from "@/components/dashboard/mascot";
+import { Mascot } from "@/mascots";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { cn } from "@/lib/utils";
@@ -17,7 +17,7 @@ const columns: ColumnDef<Agent, unknown>[] = [
     cell: ({ row }) => {
       const agent = row.original;
       return (
-        <div className="flex min-w-0 items-center gap-4">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           {/* Lit only while the agent is answering */}
           <span
             aria-hidden
@@ -44,20 +44,20 @@ const columns: ColumnDef<Agent, unknown>[] = [
   {
     accessorKey: "edited",
     header: "Last modified",
-    size: 130,
-    meta: { className: "text-xs text-muted-foreground" },
+    size: 104,
+    meta: { className: "text-xs text-muted-foreground truncate" },
   },
   {
     id: "actions",
     header: "",
     enableSorting: false,
-    size: 48,
+    size: 44,
     cell: ({ row }) => (
       <Button
         variant="ghost"
         size="icon-xs"
         aria-label={`Options for ${row.original.name}`}
-        className="cursor-pointer text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+        className="cursor-pointer text-muted-foreground transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
       >
         <MoreHorizontal />
       </Button>

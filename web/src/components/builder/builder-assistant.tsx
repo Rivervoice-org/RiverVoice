@@ -3,7 +3,7 @@
 import { ArrowUp, History, PanelRight, Sparkles } from "lucide-react";
 
 import type { Agent } from "@/components/dashboard/data";
-import { Mascot } from "@/components/dashboard/mascot";
+import { Mascot } from "@/mascots";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
@@ -24,7 +24,7 @@ export function BuilderAssistant({
   onClose: () => void;
 }) {
   return (
-    <aside className="panel flex h-full w-96 flex-col overflow-hidden">
+    <aside className="panel flex h-full w-full flex-col overflow-hidden">
       <header className="flex h-14 shrink-0 items-center gap-2 px-4">
         <Sparkles className="size-4 text-muted-foreground" strokeWidth={1.75} />
         <span className="text-sm font-medium">Ask Rivervoice</span>

@@ -57,7 +57,7 @@ export function ApiToolDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[86vh] flex-col gap-0 rounded-2xl p-0 sm:max-w-2xl">
+      <DialogContent className="flex max-h-[86svh] flex-col gap-0 rounded-2xl p-0 sm:max-w-2xl">
         <ToolDialogShell
           form={form}
           title="API tool"

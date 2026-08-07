@@ -1,4 +1,4 @@
-import { Mascot } from "@/components/dashboard/mascot";
+import { Mascot } from "@/mascots";
 
 /**
  * A crowd of agents mid-conversation behind the composer. Each one cycles
