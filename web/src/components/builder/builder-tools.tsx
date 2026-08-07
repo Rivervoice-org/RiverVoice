@@ -6,7 +6,8 @@ import { Plus, Search } from "lucide-react";
 import { AddToolDialog, type ToolKind } from "@/components/builder/add-tool-dialog";
 import { ApiToolDialog } from "@/components/builder/api-tool-dialog";
 import { MockToolDialog } from "@/components/builder/mock-tool-dialog";
-import { systemTools } from "@/components/dashboard/data";
+import { TelegramConnectDialog } from "@/components/builder/telegram-connect-dialog";
+import { systemTools, type Agent } from "@/components/dashboard/data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -96,7 +97,7 @@ function SystemTools() {
   );
 }
 
-export function BuilderTools() {
+export function BuilderTools({ agent }: { agent: Agent }) {
   const [kind, setKind] = React.useState<"custom" | "system">("custom");
   const [adding, setAdding] = React.useState(false);
   const [building, setBuilding] = React.useState<ToolKind | null>(null);
@@ -165,6 +166,11 @@ export function BuilderTools() {
         open={building === "mock"}
         onOpenChange={(next) => setBuilding(next ? "mock" : null)}
         onSubmit={save}
+      />
+      <TelegramConnectDialog
+        agent={agent}
+        open={building === "messaging"}
+        onOpenChange={(next) => setBuilding(next ? "messaging" : null)}
       />
     </div>
   );
