@@ -41,7 +41,9 @@ select
   -- has left the org, and the cast alone would tell sqlc it never is.
   coalesce(u.email::text, '') as edited_by
 from
-  agents a
+  -- The view, not the table: agents_read lets templates through on purpose, so
+  -- selecting from agents here would put the roster on everyone's board.
+  my_agents a
   join lateral (
     select
       updated_at,
@@ -145,3 +147,20 @@ where
 order by
   position,
   created_at;
+
+-- name: ListAgentTemplates :many
+-- The roster on the agents page. No org filter: agents_read lets templates
+-- through for everyone, which is the point of them.
+select
+  id,
+  name,
+  purpose,
+  mascot,
+  coalesce(template_category, '')::text as category
+from
+  agents
+where
+  is_template
+order by
+  template_category,
+  name;

@@ -8,6 +8,16 @@ export type VersionState = "draft" | "committed";
 export type ToolKind = "api" | "validator" | "mock";
 export type ToolTrigger = "start" | "during" | "end";
 
+/** A card on the roster. Mirrors harbor's ListAgentTemplatesRow. */
+export type AgentTemplate = {
+  id: string;
+  name: string;
+  purpose: string;
+  mascot: string | null;
+  /** Empty if the template was seeded without one. */
+  category: string;
+};
+
 /** A row on the agents board. */
 export type AgentSummary = {
   id: string;

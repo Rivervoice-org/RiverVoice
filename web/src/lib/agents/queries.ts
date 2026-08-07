@@ -3,7 +3,7 @@ import { useRouter } from "next/navigation";
 
 import { ApiError, api } from "@/lib/api";
 import type { CreateAgentValues } from "@/lib/agents/schemas";
-import type { Agent, AgentSummary } from "@/lib/agents/types";
+import type { Agent, AgentSummary, AgentTemplate } from "@/lib/agents/types";
 
 export const agentsQueryKey = ["agents"] as const;
 
@@ -42,5 +42,16 @@ export function useCreateAgent() {
       await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
       router.push(`/build-agent/${created.agent_id}`);
     },
+  });
+}
+
+export const templatesQueryKey = ["agent-templates"] as const;
+
+export function useAgentTemplates(): UseQueryResult<AgentTemplate[]> {
+  return useQuery({
+    queryKey: templatesQueryKey,
+    queryFn: () => api.get<AgentTemplate[]>("/v1/agent-templates"),
+    // The roster changes on a deploy, not while you are looking at it.
+    staleTime: 60 * 60 * 1000,
   });
 }
