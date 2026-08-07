@@ -37,11 +37,21 @@ func (h *Handler) issueToken(userID, orgID, role string) (string, error) {
 
 // HttpOnly is what stops an XSS bug from becoming a stolen session.
 func (h *Handler) sessionCookie(token string) *http.Cookie {
+	return h.cookie(token, int(tokenTTL.Seconds()))
+}
+
+// Every attribute has to match the one being replaced, or the browser keeps
+// the original alongside it.
+func (h *Handler) expiredSessionCookie() *http.Cookie {
+	return h.cookie("", -1)
+}
+
+func (h *Handler) cookie(value string, maxAge int) *http.Cookie {
 	return &http.Cookie{
 		Name:     sessionCookieName,
-		Value:    token,
+		Value:    value,
 		Path:     "/",
-		MaxAge:   int(tokenTTL.Seconds()),
+		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   h.secureCookies,
 		SameSite: http.SameSiteLaxMode,
