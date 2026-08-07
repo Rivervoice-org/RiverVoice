@@ -48,7 +48,7 @@ export function AgentRecents() {
               key={agent.name}
               className="group row-hover flex cursor-pointer items-center gap-3 border-b border-border px-3 py-2.5 last:border-b-0"
             >
-              <Mascot seed={agent.name} size={28} />
+              <Mascot seed={agent.mascot ?? agent.name} size={28} />
 
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm leading-5 font-medium">{agent.name}</span>

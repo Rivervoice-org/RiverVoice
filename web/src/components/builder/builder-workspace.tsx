@@ -8,15 +8,19 @@ import { BuilderTopbar } from "@/components/builder/builder-topbar";
 import type { Agent } from "@/components/dashboard/data";
 import { cn } from "@/lib/utils";
 
-/** Holds the one piece of layout state the builder has: is the panel open. */
+/** Holds the builder's shared state: the panel, and the agent's chosen face. */
 export function BuilderWorkspace({ agent, children }: { agent: Agent; children: React.ReactNode }) {
   const [assistantOpen, setAssistantOpen] = React.useState(true);
+  // null means the name is still choosing the mascot.
+  const [mascot, setMascot] = React.useState<string | null>(agent.mascot ?? null);
 
   return (
     <div className="flex h-svh overflow-hidden bg-canvas p-2">
       <div className="panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <BuilderTopbar
           agent={agent}
+          mascot={mascot}
+          onMascotChange={setMascot}
           assistantOpen={assistantOpen}
           onToggleAssistant={() => setAssistantOpen((open) => !open)}
         />
@@ -37,7 +41,7 @@ export function BuilderWorkspace({ agent, children }: { agent: Agent; children: 
           assistantOpen ? "w-[25rem] pl-2 opacity-100" : "pointer-events-none w-0 pl-0 opacity-0",
         )}
       >
-        <BuilderAssistant agent={agent} onClose={() => setAssistantOpen(false)} />
+        <BuilderAssistant agent={agent} mascot={mascot} onClose={() => setAssistantOpen(false)} />
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ export function HomeAgents() {
             href={`/build-agent/${agent.id}`}
             className="group flex items-center gap-3 rounded-xl border border-border p-3 transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none"
           >
-            <Mascot seed={agent.name} size={32} />
+            <Mascot seed={agent.mascot ?? agent.name} size={32} />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13px] font-medium">{agent.name}</span>
               <span className="block truncate text-xs text-muted-foreground">

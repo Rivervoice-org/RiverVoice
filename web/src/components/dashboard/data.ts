@@ -140,6 +140,8 @@ export type Agent = {
   /** Slug + number, used as the route: /build-agent/front-desk-343938430 */
   id: string;
   name: string;
+  /** A chosen face. Left off, the name draws one. */
+  mascot?: string;
   number: string;
   calls: number;
   status: "live" | "paused" | "draft";
