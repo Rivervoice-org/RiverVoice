@@ -16,8 +16,8 @@ function CollapsibleContent({ className, ...props }: CollapsiblePrimitive.Panel.
   return (
     <CollapsiblePrimitive.Panel
       data-slot="collapsible-content"
-      // The primitive publishes the measured height as a CSS var, which is what
-      // makes an auto-height panel animatable at all.
+      // The measured height comes back as a CSS var, which is what makes an
+      // auto-height panel animatable at all.
       className={cn(
         "h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0",
         className,
