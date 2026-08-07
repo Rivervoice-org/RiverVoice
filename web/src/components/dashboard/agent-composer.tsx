@@ -13,8 +13,15 @@ const JOBS = [
 ];
 
 export function AgentComposer() {
+  /* Holds most of the first screen and sits its contents in the middle of it,
+     so the ask and the crowd behind it land centred rather than stacked under
+     the header. The board and the roster stay below the fold, which is the
+     right order: you describe an agent before you go looking for one.
+
+     A min-height rather than a grow: the column's later sections already
+     overflow it, so there is no spare space left for a grow to take. */
   return (
-    <section className="animate-rise relative isolate flex flex-col items-center overflow-hidden px-4 py-14 sm:py-20">
+    <section className="animate-rise relative isolate flex min-h-[70svh] flex-col items-center justify-center overflow-hidden px-4 py-14 sm:py-20">
       <ComposerCrowd />
 
       <h2 className="relative text-center font-serif text-3xl leading-tight font-light tracking-tight sm:text-4xl">

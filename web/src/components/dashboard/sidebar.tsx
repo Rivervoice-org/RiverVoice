@@ -58,7 +58,7 @@ const sections: { title: string; items: NavItem[] }[] = [
     title: "Build",
     items: [
       { label: "Agents", href: "/agents" },
-      { label: "Knowledge base", icon: KnowledgeIcon },
+      { label: "Knowledge base", icon: KnowledgeIcon, href: "/knowledge" },
       { label: "Phone numbers", icon: Phone },
     ],
   },

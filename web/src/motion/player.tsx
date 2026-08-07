@@ -7,6 +7,25 @@ import { FPS, formatTime, seconds } from "@/motion/timeline";
 import { totalFrames, type Scene } from "@/motion/types";
 import { cn } from "@/lib/utils";
 
+const REDUCED = "(prefers-reduced-motion: reduce)";
+
+const watchMotion = (onChange: () => void) => {
+  const query = window.matchMedia(REDUCED);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+};
+
+/* Subscribed to rather than read in an effect, so the first client render
+   already knows the answer and nothing has to be corrected afterwards. The
+   server has no media queries, and assuming full motion there matches what
+   every other animation on the page does. */
+const useReducedMotion = () =>
+  React.useSyncExternalStore(
+    watchMotion,
+    () => window.matchMedia(REDUCED).matches,
+    () => false,
+  );
+
 // Knows nothing about what it draws, so any walkthrough gets the controls.
 export function Player<S>({
   scenes,
@@ -14,6 +33,7 @@ export function Player<S>({
   viewBox = "0 0 640 324",
   ratio = "640/324",
   autoPlay = true,
+  camera,
   className,
 }: {
   scenes: Scene<S>[];
@@ -21,12 +41,24 @@ export function Player<S>({
   viewBox?: string;
   ratio?: string;
   autoPlay?: boolean;
+  /**
+   * The viewBox to shoot through, as a function of the whole film's frame
+   * rather than the scene's. Taking it globally is what keeps the move
+   * continuous across a scene change: there is no per-scene camera to cut
+   * between, only one rectangle travelling the whole way.
+   */
+  camera?: (frame: number) => string;
   className?: string;
 }) {
   const total = React.useMemo(() => totalFrames(scenes), [scenes]);
   const [frame, setFrame] = React.useState(0);
-  const [playing, setPlaying] = React.useState(autoPlay);
   const track = React.useRef<HTMLDivElement>(null);
+
+  /* Whether it plays is derived, not stored: nothing autoplays under reduced
+     motion, but pressing play still works, and that press is the override. */
+  const reduced = useReducedMotion();
+  const [override, setOverride] = React.useState<boolean | null>(null);
+  const playing = override ?? (autoPlay && !reduced);
 
   React.useEffect(() => {
     if (!playing) return;
@@ -40,7 +72,7 @@ export function Player<S>({
         last = now;
         setFrame((current) => {
           if (current + advanced >= total) {
-            setPlaying(false);
+            setOverride(false);
             return total;
           }
           return current + advanced;
@@ -56,13 +88,15 @@ export function Player<S>({
   const done = frame >= total;
   const scene = scenes.findLast((entry) => frame >= entry.at) ?? scenes[0];
 
+  const shot = camera ? camera(frame) : viewBox;
+
   const toggle = () => {
     if (done) {
       setFrame(0);
-      setPlaying(true);
+      setOverride(true);
       return;
     }
-    setPlaying((on) => !on);
+    setOverride(!playing);
   };
 
   // Dragging anywhere on the track scrubs, the way a video player does.
@@ -92,8 +126,11 @@ export function Player<S>({
         className="relative cursor-pointer outline-none focus-visible:bg-muted/40"
       >
         <svg
-          viewBox={viewBox}
+          viewBox={shot}
           style={{ aspectRatio: ratio }}
+          /* The default tint the first walkthrough was drawn against. Anything
+             that sets its own colour — the pen in `ink.tsx` does, per tier —
+             overrides it rather than inheriting the wash. */
           className="block w-full text-foreground/75"
           aria-label={scene.caption}
         >
@@ -113,7 +150,7 @@ export function Player<S>({
         ref={track}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
-          setPlaying(false);
+          setOverride(false);
           scrubTo(event.clientX);
         }}
         onPointerMove={(event) => {

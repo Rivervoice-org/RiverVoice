@@ -3,6 +3,7 @@ export {
   MASCOT_STYLE_IDS,
   invertsInDark,
   mascotDataUri,
+  draw as mascotSvg,
   mascotRef,
   mascotStyle,
   parseMascot,

@@ -9,7 +9,11 @@ export const metadata = { title: "Agents" };
 export default function AgentsPage() {
   return (
     <>
-      <PageHeader title="Agents" action={<CreateAgentDialog />} />
+      <PageHeader
+        title="Agents"
+        description="Everyone who answers your phones — live, paused, and still in draft."
+        action={<CreateAgentDialog />}
+      />
 
       <AgentComposer />
       <AgentBoard />

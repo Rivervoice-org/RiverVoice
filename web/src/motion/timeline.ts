@@ -28,5 +28,7 @@ export function typed(text: string, frame: number, at: number, perChar = 1.6) {
 
 export function formatTime(frame: number) {
   const total = Math.floor(frame / FPS);
-  return `0:${String(total).padStart(2, "0")}`;
+  // Carried properly rather than assuming a clip is under a minute — the first
+  // one was, and a minute-long one read "0:60".
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
