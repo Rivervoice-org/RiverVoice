@@ -34,10 +34,9 @@ export function Reveal({
     const node = ref.current;
     if (!node) return;
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setShown(true);
-      return;
-    }
+    // Reduced motion is handled by the motion-reduce classes below, so there is
+    // nothing to observe and no state to set.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -60,6 +59,7 @@ export function Reveal({
       className={cn(
         "transition-[opacity,transform] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
         shown ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0",
+        "motion-reduce:translate-y-0 motion-reduce:opacity-100",
         className,
       )}
     >

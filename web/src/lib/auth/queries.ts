@@ -36,8 +36,16 @@ export function useSignUp() {
   const onSuccess = useAuthSuccess();
 
   return useMutation({
-    mutationFn: ({ confirmPassword: _confirmPassword, ...values }: SignUpValues) =>
-      api.post<string>("/v1/auth/signup", values),
+    // Sent field by field so confirmPassword, which is a browser-side check
+    // only, cannot reach harbor.
+    mutationFn: ({ organizationName, userName, email, phoneNumber, password }: SignUpValues) =>
+      api.post<string>("/v1/auth/signup", {
+        organizationName,
+        userName,
+        email,
+        phoneNumber,
+        password,
+      }),
     onSuccess,
   });
 }
