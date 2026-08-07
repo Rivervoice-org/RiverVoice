@@ -82,8 +82,55 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) httpx.APIRespon
 	})
 }
 
-func (h *Handler) get(w http.ResponseWriter, r *http.Request) httpx.APIResponse[string] {
-	return notImplemented()
+func (h *Handler) get(w http.ResponseWriter, r *http.Request) httpx.APIResponse[AgentDetail] {
+	session, ok := auth.SessionFrom(r.Context())
+	if !ok {
+		return httpx.Fail[AgentDetail](http.StatusUnauthorized, "Sign in to continue")
+	}
+
+	version, err := readVersion(r.URL.Query().Get("version"))
+	if err != nil {
+		return httpx.Fail[AgentDetail](http.StatusBadRequest, "Version must be a number")
+	}
+
+	req := GetAgentRequest{ID: r.PathValue("id"), Version: version}
+
+	// An id that is not a uuid cannot name an agent, so it is the same 404 as one
+	// that names nobody's — and it never reaches Postgres.
+	if err := validate.Struct(req); err != nil {
+		if validate.FirstTag(err) == "uuid" {
+			return httpx.Fail[AgentDetail](http.StatusNotFound, "No such agent")
+		}
+		return httpx.Fail[AgentDetail](http.StatusBadRequest, validate.FirstMessage(err))
+	}
+
+	var out AgentDetail
+	err = db.AsUser(r.Context(), h.pool, session.UserID, func(tx pgx.Tx) error {
+		q := dbgen.New(tx)
+
+		var err error
+		out.GetAgentRow, err = q.GetAgent(r.Context(), dbgen.GetAgentParams{
+			ID:      req.ID,
+			Version: req.Version,
+		})
+		if err != nil {
+			return err
+		}
+
+		// Same transaction, so the tools cannot be from a moment after the agent.
+		out.Tools, err = q.ListAgentTools(r.Context(), req.ID)
+		return err
+	})
+
+	switch {
+	case isNotFound(err):
+		return httpx.Fail[AgentDetail](http.StatusNotFound, "No such agent")
+	case err != nil:
+		log.Printf("get agent: %v", err)
+		return httpx.Fail[AgentDetail](http.StatusInternalServerError, "Could not load the agent")
+	}
+
+	return httpx.Ok(http.StatusOK, out)
 }
 
 func (h *Handler) rename(w http.ResponseWriter, r *http.Request) httpx.APIResponse[string] {

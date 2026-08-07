@@ -1,28 +1,31 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import type { CreateAgentValues } from "@/lib/agents/schemas";
+import type { Agent, AgentSummary } from "@/lib/agents/types";
 
 export const agentsQueryKey = ["agents"] as const;
 
-/** A row on the board. Mirrors harbor's ListAgentsRow. */
-export type Agent = {
-  id: string;
-  name: string;
-  mascot: string | null;
-  purpose: string;
-  status: "draft" | "live";
-  editedAt: string;
-  /** Empty once the person who last edited it has left the org. */
-  editedBy: string;
-};
+/** Version in the key, so switching versions is a cache hit on the way back. */
+export const agentQueryKey = (id: string, version?: number) =>
+  ["agents", id, version ?? "latest"] as const;
 
-export function useAgents(): UseQueryResult<Agent[]> {
+export function useAgents(): UseQueryResult<AgentSummary[]> {
   return useQuery({
     queryKey: agentsQueryKey,
-    queryFn: () => api.get<Agent[]>("/v1/agents"),
+    queryFn: () => api.get<AgentSummary[]>("/v1/agents"),
     staleTime: 30 * 1000,
+  });
+}
+
+export function useAgent(id: string, version?: number, enabled = true): UseQueryResult<Agent> {
+  return useQuery({
+    enabled,
+    queryKey: agentQueryKey(id, version),
+    queryFn: () => api.get<Agent>(`/v1/agents/${id}${version ? `?version=${version}` : ""}`),
+    // A 404 is an answer, not a blip.
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
   });
 }
 

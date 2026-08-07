@@ -58,3 +58,90 @@ from
   left join users u on u.id = v.created_by
 order by
   v.updated_at desc;
+
+-- name: GetAgent :one
+-- An agent at one version: identity, plus every setting that version holds.
+-- Without a version it takes the newest, which is what the builder wants the
+-- first time it opens an agent.
+select
+  a.id,
+  a.name,
+  a.mascot,
+  a.purpose,
+  a.status,
+  coalesce(a.live_version_id::text, '')::text as live_version_id,
+  a.created_at,
+  v.id as version_id,
+  v.version,
+  v.state,
+  v.greeting,
+  v.instructions,
+  v.tts_provider,
+  v.tts_model,
+  v.voice,
+  v.speed,
+  v.pitch,
+  v.llm_provider,
+  v.llm_model,
+  v.creativity,
+  v.knowledge_only,
+  v.stt_provider,
+  v.stt_model,
+  v.interruptible,
+  v.reply_delay,
+  v.noise_filter,
+  v.switch_language,
+  v.languages,
+  v.starting_language,
+  v.switch_after,
+  v.indic_numerals,
+  v.background_sound,
+  v.background_volume,
+  v.nudge_quiet_callers,
+  v.hangup_after_nudges,
+  v.leave_voicemail,
+  v.voicemail_message,
+  v.max_call_minutes,
+  v.system_tools,
+  v.updated_at as edited_at
+from
+  agents a
+  join lateral (
+    select
+      *
+    from
+      agent_versions
+    where
+      agent_id = a.id
+      and (
+        sqlc.narg ('version')::int is null
+        or version = sqlc.narg ('version')::int
+      )
+    order by
+      version desc
+    limit
+      1
+  ) v on true
+where
+  a.id = @id;
+
+-- name: ListAgentTools :many
+-- Tools belong to the agent rather than the version, so the list is the same
+-- whichever version you are looking at.
+select
+  id,
+  kind,
+  name,
+  description,
+  trigger,
+  enabled,
+  position,
+  config,
+  updated_at
+from
+  agent_tools
+where
+  agent_id = @agent_id
+order by
+  position,
+  created_at;

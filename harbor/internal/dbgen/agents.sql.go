@@ -7,6 +7,7 @@ package dbgen
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -57,6 +58,233 @@ values
 func (q *Queries) CreateFirstVersion(ctx context.Context, agentID string) error {
 	_, err := q.db.Exec(ctx, createFirstVersion, agentID)
 	return err
+}
+
+const getAgent = `-- name: GetAgent :one
+select
+  a.id,
+  a.name,
+  a.mascot,
+  a.purpose,
+  a.status,
+  coalesce(a.live_version_id::text, '')::text as live_version_id,
+  a.created_at,
+  v.id as version_id,
+  v.version,
+  v.state,
+  v.greeting,
+  v.instructions,
+  v.tts_provider,
+  v.tts_model,
+  v.voice,
+  v.speed,
+  v.pitch,
+  v.llm_provider,
+  v.llm_model,
+  v.creativity,
+  v.knowledge_only,
+  v.stt_provider,
+  v.stt_model,
+  v.interruptible,
+  v.reply_delay,
+  v.noise_filter,
+  v.switch_language,
+  v.languages,
+  v.starting_language,
+  v.switch_after,
+  v.indic_numerals,
+  v.background_sound,
+  v.background_volume,
+  v.nudge_quiet_callers,
+  v.hangup_after_nudges,
+  v.leave_voicemail,
+  v.voicemail_message,
+  v.max_call_minutes,
+  v.system_tools,
+  v.updated_at as edited_at
+from
+  agents a
+  join lateral (
+    select
+      id, agent_id, org_id, version, state, greeting, instructions, tts_provider, tts_model, voice, speed, pitch, llm_provider, llm_model, creativity, knowledge_only, stt_provider, stt_model, interruptible, reply_delay, noise_filter, switch_language, languages, starting_language, switch_after, indic_numerals, background_sound, background_volume, nudge_quiet_callers, hangup_after_nudges, leave_voicemail, voicemail_message, max_call_minutes, system_tools, created_by, created_at, updated_at
+    from
+      agent_versions
+    where
+      agent_id = a.id
+      and (
+        $1::int is null
+        or version = $1::int
+      )
+    order by
+      version desc
+    limit
+      1
+  ) v on true
+where
+  a.id = $2
+`
+
+type GetAgentParams struct {
+	Version *int32 `json:"version"`
+	ID      string `json:"id"`
+}
+
+type GetAgentRow struct {
+	ID                string             `json:"id"`
+	Name              string             `json:"name"`
+	Mascot            *string            `json:"mascot"`
+	Purpose           string             `json:"purpose"`
+	Status            AgentStatus        `json:"status"`
+	LiveVersionID     string             `json:"liveVersionId"`
+	CreatedAt         pgtype.Timestamptz `json:"createdAt"`
+	VersionID         string             `json:"versionId"`
+	Version           int32              `json:"version"`
+	State             VersionState       `json:"state"`
+	Greeting          string             `json:"greeting"`
+	Instructions      string             `json:"instructions"`
+	TtsProvider       string             `json:"ttsProvider"`
+	TtsModel          string             `json:"ttsModel"`
+	Voice             string             `json:"voice"`
+	Speed             float32            `json:"speed"`
+	Pitch             float32            `json:"pitch"`
+	LlmProvider       string             `json:"llmProvider"`
+	LlmModel          string             `json:"llmModel"`
+	Creativity        float32            `json:"creativity"`
+	KnowledgeOnly     bool               `json:"knowledgeOnly"`
+	SttProvider       string             `json:"sttProvider"`
+	SttModel          string             `json:"sttModel"`
+	Interruptible     bool               `json:"interruptible"`
+	ReplyDelay        float32            `json:"replyDelay"`
+	NoiseFilter       bool               `json:"noiseFilter"`
+	SwitchLanguage    bool               `json:"switchLanguage"`
+	Languages         []string           `json:"languages"`
+	StartingLanguage  string             `json:"startingLanguage"`
+	SwitchAfter       int32              `json:"switchAfter"`
+	IndicNumerals     bool               `json:"indicNumerals"`
+	BackgroundSound   string             `json:"backgroundSound"`
+	BackgroundVolume  float32            `json:"backgroundVolume"`
+	NudgeQuietCallers bool               `json:"nudgeQuietCallers"`
+	HangupAfterNudges bool               `json:"hangupAfterNudges"`
+	LeaveVoicemail    bool               `json:"leaveVoicemail"`
+	VoicemailMessage  string             `json:"voicemailMessage"`
+	MaxCallMinutes    int32              `json:"maxCallMinutes"`
+	SystemTools       []string           `json:"systemTools"`
+	EditedAt          pgtype.Timestamptz `json:"editedAt"`
+}
+
+// An agent at one version: identity, plus every setting that version holds.
+// Without a version it takes the newest, which is what the builder wants the
+// first time it opens an agent.
+func (q *Queries) GetAgent(ctx context.Context, arg GetAgentParams) (GetAgentRow, error) {
+	row := q.db.QueryRow(ctx, getAgent, arg.Version, arg.ID)
+	var i GetAgentRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Mascot,
+		&i.Purpose,
+		&i.Status,
+		&i.LiveVersionID,
+		&i.CreatedAt,
+		&i.VersionID,
+		&i.Version,
+		&i.State,
+		&i.Greeting,
+		&i.Instructions,
+		&i.TtsProvider,
+		&i.TtsModel,
+		&i.Voice,
+		&i.Speed,
+		&i.Pitch,
+		&i.LlmProvider,
+		&i.LlmModel,
+		&i.Creativity,
+		&i.KnowledgeOnly,
+		&i.SttProvider,
+		&i.SttModel,
+		&i.Interruptible,
+		&i.ReplyDelay,
+		&i.NoiseFilter,
+		&i.SwitchLanguage,
+		&i.Languages,
+		&i.StartingLanguage,
+		&i.SwitchAfter,
+		&i.IndicNumerals,
+		&i.BackgroundSound,
+		&i.BackgroundVolume,
+		&i.NudgeQuietCallers,
+		&i.HangupAfterNudges,
+		&i.LeaveVoicemail,
+		&i.VoicemailMessage,
+		&i.MaxCallMinutes,
+		&i.SystemTools,
+		&i.EditedAt,
+	)
+	return i, err
+}
+
+const listAgentTools = `-- name: ListAgentTools :many
+select
+  id,
+  kind,
+  name,
+  description,
+  trigger,
+  enabled,
+  position,
+  config,
+  updated_at
+from
+  agent_tools
+where
+  agent_id = $1
+order by
+  position,
+  created_at
+`
+
+type ListAgentToolsRow struct {
+	ID          string             `json:"id"`
+	Kind        ToolKind           `json:"kind"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Trigger     ToolTrigger        `json:"trigger"`
+	Enabled     bool               `json:"enabled"`
+	Position    int32              `json:"position"`
+	Config      json.RawMessage    `json:"config"`
+	UpdatedAt   pgtype.Timestamptz `json:"updatedAt"`
+}
+
+// Tools belong to the agent rather than the version, so the list is the same
+// whichever version you are looking at.
+func (q *Queries) ListAgentTools(ctx context.Context, agentID string) ([]ListAgentToolsRow, error) {
+	rows, err := q.db.Query(ctx, listAgentTools, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAgentToolsRow{}
+	for rows.Next() {
+		var i ListAgentToolsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Name,
+			&i.Description,
+			&i.Trigger,
+			&i.Enabled,
+			&i.Position,
+			&i.Config,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAgents = `-- name: ListAgents :many

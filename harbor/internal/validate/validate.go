@@ -42,10 +42,21 @@ var labels = map[string]string{
 	"email":            "Email",
 	"phoneNumber":      "Phone number",
 	"password":         "Password",
+	"version":          "Version",
 }
 
 func Struct(s any) error {
 	return v.Struct(s)
+}
+
+// FirstTag names the rule that failed, for the cases a caller answers its own
+// way — a malformed id is a 404, not a complaint about its format.
+func FirstTag(err error) string {
+	var ve validator.ValidationErrors
+	if !errors.As(err, &ve) || len(ve) == 0 {
+		return ""
+	}
+	return ve[0].Tag()
 }
 
 func FirstMessage(err error) string {
@@ -71,6 +82,8 @@ func FirstMessage(err error) string {
 		return label + " must be at least " + fe.Param() + " characters"
 	case "max":
 		return label + " must be under " + fe.Param() + " characters"
+	case "gte":
+		return label + " must be at least " + fe.Param()
 	}
 	return label + " is incorrect"
 }

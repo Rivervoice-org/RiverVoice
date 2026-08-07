@@ -1,9 +1,8 @@
+"use client";
+
 import { BuilderSettings } from "@/components/builder/builder-settings";
-import { agents } from "@/components/dashboard/data";
+import { useCurrentAgent } from "@/lib/agents/agent-context";
 
-export default async function SettingsPage({ params }: { params: Promise<{ agentId: string }> }) {
-  const { agentId } = await params;
-  const agent = agents.find((item) => item.id === agentId)!;
-
-  return <BuilderSettings agent={agent} />;
+export default function SettingsPage() {
+  return <BuilderSettings agent={useCurrentAgent()} />;
 }
