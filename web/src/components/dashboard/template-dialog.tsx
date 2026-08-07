@@ -1,15 +1,20 @@
 "use client";
 
+import * as React from "react";
 import { Phone, Sparkles } from "lucide-react";
 
 import { Loop } from "@/motion/loop";
 import {
-  FISHER_LENGTH,
-  FISHER_STILL,
-  FISHER_VIEW,
-  Fisher,
-  type FisherScript,
-} from "@/motion/walkthroughs/fisher";
+  FRONTDESK_LENGTH,
+  FRONTDESK_STILL,
+  FRONTDESK_VIEW,
+  FrontDesk,
+} from "@/motion/agent-templates/frontdesk";
+import { SLOTS_LENGTH, SLOTS_STILL, SLOTS_VIEW, Slots } from "@/motion/agent-templates/slots";
+import { KHATA_LENGTH, KHATA_STILL, KHATA_VIEW, Khata } from "@/motion/agent-templates/khata";
+import { KITE_LENGTH, KITE_STILL, KITE_VIEW, Kite } from "@/motion/agent-templates/kite";
+import { PARCEL_LENGTH, PARCEL_STILL, PARCEL_VIEW, Parcel } from "@/motion/agent-templates/parcel";
+import { THREAD_LENGTH, THREAD_STILL, THREAD_VIEW, Thread } from "@/motion/agent-templates/thread";
 import { Mascot } from "@/mascots";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -19,12 +24,132 @@ import type { AgentTemplate } from "@/lib/agents/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Fishing for the right time is the appointment story, not every story — a
- * front desk is not choosing between slots, and collections is not either. The
- * rest of the roster gets its own scene when there is one worth drawing.
+ * A scene per template, where there is a story worth drawing. Nothing generic:
+ * fishing for a slot is the appointment story and a crossing is the collections
+ * story, and neither would survive being used for the other.
  */
-const SCENES: Record<string, FisherScript> = {
-  "Appointment management": { reject: "10:30", accept: "2:00" },
+type Scene = {
+  length: number;
+  still: number;
+  view: { w: number; h: number };
+  label: string;
+  render: (f: number) => React.ReactNode;
+};
+
+const SCENES: Record<string, Scene> = {
+  "Appointment management": {
+    length: SLOTS_LENGTH,
+    still: SLOTS_STILL,
+    view: SLOTS_VIEW,
+    label: "",
+    render: (f) => (
+      <Slots
+        f={f}
+        script={{
+          slots: [
+            { at: "10:00", free: false },
+            { at: "11:30", free: true },
+            { at: "2:00", free: true },
+            { at: "3:30", free: false },
+          ],
+          chosen: 2,
+          slip: ["మంగళవారం · 2:00", "ప్రియా శర్మ"],
+          captions: ["ఎప్పుడు కావాలి?", "రెండు ఖాళీలు ఉన్నాయి", "మంగళవారం 2 గంటలకు, ఖాయం"],
+        }}
+      />
+    ),
+  },
+  "Sales discovery": {
+    length: KITE_LENGTH,
+    still: KITE_STILL,
+    view: KITE_VIEW,
+    label: "",
+    render: (f) => (
+      <Kite
+        f={f}
+        script={{
+          questions: [
+            "What are you trying to fix?",
+            "When do you need it live?",
+            "Who else signs off?",
+          ],
+          tag: "Tue, 4–6pm",
+          captions: [
+            "Three questions.",
+            "Each answer, a little higher.",
+            "Sales calls back Tuesday.",
+          ],
+        }}
+      />
+    ),
+  },
+  "Front desk": {
+    length: FRONTDESK_LENGTH,
+    still: FRONTDESK_STILL,
+    view: FRONTDESK_VIEW,
+    label: "",
+    render: (f) => (
+      <FrontDesk
+        f={f}
+        script={{
+          sign: ["खुला", "बंद"],
+          answer: "छह बजे तक खुला है, एमजी रोड पर।",
+          note: ["प्रिया", "98450 22118", "मंगलवार चाहिए"],
+          captions: ["Open till six.", "After six, it takes a message.", "Waiting in the morning."],
+        }}
+      />
+    ),
+  },
+  "Renewal nudge": {
+    length: THREAD_LENGTH,
+    still: THREAD_STILL,
+    view: THREAD_VIEW,
+    label: "",
+    render: (f) => (
+      <Thread
+        f={f}
+        script={{
+          ends: "30 नवंबर तक",
+          ask: "क्या इसे बढ़ा दूँ?",
+          extended: "अब 30 नवंबर 2027",
+          captions: ["This one lapses this month.", "Asked once.", "Carried on a year."],
+        }}
+      />
+    ),
+  },
+  "Order status": {
+    length: PARCEL_LENGTH,
+    still: PARCEL_STILL,
+    view: PARCEL_VIEW,
+    label: "",
+    render: (f) => (
+      <Parcel
+        f={f}
+        script={{
+          stops: ["Packed", "Left the hub", "Out for delivery", "At your door"],
+          tag: "मंगलवार को",
+          captions: ["मेरा ऑर्डर कहाँ है?", "अभी देखता हूँ।", "मंगलवार को पहुँचेगा।"],
+        }}
+      />
+    ),
+  },
+  "EMI collection": {
+    length: KHATA_LENGTH,
+    still: KHATA_STILL,
+    view: KHATA_VIEW,
+    label: "",
+    render: (f) => (
+      <Khata
+        f={f}
+        script={{
+          entries: ["ஜூலை · ₹800", "ஆகஸ்ட் · ₹800", "செப்டம்பர் · ₹800"],
+          balance: ["₹2,400", "₹1,600", "₹800", "₹0"],
+          cleared: "முடிந்தது",
+          captions: ["₹2,400 பாக்கி", "ஒவ்வொன்றாக", "முடிந்தது"],
+        }}
+      />
+    ),
+  },
 };
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -50,27 +175,29 @@ export function TemplateDialog({
   const agent = detail.data;
   const face = template?.mascot ?? template?.name ?? "";
 
-  const script = SCENES[template?.name ?? ""];
+  const scene = SCENES[template?.name ?? ""];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[86vh] gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-3xl">
-        <div className={cn("grid min-h-0", script && "md:grid-cols-[1fr_1.35fr]")}>
+        <div className={cn("grid min-h-0", scene && "md:grid-cols-[1fr_1.35fr]")}>
           {/* Finding a time that suits, drawn as what it feels like. */}
-          {script ? (
+          {scene ? (
             <div className="relative hidden overflow-hidden border-r border-border bg-muted/30 md:block">
               <Loop
-                length={FISHER_LENGTH}
-                still={FISHER_STILL}
-                viewBox={`0 0 ${FISHER_VIEW.w} ${FISHER_VIEW.h}`}
+                length={scene.length}
+                still={scene.still}
+                viewBox={`0 0 ${scene.view.w} ${scene.view.h}`}
                 className="absolute inset-0 size-full text-foreground/75"
               >
-                {(f) => <Fisher f={f} script={script} />}
+                {scene.render}
               </Loop>
 
-              <span className="absolute top-6 left-6 z-10 text-[13px] font-medium">
-                Finding the time
-              </span>
+              {scene.label ? (
+                <span className="absolute top-6 left-6 z-10 text-[13px] font-medium">
+                  {scene.label}
+                </span>
+              ) : null}
             </div>
           ) : null}
 
