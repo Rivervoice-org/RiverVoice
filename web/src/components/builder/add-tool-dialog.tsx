@@ -38,9 +38,8 @@ const KINDS: {
   },
   {
     kind: "messaging",
-    name: "Send a message",
-    description:
-      "Connect your WhatsApp or Telegram account and let the agent follow up in writing.",
+    name: "Message on Telegram",
+    description: "Give the agent its own bot, so it can post a summary to a group after a call.",
     icon: MessageCircle,
   },
 ];
