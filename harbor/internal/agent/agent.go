@@ -11,12 +11,29 @@ import (
 
 	"github.com/steverogersX/RiverVoice/harbor/internal/auth"
 	"github.com/steverogersX/RiverVoice/harbor/internal/db"
+	"github.com/steverogersX/RiverVoice/harbor/internal/dbgen"
 	"github.com/steverogersX/RiverVoice/harbor/internal/httpx"
 	"github.com/steverogersX/RiverVoice/harbor/internal/validate"
 )
 
-func (h *Handler) list(w http.ResponseWriter, r *http.Request) httpx.APIResponse[string] {
-	return notImplemented()
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) httpx.APIResponse[[]dbgen.ListAgentsRow] {
+	session, ok := auth.SessionFrom(r.Context())
+	if !ok {
+		return httpx.Fail[[]dbgen.ListAgentsRow](http.StatusUnauthorized, "Sign in to continue")
+	}
+
+	var out []dbgen.ListAgentsRow
+	err := db.AsUser(r.Context(), h.pool, session.UserID, func(tx pgx.Tx) error {
+		var err error
+		out, err = dbgen.New(tx).ListAgents(r.Context())
+		return err
+	})
+	if err != nil {
+		log.Printf("list agents: %v", err)
+		return httpx.Fail[[]dbgen.ListAgentsRow](http.StatusInternalServerError, "Could not load your agents")
+	}
+
+	return httpx.Ok(http.StatusOK, out)
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) httpx.APIResponse[CreateAgentResponse] {
@@ -37,9 +54,18 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) httpx.APIRespon
 
 	var id string
 	err := db.AsUser(r.Context(), h.pool, session.UserID, func(tx pgx.Tx) error {
+		q := dbgen.New(tx)
+
 		var err error
-		id, err = insertAgent(r.Context(), tx, strings.TrimSpace(req.Name), strings.TrimSpace(req.Mascot))
-		return err
+		id, err = q.CreateAgent(r.Context(), dbgen.CreateAgentParams{
+			Name:   strings.TrimSpace(req.Name),
+			Mascot: strings.TrimSpace(req.Mascot),
+		})
+		if err != nil {
+			return asNameTaken(err)
+		}
+
+		return q.CreateFirstVersion(r.Context(), id)
 	})
 
 	switch {

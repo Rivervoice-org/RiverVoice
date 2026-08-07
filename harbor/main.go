@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
@@ -30,14 +32,23 @@ func run() error {
 	// fine: deployed environments set real variables.
 	_ = godotenv.Load("../.env", ".env")
 
+	if err := migrate(ctx, mustEnv("MIGRATE_DATABASE_URL")); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+
 	pool, err := pgxpool.New(ctx, mustEnv("DATABASE_URL"))
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
-	if err := pool.Ping(ctx); err != nil {
-		return err
+	// Bounded, or an unreachable database leaves the process silent instead of
+	// telling you what is wrong.
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	if err := pool.Ping(pingCtx); err != nil {
+		return fmt.Errorf("database unreachable: %w", err)
 	}
 
 	// Plain http locally, where a Secure cookie would be dropped.
