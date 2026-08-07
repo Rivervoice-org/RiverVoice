@@ -14,7 +14,15 @@ const SUGGESTIONS = [
 ];
 
 /** The side panel that edits the agent by conversation instead of by field. */
-export function BuilderAssistant({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+export function BuilderAssistant({
+  agent,
+  mascot,
+  onClose,
+}: {
+  agent: Agent;
+  mascot: string | null;
+  onClose: () => void;
+}) {
   return (
     <aside className="panel flex h-full w-96 flex-col overflow-hidden">
       <header className="flex h-14 shrink-0 items-center gap-2 px-4">
@@ -44,7 +52,7 @@ export function BuilderAssistant({ agent, onClose }: { agent: Agent; onClose: ()
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6">
-        <Mascot seed={agent.name} size={44} className="opacity-90" />
+        <Mascot seed={mascot ?? agent.name} size={44} className="opacity-90" />
 
         <h2 className="mt-5 font-serif text-2xl leading-tight font-light tracking-tight">
           What should we change?

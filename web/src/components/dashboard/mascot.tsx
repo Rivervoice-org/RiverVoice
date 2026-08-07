@@ -1,38 +1,132 @@
-import { notionists } from "@dicebear/collection";
+import { lorelei, notionists } from "@dicebear/collection";
 import { createAvatar } from "@dicebear/core";
 
+import { bot } from "@/components/dashboard/bot-art";
 import { cn } from "@/lib/utils";
 
 /**
  * Every agent gets its own mascot, drawn from its name — the same name always
  * produces the same character, so nobody has to pick an avatar.
  *
- * Style: DiceBear "notionists" (CC0, no attribution required), rendered on the
- * server as inline SVG so there are no image requests at runtime. To change the
- * look, swap both the import and the first argument to createAvatar: bottts
- * (robots), thumbs (abstract, CC0), icons (pictograms, MIT), funEmoji or
- * croodles (CC BY 4.0 — those two need attribution).
+ * Three styles are offered; notionists is the default. Both DiceBear styles are
+ * CC0 and the bots are ours, so nothing here owes attribution — but the picker
+ * credits each from the `meta` below, so check the licence before adding one.
  */
-
-/** The ground comes from the theme, so faces stay right in dark mode. */
 
 /** Two mouths from the set's own `lips` options: open, then closed. */
 const MOUTH_OPEN = "variant19";
 const MOUTH_SHUT = "variant10";
 
-type Extra = { lips?: string; beard?: boolean };
+type Extra = { lips?: string };
 
-function draw(seed: string, size: number, extra: Extra = {}) {
-  return createAvatar(notionists, {
-    seed,
-    size,
-    ...(extra.beard === true ? { beardProbability: 100 } : {}),
-    ...(extra.beard === false ? { beardProbability: 0 } : {}),
-    ...(extra.lips ? { lips: [extra.lips as "variant10"] } : {}),
-    radius: 50,
-    scale: 130,
-    translateY: 6,
-  }).toString();
+type Frame = { seed: string; size: number; radius: number };
+
+/** Mirrors DiceBear's own meta, where every field is optional. */
+type StyleMeta = {
+  title?: string;
+  creator?: string;
+  source?: string;
+  license?: { name: string; url?: string };
+};
+
+type StyleEntry = {
+  label: string;
+  meta: StyleMeta;
+  render: (frame: Frame) => { toString: () => string; toDataUri: () => string };
+};
+
+/**
+ * Each style needs its own call so the option types stay checked, and only
+ * notionists needs reframing — the rest sit correctly at their own defaults.
+ */
+const STYLES = {
+  notionists: {
+    label: "Hand-drawn",
+    meta: notionists.meta,
+    render: (f: Frame) => createAvatar(notionists, { ...f, scale: 130, translateY: 6 }),
+  },
+  rivervoice: {
+    label: "Bots",
+    meta: { title: "Rivervoice bots", creator: "Rivervoice" },
+    render: (f: Frame) => bot(f.seed, f.size),
+  },
+  lorelei: {
+    label: "Inked",
+    meta: lorelei.meta,
+    render: (f: Frame) => createAvatar(lorelei, f),
+  },
+} satisfies Record<string, StyleEntry>;
+
+export type MascotStyleId = keyof typeof STYLES;
+
+export const MASCOT_STYLE_IDS = Object.keys(STYLES) as MascotStyleId[];
+
+/** Annotated so the per-style literal types widen to one shape at the call site. */
+export function mascotStyle(id: MascotStyleId): { label: string; meta: StyleMeta } {
+  return STYLES[id];
+}
+
+const DEFAULT_STYLE: MascotStyleId = "notionists";
+
+/** Stored as "style:seed". A bare string is a seed in the default style. */
+export function parseMascot(ref: string): { style: MascotStyleId; seed: string } {
+  const split = ref.indexOf(":");
+  const head = split > 0 ? ref.slice(0, split) : "";
+  if (head in STYLES) {
+    return { style: head as MascotStyleId, seed: ref.slice(split + 1) };
+  }
+  return { style: DEFAULT_STYLE, seed: ref };
+}
+
+export function mascotRef(style: MascotStyleId, seed: string) {
+  return style === DEFAULT_STYLE ? seed : `${style}:${seed}`;
+}
+
+function memo<T>(store: Map<string, T>, key: string, make: () => T) {
+  const hit = store.get(key);
+  if (hit !== undefined) return hit;
+  const made = make();
+  if (store.size > 400) store.clear();
+  store.set(key, made);
+  return made;
+}
+
+const drawn = new Map<string, string>();
+
+/** Mouths and beards are notionists-only options, so this path stays on it. */
+function drawNotionists(seed: string, size: number, extra: Extra = {}) {
+  const key = `${seed}|${size}|${extra.lips ?? ""}`;
+  return memo(drawn, key, () =>
+    createAvatar(notionists, {
+      seed,
+      size,
+      ...(extra.lips ? { lips: [extra.lips as "variant10"] } : {}),
+      radius: 50,
+      scale: 130,
+      translateY: 6,
+    }).toString(),
+  );
+}
+
+function draw(ref: string, size: number) {
+  return memo(drawn, `svg|${ref}|${size}`, () => {
+    const { style, seed } = parseMascot(ref);
+    return STYLES[style].render({ seed, size, radius: 50 }).toString();
+  });
+}
+
+const uris = new Map<string, string>();
+
+/** For grids: an <img> costs one decode, inline SVG costs hundreds of nodes. */
+export function mascotDataUri(ref: string, size: number) {
+  return memo(uris, `${ref}|${size}`, () => {
+    const { style, seed } = parseMascot(ref);
+    return STYLES[style].render({ seed, size, radius: 50 }).toDataUri();
+  });
+}
+
+export function warmMascots(refs: string[], size: number) {
+  for (const ref of refs) mascotDataUri(ref, size);
 }
 
 const hoverLean =
@@ -53,7 +147,8 @@ export function Mascot({
   /** Offsets the mouth, so a crowd does not speak in unison. */
   talkDelay?: string;
 }) {
-  if (!talking) {
+  // Only notionists has the mouth options the animation swaps between.
+  if (!talking || parseMascot(seed).style !== "notionists") {
     return (
       <span
         role="img"
@@ -84,40 +179,15 @@ export function Mascot({
         aria-hidden
         style={{ animationDelay: talkDelay }}
         className="animate-mouth-open absolute inset-0 overflow-hidden rounded-full"
-        dangerouslySetInnerHTML={{ __html: draw(seed, size, { lips: MOUTH_OPEN }) }}
+        dangerouslySetInnerHTML={{ __html: drawNotionists(seed, size, { lips: MOUTH_OPEN }) }}
       />
       <span
         aria-hidden
         style={{ animationDelay: talkDelay }}
         className="animate-mouth-shut absolute inset-0 overflow-hidden rounded-full"
-        dangerouslySetInnerHTML={{ __html: draw(seed, size, { lips: MOUTH_SHUT }) }}
+        dangerouslySetInnerHTML={{ __html: drawNotionists(seed, size, { lips: MOUTH_SHUT }) }}
       />
     </span>
-  );
-}
-
-/**
- * The same character, treated as a glyph instead of an avatar: no tile, no
- * crop, no ground — just the line art, inverted in dark mode so it reads as
- * ink at the same weight as the icons beside it.
- */
-export function MascotGlyph({ size = 18, className }: { size?: number; className?: string }) {
-  const svg = createAvatar(notionists, {
-    seed: "Agents",
-    size,
-    scale: 175,
-    translateY: 12,
-    backgroundColor: ["transparent"],
-  }).toString();
-
-  return (
-    <span
-      role="img"
-      aria-label="Agents"
-      style={{ width: size, height: size }}
-      className={cn("inline-block shrink-0 dark:invert", className)}
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
   );
 }
 

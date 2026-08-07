@@ -14,8 +14,8 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import { MascotPicker } from "@/components/builder/mascot-picker";
 import type { Agent } from "@/components/dashboard/data";
-import { Mascot } from "@/components/dashboard/mascot";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -28,10 +28,14 @@ import { cn } from "@/lib/utils";
 
 export function BuilderTopbar({
   agent,
+  mascot,
+  onMascotChange,
   assistantOpen,
   onToggleAssistant,
 }: {
   agent: Agent;
+  mascot: string | null;
+  onMascotChange: (seed: string | null) => void;
   assistantOpen: boolean;
   onToggleAssistant: () => void;
 }) {
@@ -64,7 +68,7 @@ export function BuilderTopbar({
         <ChevronLeft />
       </Button>
 
-      <Mascot seed={agent.name} size={26} />
+      <MascotPicker name={name} value={mascot} onChange={onMascotChange} size={26} />
 
       {editing ? (
         <input

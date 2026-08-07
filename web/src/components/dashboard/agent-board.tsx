@@ -26,7 +26,7 @@ const columns: ColumnDef<Agent, unknown>[] = [
               agent.status === "live" ? "bg-river" : "bg-transparent group-hover:bg-border",
             )}
           />
-          <Mascot seed={agent.name} size={30} />
+          <Mascot seed={agent.mascot ?? agent.name} size={30} />
           <span className="min-w-0">
             <span className="block truncate leading-5 font-medium">{agent.name}</span>
             <span className="block truncate text-xs text-muted-foreground">{agent.purpose}</span>
