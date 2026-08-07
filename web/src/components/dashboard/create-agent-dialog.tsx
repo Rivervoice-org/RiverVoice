@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Plus } from "lucide-react";
 
+import { MascotPicker } from "@/components/builder/mascot-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,6 +19,7 @@ import {
 /** The blank-slate path: name it first, configure it after. */
 export function CreateAgentDialog() {
   const [name, setName] = React.useState("");
+  const [mascot, setMascot] = React.useState<string | null>(null);
 
   return (
     <Dialog>
@@ -35,14 +37,16 @@ export function CreateAgentDialog() {
           <DialogTitle className="text-base font-medium">Name your agent</DialogTitle>
         </DialogHeader>
 
-        <div className="px-6 pt-4 pb-5">
+        <div className="flex items-center gap-3 px-6 pt-4 pb-5">
+          <MascotPicker name={name || "Agent"} value={mascot} onChange={setMascot} size={36} />
+
           <Input
             autoFocus
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="e.g. Sales bot"
             aria-label="Agent name"
-            className="h-10 px-3"
+            className="h-10 min-w-0 flex-1 px-3"
           />
         </div>
 
