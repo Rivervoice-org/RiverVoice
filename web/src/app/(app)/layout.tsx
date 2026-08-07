@@ -1,5 +1,5 @@
 import { RequireSession } from "@/components/auth/require-session";
-import { MascotNavIcon } from "@/components/dashboard/mascot";
+import { MascotNavIcon } from "@/mascots";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Splash } from "@/components/dashboard/splash";
 

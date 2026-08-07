@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Search } from "lucide-react";
 
 import { agents } from "@/components/dashboard/data";
-import { Mascot } from "@/components/dashboard/mascot";
+import { Mascot } from "@/mascots";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 

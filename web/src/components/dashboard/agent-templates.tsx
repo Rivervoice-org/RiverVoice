@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react";
 
 import { agentTemplates, templateCategories } from "@/components/dashboard/data";
-import { Mascot } from "@/components/dashboard/mascot";
+import { Mascot } from "@/mascots";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function Roster({ items }: { items: typeof agentTemplates }) {

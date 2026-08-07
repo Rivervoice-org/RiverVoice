@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { agents } from "@/components/dashboard/data";
-import { Mascot } from "@/components/dashboard/mascot";
+import { Mascot } from "@/mascots";
 import { cn } from "@/lib/utils";
 
 /** Notion's "recently visited", for the things you actually edit here. */

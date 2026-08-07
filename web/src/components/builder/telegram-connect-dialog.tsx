@@ -12,7 +12,7 @@ import { telegramScenes } from "@/motion/walkthroughs/telegram";
 import { Step, TextField } from "@/components/builder/tool-form";
 import { chatLabel, getMe, pollChats, sendMessage, type Bot, type Chat } from "@/lib/telegram";
 import type { Agent } from "@/components/dashboard/data";
-import { Mascot, mascotDataUri } from "@/components/dashboard/mascot";
+import { Mascot, mascotDataUri } from "@/mascots";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";

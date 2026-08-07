@@ -1,4 +1,4 @@
-import { Mascot } from "@/components/dashboard/mascot";
+import { Mascot } from "@/mascots";
 
 /**
  * The dashboard's crowd scatters agents across the full width, which works
