@@ -66,6 +66,41 @@ export function useTemplate() {
   });
 }
 
+/**
+ * Deleting takes the agent and every version with it. Nothing optimistic here:
+ * the row stays on the board until harbor confirms, because an agent that
+ * vanishes and comes back would be worse than one that takes a moment to go.
+ */
+/**
+ * Cloning copies the agent's settings, its tools and its name into a fresh v1
+ * draft. There is no body: harbor settles the name — "Front desk 2" when the
+ * first is already on the board — so this cannot collide and has nothing to ask.
+ *
+ * It stays on the board rather than opening the copy: you cloned from a list, so
+ * the list is where the new row belongs.
+ */
+export function useCloneAgent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => api.post<CreatedAgent>(`/v1/agents/${id}/clone`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: agentsQueryKey }),
+  });
+}
+
+export function useDeleteAgent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => api.del<string>(`/v1/agents/${id}`),
+    onSuccess: async (_message, id) => {
+      // Whatever is cached under this agent is about to 404 on any refetch.
+      queryClient.removeQueries({ queryKey: ["agents", id] });
+      await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+    },
+  });
+}
+
 export const templatesQueryKey = ["agent-templates"] as const;
 
 export function useAgentTemplates(): UseQueryResult<AgentTemplate[]> {
