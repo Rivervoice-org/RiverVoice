@@ -1,10 +1,10 @@
 "use client";
 
-import { ArrowUp, History, PanelRight, Sparkles } from "lucide-react";
+import { History, PanelRight, Sparkles } from "lucide-react";
 
 import type { Agent } from "@/lib/agents/types";
 import { Mascot } from "@/mascots";
-import { Textarea } from "@/components/ui/textarea";
+import { AskComposer } from "@/components/ask/ask-composer";
 import { Button } from "@/components/ui/button";
 
 const SUGGESTIONS = [
@@ -73,23 +73,7 @@ export function BuilderAssistant({
       </div>
 
       <div className="shrink-0 p-3">
-        <div className="rounded-2xl border border-foreground/15 bg-muted/50 transition-all focus-within:border-foreground/30 focus-within:bg-card">
-          <Textarea
-            rows={3}
-            aria-label="Ask Rivervoice"
-            placeholder="Describe the change you want"
-            className="min-h-20 resize-none border-0 bg-transparent px-3.5 pt-3 pb-1 text-sm shadow-none focus-visible:border-0 focus-visible:ring-0 md:text-sm dark:bg-transparent"
-          />
-          <div className="flex items-center px-2.5 pb-2.5">
-            <Button
-              size="icon"
-              aria-label="Send"
-              className="ml-auto size-8 cursor-pointer rounded-full"
-            >
-              <ArrowUp />
-            </Button>
-          </div>
-        </div>
+        <AskComposer placeholder="Describe the change you want" />
       </div>
     </aside>
   );
