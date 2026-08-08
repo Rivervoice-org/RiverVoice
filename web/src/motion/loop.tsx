@@ -24,12 +24,20 @@ export function Loop({
   length,
   still,
   viewBox,
+  /**
+   * Bottom-anchored by default. These scenes stand on a ground line at the foot
+   * of the frame, and the panel they sit in changes height with whatever is in
+   * the column beside it — centred, the whole drawing floats in a letterbox band
+   * and the character ends up somewhere nobody is looking.
+   */
+  preserve = "xMidYMax meet",
   className,
   children,
 }: {
   length: number;
   still: number;
   viewBox: string;
+  preserve?: string;
   className?: string;
   children: (frame: number) => React.ReactNode;
 }) {
@@ -57,7 +65,7 @@ export function Loop({
   }, [reduced, length]);
 
   return (
-    <svg viewBox={viewBox} className={className} aria-hidden>
+    <svg viewBox={viewBox} preserveAspectRatio={preserve} className={className} aria-hidden>
       {children(reduced ? still : frame)}
     </svg>
   );
