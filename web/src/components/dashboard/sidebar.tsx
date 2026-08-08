@@ -66,7 +66,7 @@ const sections: { title: string; items: NavItem[] }[] = [
     title: "Deploy",
     items: [
       { label: "Inbound calls", icon: PhoneIncoming, badge: "3" },
-      { label: "Outbound campaigns", icon: CampaignIcon },
+      { label: "Outbound campaigns", icon: CampaignIcon, href: "/campaigns" },
       { label: "Deploy with code", icon: DeployCodeIcon },
     ],
   },

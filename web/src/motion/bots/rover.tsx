@@ -57,9 +57,12 @@ export function Rover({
   holding = false,
   lit = 0,
 }: Props) {
-  // Down at the inner ends is a frown, up is pleased. Everything this character
-  // feels is these two short lines.
-  const brow = 4 - smile * 7;
+  /* The brows are the whole face, and which way they slope is the whole mood.
+     Outer ends low and inner ends high is the hopeful look the films use; the
+     other way round is a scowl, and a straight pair reads as a security camera.
+     So they only ever rise from here — `smile` lifts the inner ends further. */
+  const inner = -37 - smile * 2.5;
+  const outer = -29 + smile * 1;
   const shut = Math.max(0.06, blink);
 
   return (
@@ -121,27 +124,38 @@ export function Rover({
           <path d="M-16,-14 h32" strokeWidth={2.2} opacity={0.6} />
           <path d="M0,-8 v-6" strokeWidth={2} opacity={0.6} />
 
+          {/* Toed in a couple of degrees. Two barrels dead parallel read as
+              optics; a slight converge reads as looking at you. */}
           {[-15, 15].map((cx) => (
-            <g key={cx}>
+            <g key={cx} transform={`rotate(${cx < 0 ? 5 : -5} ${cx} -20)`}>
               <circle
                 cx={cx}
                 cy={-20}
-                r={13}
+                r={13.5}
                 strokeWidth={2.6}
                 fill="currentColor"
                 fillOpacity={0.03 + lit * 0.09}
               />
               {/* The lens shuts by closing, not by shrinking */}
               <g transform={`translate(${cx} -20) scale(1 ${shut}) translate(${-cx} 20)`}>
-                <circle cx={cx} cy={-20} r={5.4} strokeWidth={2.2} />
-                <circle cx={cx - 1.8} cy={-21.8} r={1.8} fill="currentColor" stroke="none" />
+                <circle
+                  cx={cx}
+                  cy={-19}
+                  r={6.4}
+                  strokeWidth={2.2}
+                  fill="currentColor"
+                  fillOpacity={0.12}
+                />
+                {/* Big and set low, with a catchlight — which is most of it */}
+                <circle cx={cx - 2} cy={-20.6} r={2.4} fill="currentColor" stroke="none" />
               </g>
             </g>
           ))}
 
-          {/* The brows. The whole face, really. */}
-          <path d={`M-27,${-35 + brow * 0.3} L-5,${-33 + brow}`} strokeWidth={3} />
-          <path d={`M27,${-35 + brow * 0.3} L5,${-33 + brow}`} strokeWidth={3} />
+          {/* Curved over the lens rather than floating above it, so the brow
+              belongs to the eye instead of hovering like a drawn-on frown. */}
+          <path d={`M-29,${outer} Q-20,${inner - 3} -5,${inner}`} strokeWidth={3} />
+          <path d={`M29,${outer} Q20,${inner - 3} 5,${inner}`} strokeWidth={3} />
         </g>
       </g>
     </g>
