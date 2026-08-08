@@ -415,6 +415,31 @@
   }
 }
 
+/* Theme change. The default cross-fade is switched off: the new palette sits on
+   top of the old one and clips itself open as a circle, which is animated from
+   use-theme-transition.ts where the click coordinates live. Scoped to the
+   attribute that hook sets, so any other view transition keeps its own look. */
+html[data-theme-transition]::view-transition-old(root),
+html[data-theme-transition]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html[data-theme-transition]::view-transition-old(root) {
+  z-index: 0;
+}
+
+html[data-theme-transition]::view-transition-new(root) {
+  z-index: 1;
+}
+
+/* The selected pill travels between the three options while the wipe runs. */
+html[data-theme-transition]::view-transition-group(theme-pill) {
+  animation-duration: 480ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 2;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

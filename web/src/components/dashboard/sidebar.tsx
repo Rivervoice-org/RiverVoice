@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useTheme } from "next-themes";
 import {
   ChevronsUpDown,
   CreditCard,
@@ -40,6 +39,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useMe, useSignOut } from "@/lib/auth/queries";
+import { originOf, useThemeTransition } from "@/lib/use-theme-transition";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -240,7 +240,7 @@ function SidebarSections({
 function SidebarFooter({ collapsed }: { collapsed?: boolean }) {
   const { data: me } = useMe();
   const signOut = useSignOut();
-  const { theme, setTheme } = useTheme();
+  const { theme, changeTheme } = useThemeTransition();
   const minutesLeft = usage.minutes.included - usage.minutes.used;
 
   return (
@@ -304,23 +304,30 @@ function SidebarFooter({ collapsed }: { collapsed?: boolean }) {
             <MoonStar className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
             <span className="flex-1 text-[13px]">Theme</span>
             <div className="flex items-center gap-0.5 rounded-full bg-muted p-0.5">
-              {THEMES.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-label={option.label}
-                  title={option.label}
-                  onClick={() => setTheme(option.value)}
-                  className={cn(
-                    "flex size-6 cursor-pointer items-center justify-center rounded-full transition-colors",
-                    theme === option.value
-                      ? "bg-card text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <option.icon className="size-3.5" strokeWidth={1.75} />
-                </button>
-              ))}
+              {THEMES.map((option) => {
+                const active = theme === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-label={option.label}
+                    aria-pressed={active}
+                    title={option.label}
+                    onClick={(event) => changeTheme(option.value, originOf(event.currentTarget))}
+                    /* Naming only the selected pill lets the browser morph it
+                       from the old position to the new one during the wipe. */
+                    style={active ? { viewTransitionName: "theme-pill" } : undefined}
+                    className={cn(
+                      "flex size-6 cursor-pointer items-center justify-center rounded-full transition-colors",
+                      active
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <option.icon className="size-3.5" strokeWidth={1.75} />
+                  </button>
+                );
+              })}
             </div>
           </div>
           <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
