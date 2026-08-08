@@ -29,7 +29,8 @@ export function useAgent(id: string, version?: number, enabled = true): UseQuery
   });
 }
 
-type CreatedAgent = { message: string; agent_id: string };
+/** `name` is only set by a clone, where the server settled it. */
+type CreatedAgent = { message: string; agent_id: string; name?: string };
 
 export function useCreateAgent() {
   const router = useRouter();
@@ -38,6 +39,26 @@ export function useCreateAgent() {
   return useMutation({
     mutationFn: (values: CreateAgentValues) =>
       api.post<CreatedAgent>("/v1/agents", { name: values.name, mascot: values.mascot }),
+    onSuccess: async (created) => {
+      await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+      router.push(`/build-agent/${created.agent_id}`);
+    },
+  });
+}
+
+/**
+ * Taking a template clones it. There is no body: the settings, the tools and
+ * the name all come from the server, which picks "Front desk 2" if the first
+ * one is already on the board — so this cannot fail on a name collision and
+ * has nothing to ask the person first.
+ */
+export function useTemplate() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (templateId: string) =>
+      api.post<CreatedAgent>(`/v1/agent-templates/${templateId}/use`),
     onSuccess: async (created) => {
       await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
       router.push(`/build-agent/${created.agent_id}`);

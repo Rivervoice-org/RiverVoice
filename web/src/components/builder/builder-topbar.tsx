@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { MascotPicker } from "@/components/builder/mascot-picker";
+import type { RailView } from "@/components/builder/rail";
 import type { Agent } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/time";
 import { Button } from "@/components/ui/button";
@@ -31,16 +32,17 @@ export function BuilderTopbar({
   agent,
   mascot,
   onMascotChange,
-  railOpen,
-  onToggleRail,
+  active,
   onOpenAssistant,
+  onTest,
 }: {
   agent: Agent;
   mascot: string | null;
   onMascotChange: (seed: string | null) => void;
-  railOpen: boolean;
-  onToggleRail: () => void;
+  /** Whichever panel is on screen, so its own button can stand down. */
+  active: RailView | null;
   onOpenAssistant: () => void;
+  onTest: () => void;
 }) {
   const [editing, setEditing] = React.useState(false);
   const [name, setName] = React.useState(agent.name);
@@ -151,35 +153,42 @@ export function BuilderTopbar({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {/* A panel's own button stands down while that panel is up: there is
+          nothing for it to do, and the pair reads as one switch between the two
+          rather than as two buttons where one is already pressed. */}
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
-        {/* The rail only exists from xl up; below it the same panel is a sheet. */}
-        <Button
-          variant="outline"
-          size="icon-lg"
-          aria-label="Improve with Rivervoice"
-          className="cursor-pointer rounded-full xl:hidden"
-          onClick={onOpenAssistant}
-        >
-          <Sparkles className="text-muted-foreground" />
-        </Button>
+        {active === "assistant" ? null : (
+          <>
+            {/* The rail only exists from xl up; below it the panel is a sheet. */}
+            <Button
+              variant="outline"
+              size="icon-lg"
+              aria-label="Improve with Rivervoice"
+              className="cursor-pointer rounded-full xl:hidden"
+              onClick={onOpenAssistant}
+            >
+              <Sparkles className="text-muted-foreground" />
+            </Button>
 
-        {railOpen ? null : (
-          <Button
-            variant="outline"
-            size="lg"
-            className="hidden cursor-pointer rounded-full px-4 xl:inline-flex"
-            onClick={onToggleRail}
-          >
-            <Sparkles data-icon="inline-start" className="text-muted-foreground" />
-            Improve with Rivervoice
-          </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              className="hidden cursor-pointer rounded-full px-4 xl:inline-flex"
+              onClick={onOpenAssistant}
+            >
+              <Sparkles data-icon="inline-start" className="text-muted-foreground" />
+              Improve with Rivervoice
+            </Button>
+          </>
         )}
 
-        <Button size="lg" className="cursor-pointer rounded-full px-3 sm:px-4">
-          <Phone data-icon="inline-start" />
-          <span className="hidden sm:inline">Test agent</span>
-          <span className="sm:hidden">Test</span>
-        </Button>
+        {active === "test" ? null : (
+          <Button size="lg" className="cursor-pointer rounded-full px-3 sm:px-4" onClick={onTest}>
+            <Phone data-icon="inline-start" />
+            <span className="hidden sm:inline">Test agent</span>
+            <span className="sm:hidden">Test</span>
+          </Button>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger
             render={

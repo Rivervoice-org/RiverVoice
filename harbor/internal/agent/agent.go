@@ -82,6 +82,81 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) httpx.APIRespon
 	})
 }
 
+// Taking a template is a clone, not a reference: the new agent keeps nothing
+// pointing at the roster, so editing it later cannot change anybody else's, and
+// a template we retire cannot take working agents down with it.
+func (h *Handler) useTemplate(w http.ResponseWriter, r *http.Request) httpx.APIResponse[CreateAgentResponse] {
+	session, ok := auth.SessionFrom(r.Context())
+	if !ok {
+		return httpx.Fail[CreateAgentResponse](http.StatusUnauthorized, "Sign in to continue")
+	}
+
+	req := UseTemplateRequest{TemplateID: r.PathValue("id")}
+
+	// An id that is not a uuid cannot name a template, so it is the same 404 as
+	// one that names nothing — and it never reaches Postgres.
+	if err := validate.Struct(req); err != nil {
+		return httpx.Fail[CreateAgentResponse](http.StatusNotFound, "No such template")
+	}
+
+	var id, name string
+	err := db.AsUser(r.Context(), h.pool, session.UserID, func(tx pgx.Tx) error {
+		q := dbgen.New(tx)
+
+		// The one read that decides whether this is a template at all. Everything
+		// after it is a write, so a bad id fails before anything is created.
+		templateName, err := q.GetTemplateName(r.Context(), req.TemplateID)
+		if err != nil {
+			return err
+		}
+
+		// Taking the same template twice is ordinary, so the second one is named
+		// rather than refused.
+		name, err = q.FreeAgentName(r.Context(), templateName)
+		if err != nil {
+			return asNameTaken(err)
+		}
+
+		id, err = q.CloneTemplateAgent(r.Context(), dbgen.CloneTemplateAgentParams{
+			Name:       name,
+			TemplateID: req.TemplateID,
+		})
+		if err != nil {
+			return asNameTaken(err)
+		}
+
+		// One transaction for all three: an agent with no version is something the
+		// builder cannot open, and half-copied tools are worse than none.
+		if err := q.CloneTemplateVersion(r.Context(), dbgen.CloneTemplateVersionParams{
+			AgentID:    id,
+			TemplateID: req.TemplateID,
+		}); err != nil {
+			return err
+		}
+
+		return q.CloneTemplateTools(r.Context(), dbgen.CloneTemplateToolsParams{
+			AgentID:    id,
+			TemplateID: req.TemplateID,
+		})
+	})
+
+	switch {
+	case isNotFound(err):
+		return httpx.Fail[CreateAgentResponse](http.StatusNotFound, "No such template")
+	case errors.Is(err, errNameTaken):
+		return httpx.Fail[CreateAgentResponse](http.StatusConflict, "You already have an agent with that name")
+	case err != nil:
+		log.Printf("use template %s: %v", req.TemplateID, err)
+		return httpx.Fail[CreateAgentResponse](http.StatusInternalServerError, "Could not create the agent")
+	}
+
+	return httpx.Ok(http.StatusCreated, CreateAgentResponse{
+		Message: "Agent created from template",
+		AgentID: id,
+		Name:    name,
+	})
+}
+
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) httpx.APIResponse[AgentDetail] {
 	session, ok := auth.SessionFrom(r.Context())
 	if !ok {

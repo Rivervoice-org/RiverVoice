@@ -26,7 +26,17 @@ type CreateAgentRequest struct {
 	Mascot string `json:"mascot" validate:"omitempty,max=100"`
 }
 
+// The path of a clone. There is no body: everything the new agent starts with
+// comes from the template, and the name is settled server-side so taking the
+// same template twice cannot collide.
+type UseTemplateRequest struct {
+	TemplateID string `json:"template_id" validate:"required,uuid"`
+}
+
 type CreateAgentResponse struct {
 	Message string `json:"message"`
 	AgentID string `json:"agent_id"`
+	// Only set by a clone, where the server chose it — "Front desk 2" when the
+	// first one is already on the board.
+	Name string `json:"name,omitempty"`
 }

@@ -148,6 +148,200 @@ order by
   position,
   created_at;
 
+-- name: GetTemplateName :one
+-- The name a clone starts from, and the check that the id names a template at
+-- all. `is_template` matters: without it this would read any agent the read
+-- policy lets through, which includes every agent in the caller's own org.
+select
+  name
+from
+  agents
+where
+  id = @id
+  and is_template;
+
+-- name: FreeAgentName :one
+-- "Appointment management", then "Appointment management 2". Taking a template
+-- twice is ordinary — the second one cannot fail on the unique (org_id, name).
+--
+-- Ordered by n rather than by the name, or "… 10" would be picked before "… 2".
+select
+  c.candidate::text as name
+from
+  generate_series(1, 50) as n
+  cross join lateral (
+    select
+      case
+        when n = 1 then @name::text
+        else @name::text || ' ' || n::text
+      end as candidate
+  ) c
+where
+  not exists (
+    select
+      1
+    from
+      my_agents a
+    where
+      a.name = c.candidate
+  )
+order by
+  n
+limit
+  1;
+
+-- name: CloneTemplateAgent :one
+-- The identity of the new agent, taken from the template. org_id and created_by
+-- come from the session, so the row lands in the caller's org however the
+-- template is owned — and is_template stays false, which agents_write requires.
+insert into
+  agents (org_id, name, mascot, purpose, created_by)
+select
+  app.current_org_id (),
+  @name,
+  t.mascot,
+  t.purpose,
+  app.current_user_id ()
+from
+  agents t
+where
+  t.id = @template_id
+  and t.is_template
+returning
+  id;
+
+-- name: CloneTemplateVersion :exec
+-- Every setting the template carries, copied into a v1 draft so the builder
+-- opens on something editable. A committed version would leave the new agent
+-- with nothing to write into.
+--
+-- Column by column rather than `select *`: a new setting should fail to compile
+-- here rather than silently stop being copied.
+insert into
+  agent_versions (
+    agent_id,
+    org_id,
+    version,
+    state,
+    created_by,
+    greeting,
+    instructions,
+    tts_provider,
+    tts_model,
+    voice,
+    speed,
+    pitch,
+    llm_provider,
+    llm_model,
+    creativity,
+    knowledge_only,
+    stt_provider,
+    stt_model,
+    interruptible,
+    reply_delay,
+    noise_filter,
+    switch_language,
+    languages,
+    starting_language,
+    switch_after,
+    indic_numerals,
+    background_sound,
+    background_volume,
+    nudge_quiet_callers,
+    hangup_after_nudges,
+    leave_voicemail,
+    voicemail_message,
+    max_call_minutes,
+    system_tools
+  )
+select
+  @agent_id,
+  app.current_org_id (),
+  1,
+  'draft',
+  app.current_user_id (),
+  v.greeting,
+  v.instructions,
+  v.tts_provider,
+  v.tts_model,
+  v.voice,
+  v.speed,
+  v.pitch,
+  v.llm_provider,
+  v.llm_model,
+  v.creativity,
+  v.knowledge_only,
+  v.stt_provider,
+  v.stt_model,
+  v.interruptible,
+  v.reply_delay,
+  v.noise_filter,
+  v.switch_language,
+  v.languages,
+  v.starting_language,
+  v.switch_after,
+  v.indic_numerals,
+  v.background_sound,
+  v.background_volume,
+  v.nudge_quiet_callers,
+  v.hangup_after_nudges,
+  v.leave_voicemail,
+  v.voicemail_message,
+  v.max_call_minutes,
+  v.system_tools
+from
+  agents t
+  join lateral (
+    select
+      *
+    from
+      agent_versions
+    where
+      agent_id = t.id
+    order by
+      version desc
+    limit
+      1
+  ) v on true
+where
+  t.id = @template_id
+  and t.is_template;
+
+-- name: CloneTemplateTools :exec
+-- Tools hang off the agent rather than the version, so they are copied once.
+-- Nothing is carried over from the template's own row — created_by and the
+-- timestamps are the caller's, because this is a new tool, not a shared one.
+insert into
+  agent_tools (
+    agent_id,
+    org_id,
+    kind,
+    name,
+    description,
+    trigger,
+    enabled,
+    position,
+    config,
+    created_by
+  )
+select
+  @agent_id,
+  app.current_org_id (),
+  tool.kind,
+  tool.name,
+  tool.description,
+  tool.trigger,
+  tool.enabled,
+  tool.position,
+  tool.config,
+  app.current_user_id ()
+from
+  agent_tools tool
+  join agents t on t.id = tool.agent_id
+where
+  tool.agent_id = @template_id
+  and t.is_template;
+
 -- name: ListAgentTemplates :many
 -- The roster on the agents page. No org filter: agents_read lets templates
 -- through for everyone, which is the point of them.
