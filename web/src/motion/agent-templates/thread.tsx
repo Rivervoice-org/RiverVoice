@@ -1,232 +1,142 @@
 "use client";
 
-import { Face } from "@/motion/agent-templates/face";
-import { box } from "@/motion/shapes";
-import { interpolate, seconds } from "@/motion/timeline";
+import { ease, interpolate, seconds } from "@/motion/timeline";
+import { Chaabi } from "@/motion/agent-templates/bots";
+import { Caption, Card, Ink, Tick, VIEW, text } from "@/motion/agent-templates/stage";
 
 /**
- * "Carried on" — a plan running out, and offered more.
+ * "क्या इसे बढ़ा दूँ?" — wound for another year.
  *
- * A thread comes down the panel to a knot: the date it lapses. Below it, two
- * frayed ends and nothing. The agent asks once, and then waits — that silence
- * is the longest beat in the loop on purpose, because the template's rule is to
- * ask once and never a second time. When the answer comes the thread carries on
- * past the knot to a new one.
- *
- * Nothing is asked twice here, and nothing is pushed.
+ * A wind-up, because that is what a renewal actually is: the thing runs down on
+ * its own and somebody has to turn the key before it stops. The year fills as a
+ * band of months across the panel, Chaabi sags a little further with each one,
+ * and the ask lands while there is still a turn left in it — not after.
  */
 export type ThreadScript = {
-  /** On the knot it was going to end at. */
+  /** The date it runs out. */
   ends: string;
-  /** What the agent asks, once. */
+  /** The one question. */
   ask: string;
-  /** On the knot it ends at now. */
+  /** What it says afterwards. */
   extended: string;
   captions: [string, string, string];
 };
 
-export const THREAD_VIEW = { w: 240, h: 560 };
+export const THREAD_VIEW = VIEW;
 
-const X = 152;
-const TOP = 96;
-const KNOT = 330;
-const NEW_KNOT = 470;
+const MONTHS = 12;
+const BAND = { y: 168, from: 40, to: 220 };
+const STEP = (BAND.to - BAND.from) / (MONTHS - 1);
 
-const FACE = { x: 54, y: 452, r: 28 };
+const ASK = { x: 40, y: 232, w: 180, h: 54 };
+const NOW = { x: 48, y: 232, w: 164, h: 54 };
 
-/* Beats. */
+const BOT = { x: 118, y: 372 };
+const FLOOR = 434;
 
-const ASK = seconds(1.6);
-const ASK_GONE = seconds(3.0);
-/** The wait. Nothing happens here, and that is the point. */
-const ANSWER = seconds(4.0);
-const CARRY = seconds(4.3);
-const CARRIED = seconds(5.8);
-const CAP2 = seconds(1.6);
-const CAP3 = seconds(5.8);
-const RESET = seconds(7.4);
+const FILL = seconds(0.7);
+const ENDS = seconds(3.3);
+const ASKED = seconds(3.9);
+const WIND = seconds(5.1);
+const TURNS = seconds(0.9);
+const NEW = WIND + TURNS;
+const RESET = seconds(7.9);
 
-export const THREAD_LENGTH = seconds(8.0);
-/** Carried on, with the new date written. */
-export const THREAD_STILL = seconds(6.6);
-
-const out = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
-
-const captionText = "fill-current text-[11px] [font-family:var(--font-sans)]";
-const dateText = "fill-current text-[10px] [font-family:var(--font-sans)]";
-const askText = "fill-current text-[10px] [font-family:var(--font-sans)]";
-
-/** Rounded, with the tail rounded into it rather than a spike off the corner. */
-function bubble(w: number, y: number) {
-  return `${box(14, y, w, 26, 10)} M34,${y + 26} Q31,${y + 34} 40,${y + 33} Q44,${y + 30} 44,${y + 26}`;
-}
-
-const S = ({ d, w = 2.6, o = 1 }: { d: string; w?: number; o?: number }) => (
-  <path d={d} fill="none" stroke="currentColor" strokeWidth={w} strokeLinecap="round" opacity={o} />
-);
+export const THREAD_LENGTH = seconds(8.6);
+/** Wound back up, and dated a year on. */
+export const THREAD_STILL = seconds(7.0);
 
 export function Thread({ f, script }: { f: number; script: ThreadScript }) {
   const gone = 1 - interpolate(f, [RESET, RESET + seconds(0.6)], [0, 1]);
 
-  const carried = out(interpolate(f, [CARRY, CARRIED], [0, 1]));
-  const answered = interpolate(f, [ANSWER, ANSWER + seconds(0.4)], [0, 1]);
+  // The year filling up, and the spring running down with it.
+  const used = interpolate(f, [FILL, ENDS], [0, MONTHS]);
+  const rewound = ease(interpolate(f, [WIND, NEW], [0, 1]));
+  const wound = Math.max(0.1, 1 - used / MONTHS) + rewound * (used / MONTHS);
+  // Three full turns, so it plainly takes winding rather than a nudge.
+  const turn = rewound * 1080;
 
-  const sway = Math.sin(f / 30);
-  // The frayed ends stir until there is something to carry on to.
-  const loose = (1 - carried) * gone;
-
-  const askShow = Math.min(
-    interpolate(f, [ASK, ASK + seconds(0.3)], [0, 1]),
-    1 - interpolate(f, [ASK_GONE, ASK_GONE + seconds(0.3)], [0, 1]),
-  );
-
-  const capIndex = f >= CAP3 ? 2 : f >= CAP2 ? 1 : 0;
-  const capAt = f >= CAP3 ? CAP3 : f >= CAP2 ? CAP2 : 0;
-  const capShow = Math.min(interpolate(f, [capAt, capAt + seconds(0.3)], [0, 1]), gone);
-
-  const arrive = interpolate(f, [0, seconds(0.5)], [0, 1]);
-  const nod = Math.sin(Math.PI * interpolate(f, [ANSWER, ANSWER + seconds(0.5)], [0, 1])) * 2;
-
-  // She waits with it, then looks down the new stretch as it goes.
-  const look = -3 + carried * 6;
+  const ask = interpolate(f, [ASKED, ASKED + seconds(0.5)], [0, 1]);
+  const now = interpolate(f, [NEW, NEW + seconds(0.5)], [0, 1]);
+  const tick = interpolate(f, [NEW + seconds(0.5), NEW + seconds(0.95)], [0, 1]);
 
   return (
     <g>
-      {/* Caption */}
-      <text
-        x={120}
-        y={64}
-        textAnchor="middle"
-        className={captionText}
-        opacity={capShow * 0.8}
-        transform={`translate(0 ${(1 - capShow) * 3})`}
-      >
-        {script.captions[capIndex]}
-      </text>
+      <Caption f={f} at={[0, ENDS, NEW]} lines={script.captions} fade={gone} />
 
-      {/* The run so far: there from the first frame, because it already happened */}
-      <path
-        d={`M${X},${TOP} C${X - 6},${(TOP + KNOT) / 2} ${X + 6},${(TOP + KNOT) / 2 + 30} ${X},${KNOT}`}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2.4}
-        strokeLinecap="round"
-        opacity={0.7 * gone}
-      />
-
-      {/* Where it was going to stop */}
+      {/* The year, a month at a time. After winding it is a fresh band. */}
       <g opacity={gone}>
-        <circle cx={X} cy={KNOT} r={4.5} fill="none" stroke="currentColor" strokeWidth={2.2} />
-        <text x={X - 16} y={KNOT + 3.5} textAnchor="end" className={dateText} opacity={0.55}>
+        <Ink d={`M${BAND.from - 8},${BAND.y} H${BAND.to + 8}`} w={1.4} o={0.22} />
+
+        {Array.from({ length: MONTHS }, (_, i) => {
+          const x = BAND.from + i * STEP;
+          const spent = rewound > 0.5 ? 0 : Math.max(0, Math.min(1, used - i));
+          const last = i === MONTHS - 1;
+
+          return (
+            <g key={x}>
+              <Ink
+                d={`M${x},${BAND.y - (last ? 13 : 9)} V${BAND.y + (last ? 13 : 9)}`}
+                w={last ? 2.6 : 2}
+                o={0.18 + spent * 0.72}
+              />
+            </g>
+          );
+        })}
+
+        {/* Named only at the end of the band — the date it stops */}
+        <text
+          x={BAND.to}
+          y={BAND.y + 32}
+          textAnchor="end"
+          className={text.small}
+          opacity={
+            (rewound > 0.5 ? 0.3 : interpolate(f, [ENDS, ENDS + seconds(0.4)], [0, 0.9])) * 1
+          }
+        >
           {script.ends}
         </text>
       </g>
 
-      {/* Frayed ends, stirring, until there is more thread */}
-      <g opacity={loose * 0.5}>
-        <S
-          d={`M${X},${KNOT + 5} C${X - 4 + sway * 3},${KNOT + 18} ${X - 9},${KNOT + 26} ${X - 12 + sway * 4},${KNOT + 36}`}
-          w={1.6}
-        />
-        <S
-          d={`M${X},${KNOT + 5} C${X + 5 - sway * 2},${KNOT + 16} ${X + 9},${KNOT + 24} ${X + 11 - sway * 3},${KNOT + 33}`}
-          w={1.4}
-        />
-      </g>
-
-      {/* Carried on, drawn from the old knot to the new */}
-      {carried > 0 ? (
-        <>
-          <path
-            d={`M${X},${KNOT} C${X + 7},${KNOT + 46} ${X - 7},${NEW_KNOT - 46} ${X},${NEW_KNOT}`}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.4}
-            strokeLinecap="round"
-            pathLength={1}
-            strokeDasharray={1}
-            strokeDashoffset={1 - carried}
-            opacity={0.7 * gone}
-          />
-
-          {carried > 0.94 ? (
-            <g opacity={interpolate(carried, [0.94, 1], [0, 1]) * gone}>
-              <circle
-                cx={X}
-                cy={NEW_KNOT}
-                r={4.5}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.2}
-              />
-              <text x={X + 16} y={NEW_KNOT + 3.5} className={dateText} opacity={0.75}>
+      {/* Asked while there is still a turn left in it */}
+      <g opacity={gone}>
+        {now > 0 ? (
+          <>
+            <Card {...NOW} t={now}>
+              <text
+                x={NOW.x + NOW.w / 2}
+                y={NOW.y + 33}
+                textAnchor="middle"
+                className={text.strong}
+              >
                 {script.extended}
               </text>
-            </g>
-          ) : null}
-        </>
-      ) : null}
+            </Card>
+            <Tick x={NOW.x + NOW.w - 2} y={NOW.y + 22} t={tick} />
+          </>
+        ) : (
+          <Card {...ASK} t={ask}>
+            <text x={ASK.x + ASK.w / 2} y={ASK.y + 33} textAnchor="middle" className={text.body}>
+              {script.ask}
+            </text>
+          </Card>
+        )}
+      </g>
 
-      {/* Asked once, and then not again */}
-      {askShow > 0 ? (
-        <g opacity={askShow} transform={`translate(0 ${(1 - askShow) * 4})`}>
-          <path
-            d={bubble(Math.min(212, 20 + script.ask.length * 6.2), 394)}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.8}
-            strokeLinejoin="round"
-          />
-          <text x={22} y={411} className={askText}>
-            {script.ask}
-          </text>
-        </g>
-      ) : null}
-
-      {/* One ripple, once — there is no second ask in this template */}
-      {[0, 1].map((i) => {
-        const t = interpolate(f, [ASK + i * seconds(0.14), ASK + seconds(0.9)], [0, 1]);
-        if (t <= 0 || t >= 1) return null;
-        return (
-          <circle
-            key={i}
-            cx={FACE.x + FACE.r - 2}
-            cy={FACE.y - 10}
-            r={8 + t * 38}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.2}
-            opacity={0.32 * (1 - t) * gone}
-          />
-        );
-      })}
-
-      {/* The answer, when it comes */}
-      {answered > 0 ? (
-        <path
-          d={`M${X + 20},${KNOT - 26} l5,6 l11,-12`}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2.4}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          pathLength={1}
-          strokeDasharray={1}
-          strokeDashoffset={1 - answered}
-          opacity={gone}
+      {/* The turn itself */}
+      <g opacity={gone}>
+        <Chaabi
+          x={BOT.x}
+          y={BOT.y}
+          size={1.3}
+          wound={wound}
+          turn={turn}
+          blink={f % 94 < 4 ? 0.1 : 1}
+          talk={f >= ASKED && f < ASKED + seconds(1.1) ? Math.abs(Math.sin(f * 0.5)) * 0.8 : 0}
+          smile={interpolate(f, [NEW, NEW + seconds(0.6)], [0, 1])}
         />
-      ) : null}
-
-      {/* Ananya, waiting with it */}
-      <g opacity={arrive * gone} transform={`translate(0 ${(1 - arrive) * 4 + nod})`}>
-        <S d="M28,486 Q54,492 80,486" />
-        <S d="M28,486 L26,514" />
-        <S d="M80,486 L82,514" />
-
-        {/* A hand toward the thread, open rather than reaching */}
-        <S d="M76,490 C90,489 100,486 108,482" w={2.5} />
-
-        <Face x={FACE.x} y={FACE.y} r={FACE.r} look={look} />
+        <Ink d={`M28,${FLOOR} H232`} w={2.4} o={0.6} />
+        <Ink d={`M36,${FLOOR + 5} H224`} w={1.1} o={0.24} />
       </g>
     </g>
   );

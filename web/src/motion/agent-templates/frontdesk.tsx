@@ -1,229 +1,136 @@
 "use client";
 
-import { Face } from "@/motion/agent-templates/face";
 import { box } from "@/motion/shapes";
-import { interpolate, seconds } from "@/motion/timeline";
+import { ease, interpolate, seconds } from "@/motion/timeline";
+import { Bell } from "@/motion/agent-templates/bots";
+import { Caption, Card, Ink, VIEW, text } from "@/motion/agent-templates/stage";
 
 /**
- * "After six" — the same desk, answering two different ways.
+ * "छह बजे तक खुला है" — the desk that is still there after six.
  *
- * A call comes in while the sign says open and gets an answer straight back.
- * The sign turns. The next call gets no answer at all — it gets a note, written
- * down and left on the spike for the morning.
- *
- * One object changes, and the behaviour around it changes with it. That is the
- * whole of what a front desk does, and the only thing worth drawing.
+ * Staged head-on: the sign above, Bell behind the counter, and the slip written
+ * on the counter itself. A call during hours gets answered outright; the sign
+ * turns over, the same call comes after hours, and the details are taken down
+ * instead of missed.
  */
 export type FrontDeskScript = {
-  /** What the sign says, before and after. */
+  /** Open, then closed. */
   sign: [string, string];
-  /** The answer given while it is still open. */
+  /** Answered outright, while the desk is open. */
   answer: string;
-  /** Who called, on what number, about what. */
+  /** Taken down after hours: name, number, what they wanted. */
   note: [string, string, string];
   captions: [string, string, string];
 };
 
-export const FRONTDESK_VIEW = { w: 240, h: 560 };
+export const FRONTDESK_VIEW = VIEW;
 
-const WIRE = 96;
-const SIGN = { x: 150, y: 132, w: 92, h: 40 };
-const DESK = 486;
-const SPIKE = { x: 150, y: DESK };
+const SIGN = { x: 80, y: 84, w: 100, h: 46 };
+const SAID = { x: 34, y: 172, w: 192, h: 60 };
+const SLIP = { x: 58, y: 396, w: 144, h: 78 };
 
-const FACE = { x: 54, y: 448, r: 28 };
+const COUNTER = 376;
+const BOT = { x: 130, y: 300 };
 
-/* Beats: a call in hours, the turn, and a call after. */
+const RING = seconds(0.6);
+const ANSWER = seconds(1.5);
+const FLIP = seconds(3.3);
+const NOTED = seconds(4.6);
+const TICK = seconds(5.8);
+const RESET = seconds(7.6);
 
-const CALL1 = seconds(0.9);
-const ANSWER = seconds(1.6);
-const ANSWER_GONE = seconds(3.0);
-const TURN = seconds(3.2);
-const CAP2 = seconds(3.2);
-const CALL2 = seconds(4.2);
-const WRITE = [seconds(4.8), seconds(5.5), seconds(6.2)];
-const SPIKED = seconds(7.0);
-const CAP3 = seconds(7.0);
-const RESET = seconds(8.4);
-
-export const FRONTDESK_LENGTH = seconds(9.0);
-/** Shut, with the message written and left on the spike. */
-export const FRONTDESK_STILL = seconds(7.8);
-
-const out = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
-
-const captionText = "fill-current text-[11px] [font-family:var(--font-sans)]";
-const signText = "fill-current text-[13px] font-medium [font-family:var(--font-sans)]";
-const noteText = "fill-current text-[9px] [font-family:var(--font-sans)]";
-const answerText = "fill-current text-[10px] [font-family:var(--font-sans)]";
-
-/** Rounded, with the tail rounded into it rather than a spike off the corner. */
-function bubble(w: number, y: number) {
-  return `${box(14, y, w, 26, 10)} M34,${y + 26} Q31,${y + 34} 40,${y + 33} Q44,${y + 30} 44,${y + 26}`;
-}
-
-const S = ({ d, w = 2.6, o = 1 }: { d: string; w?: number; o?: number }) => (
-  <path d={d} fill="none" stroke="currentColor" strokeWidth={w} strokeLinecap="round" opacity={o} />
-);
-
-/** One ripple off the door, for a call arriving. */
-function Ring({ f, at }: { f: number; at: number }) {
-  return (
-    <>
-      {[0, 1].map((i) => {
-        const t = interpolate(f, [at + i * seconds(0.14), at + seconds(0.9)], [0, 1]);
-        if (t <= 0 || t >= 1) return null;
-        return (
-          <circle
-            key={i}
-            cx={FACE.x + FACE.r - 2}
-            cy={FACE.y - 10}
-            r={8 + t * 38}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.2}
-            opacity={0.32 * (1 - t)}
-          />
-        );
-      })}
-    </>
-  );
-}
+export const FRONTDESK_LENGTH = seconds(8.4);
+/** The slip taken and read back, with the sign already turned. */
+export const FRONTDESK_STILL = seconds(6.8);
 
 export function FrontDesk({ f, script }: { f: number; script: FrontDeskScript }) {
   const gone = 1 - interpolate(f, [RESET, RESET + seconds(0.6)], [0, 1]);
 
-  /* The sign turns once, and everything after it behaves differently. */
-  const turning = interpolate(f, [TURN, TURN + seconds(0.6)], [0, 1]);
-  const shut = turning >= 0.5;
-  const edge = turning < 0.5 ? turning * 2 : (1 - turning) * 2;
-  const swing = Math.sin(f / 26) * 1.6 + Math.sin(Math.PI * turning) * 5;
+  const hung = ease(interpolate(f, [seconds(0.2), seconds(1)], [0, 1]));
+  const said = interpolate(f, [ANSWER, ANSWER + seconds(0.5)], [0, 1]);
+  // Turned over on its string rather than swapped, so it is plainly one sign.
+  const turn = interpolate(f, [FLIP, FLIP + seconds(0.7)], [0, 1]);
+  const closed = turn > 0.5;
+  const edgeOn = Math.abs(Math.cos(Math.PI * turn));
+  const slip = interpolate(f, [NOTED, NOTED + seconds(0.6)], [0, 1]);
 
-  /* In hours: the answer goes straight back. */
-  const answerShow = Math.min(
-    interpolate(f, [ANSWER, ANSWER + seconds(0.3)], [0, 1]),
-    1 - interpolate(f, [ANSWER_GONE, ANSWER_GONE + seconds(0.3)], [0, 1]),
+  const ring = Math.max(
+    interpolate(f, [RING, RING + seconds(0.9)], [1, 0]),
+    interpolate(f, [FLIP + seconds(0.8), FLIP + seconds(1.7)], [1, 0]) *
+      (f >= FLIP + seconds(0.8) ? 1 : 0),
   );
-
-  /* After: a note, written a line at a time, then left on the spike. */
-  const written = WRITE.filter((at) => f >= at + seconds(0.3)).length;
-  const noteIn = interpolate(f, [CALL2 + seconds(0.3), CALL2 + seconds(0.9)], [0, 1]);
-  const spiked = out(interpolate(f, [SPIKED, SPIKED + seconds(0.6)], [0, 1]));
-  const noteY = 300 + spiked * (DESK - 328);
-
-  const capIndex = f >= CAP3 ? 2 : f >= CAP2 ? 1 : 0;
-  const capAt = f >= CAP3 ? CAP3 : f >= CAP2 ? CAP2 : 0;
-  const capShow = Math.min(interpolate(f, [capAt, capAt + seconds(0.3)], [0, 1]), gone);
-
-  const arrive = interpolate(f, [0, seconds(0.5)], [0, 1]);
-  const nod = Math.sin(Math.PI * interpolate(f, [SPIKED, SPIKED + seconds(0.5)], [0, 1])) * 2;
-  // Looks up at the sign as it turns, down at the note while writing.
-  const look = f >= CALL2 ? 4 : f >= TURN ? -8 : -2;
 
   return (
     <g>
-      <text
-        x={120}
-        y={62}
-        textAnchor="middle"
-        className={captionText}
-        opacity={capShow * 0.8}
-        transform={`translate(0 ${(1 - capShow) * 3})`}
-      >
-        {script.captions[capIndex]}
-      </text>
+      <Caption f={f} at={[0, FLIP, TICK]} lines={script.captions} y={524} fade={gone} />
 
-      {/* The sign, hung from two strings, turning once */}
+      {/* The sign, on its strings */}
       <g opacity={gone}>
-        <S d={`M${SIGN.x - 26},${WIRE} L${SIGN.x - 22},${SIGN.y - SIGN.h / 2}`} w={1.2} o={0.5} />
-        <S d={`M${SIGN.x + 26},${WIRE} L${SIGN.x + 22},${SIGN.y - SIGN.h / 2}`} w={1.2} o={0.5} />
-
-        <g transform={`translate(${SIGN.x} ${SIGN.y}) rotate(${swing})`}>
-          <g transform={`scale(${Math.max(0.05, 1 - edge)} 1)`}>
-            <path
-              d={box(-SIGN.w / 2, -SIGN.h / 2, SIGN.w, SIGN.h, 12)}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.2}
-            />
-            <text x={0} y={5} textAnchor="middle" className={signText} opacity={shut ? 0.55 : 1}>
-              {script.sign[shut ? 1 : 0]}
-            </text>
-          </g>
-        </g>
-      </g>
-
-      {/* Two calls: one answered, one written down */}
-      <g opacity={gone}>
-        <Ring f={f} at={CALL1} />
-        <Ring f={f} at={CALL2} />
-      </g>
-
-      {/* In hours, the answer goes straight back */}
-      {answerShow > 0 ? (
-        <g opacity={answerShow * gone} transform={`translate(0 ${(1 - answerShow) * 4})`}>
-          <path
-            d={bubble(Math.min(212, 20 + script.answer.length * 6.2), 232)}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.8}
-            strokeLinejoin="round"
-          />
-          <text x={24} y={249} className={answerText}>
-            {script.answer}
+        <Ink d={`M${SIGN.x + 24},${SIGN.y - 20} l5,20`} t={hung} w={1.5} o={0.45} />
+        <Ink d={`M${SIGN.x + SIGN.w - 24},${SIGN.y - 20} l-5,20`} t={hung} w={1.5} o={0.45} />
+        <g
+          transform={`translate(${SIGN.x + SIGN.w / 2} 0) scale(${Math.max(0.04, edgeOn)} 1) translate(${-(SIGN.x + SIGN.w / 2)} 0)`}
+        >
+          <Ink d={box(SIGN.x, SIGN.y, SIGN.w, SIGN.h, 10)} t={hung} w={2.2} />
+          <text
+            x={SIGN.x + SIGN.w / 2}
+            y={SIGN.y + 29}
+            textAnchor="middle"
+            className={text.strong}
+            opacity={hung * (closed ? 0.5 : 1)}
+          >
+            {closed ? script.sign[1] : script.sign[0]}
           </text>
         </g>
-      ) : null}
+      </g>
 
-      {/* After, a note instead — written a line at a time */}
-      {noteIn > 0 ? (
-        <g
-          opacity={noteIn * gone}
-          transform={`translate(${SPIKE.x} ${noteY}) rotate(${-4 + spiked * 6})`}
-        >
-          <path d={box(-38, -30, 76, 61, 9)} fill="none" stroke="currentColor" strokeWidth={2} />
-          {script.note.map((line, i) => {
-            const at = WRITE[i];
-            const on = interpolate(f, [at, at + seconds(0.3)], [0, 1]);
-            return (
-              <g key={line}>
-                <path
-                  d={`M-28,${-12 + i * 18} L28,${-12.4 + i * 18}`}
-                  stroke="currentColor"
-                  strokeWidth={1}
-                  opacity={i < written ? 0.28 : 0.14}
-                />
-                {on > 0 ? (
-                  <text
-                    x={-28}
-                    y={-15 + i * 18}
-                    className={noteText}
-                    textLength={Math.max(1, on * (line.length * 4.6))}
-                    lengthAdjust="spacingAndGlyphs"
-                  >
-                    {line}
-                  </text>
-                ) : null}
-              </g>
-            );
-          })}
+      {/* Answered outright, while the desk is open */}
+      {!closed ? (
+        <g opacity={gone}>
+          <Card {...SAID} t={said}>
+            <text x={SAID.x + 16} y={SAID.y + 25} className={text.body}>
+              {script.answer.slice(0, 22)}
+            </text>
+            <text x={SAID.x + 16} y={SAID.y + 45} className={text.body}>
+              {script.answer.slice(22)}
+            </text>
+          </Card>
         </g>
       ) : null}
 
-      {/* The desk, and the spike the note is left on */}
       <g opacity={gone}>
-        <S d={`M14,${DESK} L226,${DESK}`} w={2.8} />
-        <S d={`M18,${DESK + 5} L222,${DESK + 4}`} w={1.2} o={0.4} />
-        <S d={`M${SPIKE.x},${DESK} L${SPIKE.x},${DESK - 26}`} w={1.6} o={0.6} />
-      </g>
+        <Bell
+          x={BOT.x}
+          y={BOT.y}
+          size={1.15}
+          blink={f % 104 < 4 ? 0.1 : 1}
+          talk={f >= ANSWER && f < ANSWER + seconds(1.3) ? Math.abs(Math.sin(f * 0.5)) * 0.85 : 0}
+          smile={interpolate(f, [TICK, TICK + seconds(0.5)], [0, 1])}
+          ring={ring}
+        />
 
-      {/* Aarav, on the desk either way */}
-      <g opacity={arrive * gone} transform={`translate(0 ${(1 - arrive) * 4 + nod})`}>
-        <S d="M28,482 Q54,488 80,482" />
-        <S d="M28,482 L26,506" />
-        <S d="M80,482 L82,506" />
+        {/* The counter, in front — the desk is what you are standing at */}
+        <Ink d={`M20,${COUNTER} H240`} w={2.7} o={0.85} />
+        <Ink d={`M26,${COUNTER + 7} H234`} w={1.2} o={0.28} />
+        <Ink d={`M34,${COUNTER + 7} V520`} w={2} o={0.35} />
+        <Ink d={`M226,${COUNTER + 7} V520`} w={2} o={0.35} />
 
-        <Face x={FACE.x} y={FACE.y} r={FACE.r} look={look} />
+        {/* Written on the counter, after hours */}
+        {closed ? (
+          <Card {...SLIP} t={slip}>
+            {script.note.map((line, i) => (
+              <text
+                key={line}
+                x={SLIP.x + 16}
+                y={SLIP.y + 26 + i * 21}
+                className={i === 0 ? text.strong : text.small}
+                opacity={i === 0 ? 1 : 0.66}
+              >
+                {line}
+              </text>
+            ))}
+          </Card>
+        ) : null}
       </g>
     </g>
   );

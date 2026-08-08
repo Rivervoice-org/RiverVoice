@@ -1,237 +1,143 @@
 "use client";
 
-import { Face } from "@/motion/agent-templates/face";
-import { box } from "@/motion/shapes";
 import { interpolate, seconds } from "@/motion/timeline";
+import { Kaki } from "@/motion/agent-templates/bots";
+import { Caption, Card, Ink, Tick, VIEW, text } from "@/motion/agent-templates/stage";
 
 /**
- * "On its way" — a parcel, walked down to the door.
+ * "मेरा ऑर्डर कहाँ है?" — looked up, not guessed at.
  *
- * The agent is asked where something is, looks it up, and the parcel comes down
- * a route past three stops, rewriting what it says at each one. It lands on the
- * step and the day is written beside it.
- *
- * The stops stay lit once passed, so by the end the panel holds the whole
- * answer at once — which is what reading a status back actually is.
+ * The only scene here that travels, so it is staged on a diagonal rather than
+ * in columns. Kaki carries the parcel up the route and lands on the stop the
+ * tracking actually reports — never the door, however much the caller would
+ * prefer it — and then says the day it arrives.
  */
 export type ParcelScript = {
-  /** Where it is, rewritten as each stop is passed. The last is the doorstep. */
-  stops: [string, string, string, string];
+  /** Four stops, in order. */
+  stops: string[];
   /** When it lands. */
   tag: string;
   captions: [string, string, string];
 };
 
-export const PARCEL_VIEW = { w: 240, h: 560 };
+export const PARCEL_VIEW = VIEW;
 
-const ROUTE_X = 154;
-const START_Y = 120;
-const STEP_Y = 452;
-const DOOR = 470;
-const STOPS = [212, 288, 364];
+const AT: [number, number][] = [
+  [56, 420],
+  [102, 344],
+  [154, 262],
+  [206, 168],
+];
+const ROUTE = "M56,420 C74,392 84,370 102,344 C124,312 136,290 154,262 C176,228 192,198 206,168";
+/** Where the tracking stands — out for delivery, not at the door. */
+const REACHED = 2;
 
-const FACE = { x: 56, y: 452, r: 28 };
+const ETA = { x: 36, y: 452, w: 188, h: 66 };
 
-/* Beats. */
+const LOOK = seconds(1.8);
+const FLY = seconds(2.3);
+const SAY = seconds(4.8);
+const TICK = seconds(5.8);
+const RESET = seconds(7.6);
 
-const DROP = seconds(0.5);
-const OVERSHOOT = seconds(0.95);
-const SETTLED = seconds(1.15);
-const LOOKUP = seconds(1.5);
-const CAP2 = seconds(2.2);
-const FALL = seconds(2.5);
-const FALL_END = seconds(5.3);
-const LAND = seconds(5.3);
-const LANDED = seconds(5.6);
-const CAP3 = seconds(5.6);
-const RESET = seconds(6.8);
-
-export const PARCEL_LENGTH = seconds(7.5);
-/** On the step, every stop lit, the day written. */
-export const PARCEL_STILL = seconds(6.2);
-
-const out = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
-
-/** The frame the parcel's centre meets each stop, solved rather than polled. */
-const CROSSINGS = STOPS.map((y) => {
-  const p = (y - START_Y) / (STEP_Y - START_Y);
-  return FALL + (1 - Math.pow(1 - p, 1 / 3)) * (FALL_END - FALL);
-});
-
-const captionText = "fill-current text-[11px] [font-family:var(--font-sans)]";
-const stopText = "fill-current text-[10px] [font-family:var(--font-sans)]";
-const tagText = "fill-current text-[11px] font-medium [font-family:var(--font-sans)]";
-
-const S = ({ d, w = 2.6, o = 1 }: { d: string; w?: number; o?: number }) => (
-  <path d={d} fill="none" stroke="currentColor" strokeWidth={w} strokeLinecap="round" opacity={o} />
-);
-
-/** Rounded at the corners, with a band of tape each way. */
-const BOX = [box(-19, -15, 38, 30, 6), "M-19,-2.4 L19.2,-3", "M0.4,-15 L0.8,14.4"].join(" ");
+export const PARCEL_LENGTH = seconds(8.4);
+/** Found, landed, and the day said out loud. */
+export const PARCEL_STILL = seconds(6.8);
 
 export function Parcel({ f, script }: { f: number; script: ParcelScript }) {
-  const gone = 1 - interpolate(f, [RESET, RESET + seconds(0.5)], [0, 1]);
+  const gone = 1 - interpolate(f, [RESET, RESET + seconds(0.6)], [0, 1]);
+  const stops = script.stops.slice(0, 4);
 
-  /* The parcel: dropped in, held while it is looked up, then walked down. */
-  const arriving = interpolate(f, [DROP, OVERSHOOT], [0, 1]);
-  const settling = interpolate(f, [OVERSHOOT, SETTLED], [0, 1]);
-  const falling = out(interpolate(f, [FALL, FALL_END], [0, 1]));
-  const landed = interpolate(f, [LAND, LANDED], [0, 1]);
+  const drawn = interpolate(f, [seconds(0.2), seconds(1.3)], [0, 1]);
+  // One leg at a time, and it stops where the tracking does.
+  const flown = interpolate(f, [FLY, FLY + seconds(2.0)], [0, REACHED]);
+  const leg = Math.min(REACHED - 1, Math.floor(flown));
+  const within = flown - leg;
 
-  const y =
-    f < DROP
-      ? -40
-      : f < OVERSHOOT
-        ? -40 + out(arriving) * (START_Y + 7 + 40)
-        : f < SETTLED
-          ? START_Y + 7 - settling * 7
-          : START_Y + falling * (STEP_Y - START_Y);
+  const from = AT[leg];
+  const to = AT[leg + 1];
+  const x = from[0] + (to[0] - from[0]) * within;
+  const y = from[1] + (to[1] - from[1]) * within;
+  const flying = f >= FLY && flown < REACHED - 0.001;
 
-  const idle = f >= SETTLED && f < FALL ? Math.sin((f - SETTLED) / 12) * 0.9 : 0;
-  const tilt = f < OVERSHOOT ? -2.5 : f < SETTLED ? -2.5 + settling * 3.5 : 1 + idle;
-
-  // Meets the step with a compress and release.
-  const squash = landed > 0 && landed < 1 ? Math.sin(Math.PI * landed) : 0;
-  const visible = f >= DROP ? gone : 0;
-
-  /* What it says now, rewritten as each stop is passed. */
-  const passed = CROSSINGS.filter((at) => f >= at).length;
-  const said = Math.min(passed, script.stops.length - 1);
-  const lastCrossed = CROSSINGS[passed - 1];
-  const pop =
-    lastCrossed !== undefined && f - lastCrossed < seconds(0.12)
-      ? Math.sin(Math.PI * ((f - lastCrossed) / seconds(0.12))) * 0.06
-      : 0;
-
-  /* Captions, and the lookup that answers the question. */
-  const capIndex = f >= CAP3 ? 2 : f >= CAP2 ? 1 : 0;
-  const capAt = f >= CAP3 ? CAP3 : f >= CAP2 ? CAP2 : 0;
-  const capShow = Math.min(interpolate(f, [capAt, capAt + seconds(0.3)], [0, 1]), gone);
-
-  const step = interpolate(f, [LAND, LANDED], [0, 1]) * gone;
-  const tagOn = interpolate(f, [LANDED, LANDED + seconds(0.4)], [0, 1]) * gone;
-  const arrive = interpolate(f, [0, seconds(0.5)], [0, 1]);
-
-  // He watches it come down, and nods once when it lands.
-  const track = (y - START_Y) / (STEP_Y - START_Y);
-  const look = -7 + track * 9;
-  const nod = Math.sin(Math.PI * interpolate(f, [LANDED, LANDED + seconds(0.4)], [0, 1])) * 2;
+  const eta = interpolate(f, [SAY, SAY + seconds(0.6)], [0, 1]);
+  const tick = interpolate(f, [TICK, TICK + seconds(0.45)], [0, 1]);
 
   return (
     <g>
-      {/* Caption */}
-      <text
-        x={120}
-        y={70}
-        textAnchor="middle"
-        className={captionText}
-        opacity={capShow * 0.8}
-        transform={`translate(0 ${(1 - capShow) * 3})`}
-      >
-        {script.captions[capIndex]}
-      </text>
+      <Caption f={f} at={[0, LOOK, SAY]} lines={script.captions} fade={gone} />
 
-      {/* The route, present the whole time — the journey is not a surprise */}
-      <path
-        d={`M${ROUTE_X},${START_Y} L${ROUTE_X},${DOOR}`}
-        stroke="currentColor"
-        strokeWidth={1.2}
-        strokeDasharray="1 7"
-        strokeLinecap="round"
-        opacity={0.22 * gone}
-      />
+      {/* The route, as the courier has it */}
+      <g opacity={gone}>
+        <Ink d={ROUTE} t={drawn} w={2} o={0.26} />
 
-      {STOPS.map((sy, i) => (
-        <g key={sy} opacity={gone}>
-          <circle
-            cx={ROUTE_X}
-            cy={sy}
-            r={3.4}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.6}
-            // Lit as it is passed, and stays lit, so the panel holds the answer
-            opacity={i < passed ? 0.75 : 0.18}
-          />
-          <text
-            x={ROUTE_X - 14}
-            y={sy + 3.5}
-            textAnchor="end"
-            className={stopText}
-            opacity={i < passed ? 0.55 : 0}
-          >
-            {script.stops[i]}
-          </text>
-        </g>
-      ))}
+        {AT.map(([sx, sy], i) => {
+          const reached = flown >= i - 0.02;
+          const arrive = interpolate(f, [seconds(0.4 + i * 0.15), seconds(0.9 + i * 0.15)], [0, 1]);
 
-      {/* The doorstep it lands on */}
-      <path
-        d={`M${ROUTE_X - 44},${DOOR} L${ROUTE_X + 44},${DOOR}`}
-        stroke="currentColor"
-        strokeWidth={1.2 + step * 1.4}
-        strokeLinecap="round"
-        opacity={(0.25 + step * 0.6) * gone}
-      />
-
-      {/* The parcel, saying where it is */}
-      <g
-        opacity={visible}
-        transform={`translate(${ROUTE_X} ${y}) rotate(${tilt}) scale(${1 + squash * 0.06} ${1 - squash * 0.1})`}
-      >
-        <S d={BOX} w={2.2} />
-        <g transform={`scale(${1 + pop})`}>
-          <text x={0} y={30} textAnchor="middle" className={stopText} opacity={0.85}>
-            {script.stops[said]}
-          </text>
-        </g>
+          return (
+            <g key={stops[i]} opacity={arrive}>
+              <circle
+                cx={sx}
+                cy={sy}
+                r={4.6}
+                fill="currentColor"
+                fillOpacity={reached ? 0.9 : 0}
+                stroke="currentColor"
+                strokeWidth={1.9}
+                opacity={reached ? 0.95 : 0.38}
+              />
+              {/* Labelled below the line, so the flight path stays clear */}
+              <text
+                x={sx - 12}
+                y={sy + 18}
+                textAnchor="end"
+                className={text.small}
+                opacity={reached ? 0.88 : 0.34}
+              >
+                {stops[i]}
+              </text>
+            </g>
+          );
+        })}
       </g>
 
-      {/* When it lands, written beside the step */}
-      {tagOn > 0 ? (
-        <text
-          x={ROUTE_X}
-          y={DOOR + 26}
-          textAnchor="middle"
-          className={tagText}
-          opacity={tagOn}
-          transform={`translate(0 ${(1 - tagOn) * 3})`}
-        >
-          {script.tag}
-        </text>
+      {/* Kaki, carrying it up the route */}
+      {f >= FLY ? (
+        <g opacity={gone} transform={`translate(${x} ${y - 30})`}>
+          <Kaki
+            x={0}
+            y={0}
+            // Bulkier than the rest of the cast, so it is sized down to sit on
+            // the route without its beak or tail leaving the panel.
+            size={0.8}
+            tilt={flying ? -22 : 0}
+            flap={flying ? (Math.sin(f * 0.9) + 1) / 2 : 0.32}
+            blink={f % 86 < 4 ? 0.1 : 1}
+            talk={f >= SAY && f < SAY + seconds(1) ? Math.abs(Math.sin(f * 0.5)) * 0.7 : 0}
+            smile={interpolate(f, [SAY, SAY + seconds(0.6)], [0, 1])}
+          />
+          {/* The parcel, slung under it */}
+          <g transform="translate(-4 34)">
+            <Ink d="M-10,-8 h20 v16 h-20 Z" w={2.1} />
+            <Ink d="M-10,-2 h20" w={1.4} o={0.5} />
+            <Ink d="M0,-8 v16" w={1.4} o={0.5} />
+          </g>
+        </g>
       ) : null}
 
-      {/* Dev, watching it down */}
-      <g opacity={arrive * gone} transform={`translate(0 ${(1 - arrive) * 4 + nod})`}>
-        <S d="M30,486 Q56,492 82,486" />
-        <S d="M30,486 L28,514" />
-        <S d="M82,486 L84,514" />
-
-        {/* An arm out toward the route, following it down */}
-        <g transform={`rotate(${-14 + track * 22} 78 488)`}>
-          <S d="M78,488 C92,486 102,482 110,478" w={2.5} />
-        </g>
-
-        <Face x={FACE.x} y={FACE.y} r={FACE.r} look={look} />
+      {/* The day it lands, said plainly */}
+      <g opacity={gone}>
+        <Card {...ETA} t={eta}>
+          <text x={ETA.x + 18} y={ETA.y + 27} className={text.small} opacity={0.6}>
+            {stops[REACHED]}
+          </text>
+          <text x={ETA.x + 18} y={ETA.y + 50} className={text.strong}>
+            {script.tag}
+          </text>
+          <Tick x={ETA.x + ETA.w - 36} y={ETA.y + 32} t={tick} />
+        </Card>
       </g>
-
-      {/* The lookup: one ripple off him, once, before it starts moving */}
-      {[0, 1].map((i) => {
-        const t = interpolate(f, [LOOKUP + i * seconds(0.14), LOOKUP + seconds(0.9)], [0, 1]);
-        if (t <= 0 || t >= 1) return null;
-        return (
-          <circle
-            key={i}
-            cx={FACE.x + FACE.r}
-            cy={FACE.y - 8}
-            r={8 + t * 40}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.2}
-            opacity={0.35 * (1 - t) * gone}
-          />
-        );
-      })}
     </g>
   );
 }
