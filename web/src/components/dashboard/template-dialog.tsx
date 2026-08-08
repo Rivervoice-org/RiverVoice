@@ -179,16 +179,23 @@ export function TemplateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[86vh] gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-3xl">
+      {/* The single row is clamped rather than left on auto: an auto row sizes to
+          the tallest column — the About text — and overflows the max height
+          instead of scrolling, which took the foot of the panel beside it. */}
+      <DialogContent className="max-h-[86vh] grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-3xl">
         <div className={cn("grid min-h-0", scene && "md:grid-cols-[1fr_1.35fr]")}>
           {/* Finding a time that suits, drawn as what it feels like. */}
           {scene ? (
-            <div className="relative hidden overflow-hidden border-r border-border bg-muted/30 md:block">
+            <div className="relative hidden overflow-hidden border-r border-border bg-muted/30 md:block md:min-h-[30rem]">
               <Loop
                 length={scene.length}
                 still={scene.still}
                 viewBox={`0 0 ${scene.view.w} ${scene.view.h}`}
-                className="absolute inset-0 size-full text-foreground/75"
+                // Sized by height with the width following the viewBox, so the scene
+                // always fits its panel exactly — stretching it to the box and
+                // relying on preserveAspectRatio was letting the foot of the
+                // drawing, where the agent stands, fall outside.
+                className="absolute inset-y-0 left-1/2 h-full w-auto -translate-x-1/2 text-foreground/75"
               >
                 {scene.render}
               </Loop>
