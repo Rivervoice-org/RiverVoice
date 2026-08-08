@@ -12,6 +12,193 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cloneTemplateAgent = `-- name: CloneTemplateAgent :one
+insert into
+  agents (org_id, name, mascot, purpose, created_by)
+select
+  app.current_org_id (),
+  $1,
+  t.mascot,
+  t.purpose,
+  app.current_user_id ()
+from
+  agents t
+where
+  t.id = $2
+  and t.is_template
+returning
+  id
+`
+
+type CloneTemplateAgentParams struct {
+	Name       string `json:"name"`
+	TemplateID string `json:"templateId"`
+}
+
+// The identity of the new agent, taken from the template. org_id and created_by
+// come from the session, so the row lands in the caller's org however the
+// template is owned — and is_template stays false, which agents_write requires.
+func (q *Queries) CloneTemplateAgent(ctx context.Context, arg CloneTemplateAgentParams) (string, error) {
+	row := q.db.QueryRow(ctx, cloneTemplateAgent, arg.Name, arg.TemplateID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const cloneTemplateTools = `-- name: CloneTemplateTools :exec
+insert into
+  agent_tools (
+    agent_id,
+    org_id,
+    kind,
+    name,
+    description,
+    trigger,
+    enabled,
+    position,
+    config,
+    created_by
+  )
+select
+  $1,
+  app.current_org_id (),
+  tool.kind,
+  tool.name,
+  tool.description,
+  tool.trigger,
+  tool.enabled,
+  tool.position,
+  tool.config,
+  app.current_user_id ()
+from
+  agent_tools tool
+  join agents t on t.id = tool.agent_id
+where
+  tool.agent_id = $2
+  and t.is_template
+`
+
+type CloneTemplateToolsParams struct {
+	AgentID    string `json:"agentId"`
+	TemplateID string `json:"templateId"`
+}
+
+// Tools hang off the agent rather than the version, so they are copied once.
+// Nothing is carried over from the template's own row — created_by and the
+// timestamps are the caller's, because this is a new tool, not a shared one.
+func (q *Queries) CloneTemplateTools(ctx context.Context, arg CloneTemplateToolsParams) error {
+	_, err := q.db.Exec(ctx, cloneTemplateTools, arg.AgentID, arg.TemplateID)
+	return err
+}
+
+const cloneTemplateVersion = `-- name: CloneTemplateVersion :exec
+insert into
+  agent_versions (
+    agent_id,
+    org_id,
+    version,
+    state,
+    created_by,
+    greeting,
+    instructions,
+    tts_provider,
+    tts_model,
+    voice,
+    speed,
+    pitch,
+    llm_provider,
+    llm_model,
+    creativity,
+    knowledge_only,
+    stt_provider,
+    stt_model,
+    interruptible,
+    reply_delay,
+    noise_filter,
+    switch_language,
+    languages,
+    starting_language,
+    switch_after,
+    indic_numerals,
+    background_sound,
+    background_volume,
+    nudge_quiet_callers,
+    hangup_after_nudges,
+    leave_voicemail,
+    voicemail_message,
+    max_call_minutes,
+    system_tools
+  )
+select
+  $1,
+  app.current_org_id (),
+  1,
+  'draft',
+  app.current_user_id (),
+  v.greeting,
+  v.instructions,
+  v.tts_provider,
+  v.tts_model,
+  v.voice,
+  v.speed,
+  v.pitch,
+  v.llm_provider,
+  v.llm_model,
+  v.creativity,
+  v.knowledge_only,
+  v.stt_provider,
+  v.stt_model,
+  v.interruptible,
+  v.reply_delay,
+  v.noise_filter,
+  v.switch_language,
+  v.languages,
+  v.starting_language,
+  v.switch_after,
+  v.indic_numerals,
+  v.background_sound,
+  v.background_volume,
+  v.nudge_quiet_callers,
+  v.hangup_after_nudges,
+  v.leave_voicemail,
+  v.voicemail_message,
+  v.max_call_minutes,
+  v.system_tools
+from
+  agents t
+  join lateral (
+    select
+      id, agent_id, org_id, version, state, greeting, instructions, tts_provider, tts_model, voice, speed, pitch, llm_provider, llm_model, creativity, knowledge_only, stt_provider, stt_model, interruptible, reply_delay, noise_filter, switch_language, languages, starting_language, switch_after, indic_numerals, background_sound, background_volume, nudge_quiet_callers, hangup_after_nudges, leave_voicemail, voicemail_message, max_call_minutes, system_tools, created_by, created_at, updated_at
+    from
+      agent_versions
+    where
+      agent_id = t.id
+    order by
+      version desc
+    limit
+      1
+  ) v on true
+where
+  t.id = $2
+  and t.is_template
+`
+
+type CloneTemplateVersionParams struct {
+	AgentID    string `json:"agentId"`
+	TemplateID string `json:"templateId"`
+}
+
+// Every setting the template carries, copied into a v1 draft so the builder
+// opens on something editable. A committed version would leave the new agent
+// with nothing to write into.
+//
+// Column by column rather than `select *`: a new setting should fail to compile
+// here rather than silently stop being copied.
+func (q *Queries) CloneTemplateVersion(ctx context.Context, arg CloneTemplateVersionParams) error {
+	_, err := q.db.Exec(ctx, cloneTemplateVersion, arg.AgentID, arg.TemplateID)
+	return err
+}
+
 const createAgent = `-- name: CreateAgent :one
 insert into
   agents (org_id, name, mascot, created_by)
@@ -58,6 +245,44 @@ values
 func (q *Queries) CreateFirstVersion(ctx context.Context, agentID string) error {
 	_, err := q.db.Exec(ctx, createFirstVersion, agentID)
 	return err
+}
+
+const freeAgentName = `-- name: FreeAgentName :one
+select
+  c.candidate::text as name
+from
+  generate_series(1, 50) as n
+  cross join lateral (
+    select
+      case
+        when n = 1 then $1::text
+        else $1::text || ' ' || n::text
+      end as candidate
+  ) c
+where
+  not exists (
+    select
+      1
+    from
+      my_agents a
+    where
+      a.name = c.candidate
+  )
+order by
+  n
+limit
+  1
+`
+
+// "Appointment management", then "Appointment management 2". Taking a template
+// twice is ordinary — the second one cannot fail on the unique (org_id, name).
+//
+// Ordered by n rather than by the name, or "… 10" would be picked before "… 2".
+func (q *Queries) FreeAgentName(ctx context.Context, name string) (string, error) {
+	row := q.db.QueryRow(ctx, freeAgentName, name)
+	var name_2 string
+	err := row.Scan(&name_2)
+	return name_2, err
 }
 
 const getAgent = `-- name: GetAgent :one
@@ -221,6 +446,26 @@ func (q *Queries) GetAgent(ctx context.Context, arg GetAgentParams) (GetAgentRow
 		&i.EditedAt,
 	)
 	return i, err
+}
+
+const getTemplateName = `-- name: GetTemplateName :one
+select
+  name
+from
+  agents
+where
+  id = $1
+  and is_template
+`
+
+// The name a clone starts from, and the check that the id names a template at
+// all. `is_template` matters: without it this would read any agent the read
+// policy lets through, which includes every agent in the caller's own org.
+func (q *Queries) GetTemplateName(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, getTemplateName, id)
+	var name string
+	err := row.Scan(&name)
+	return name, err
 }
 
 const listAgentTemplates = `-- name: ListAgentTemplates :many

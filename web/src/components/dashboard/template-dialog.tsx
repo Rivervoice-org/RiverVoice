@@ -19,7 +19,7 @@ import { Mascot } from "@/mascots";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAgent } from "@/lib/agents/queries";
+import { useAgent, useTemplate } from "@/lib/agents/queries";
 import type { AgentTemplate } from "@/lib/agents/types";
 import { cn } from "@/lib/utils";
 
@@ -173,6 +173,10 @@ export function TemplateDialog({
   // Templates are agents, so the same endpoint carries their settings and tools.
   const detail = useAgent(template?.id ?? "", undefined, Boolean(template) && open);
   const agent = detail.data;
+
+  // Taking one clones it and routes to the builder, so this dialog unmounts on
+  // success rather than needing to close itself.
+  const take = useTemplate();
   const face = template?.mascot ?? template?.name ?? "";
 
   const scene = SCENES[template?.name ?? ""];
@@ -217,8 +221,14 @@ export function TemplateDialog({
             </DialogDescription>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <Button size="lg" className="cursor-pointer rounded-full px-4">
-                Use this template
+              <Button
+                size="lg"
+                // Disabled while it runs, or a second click makes a second agent.
+                disabled={take.isPending || !template}
+                onClick={() => template && take.mutate(template.id)}
+                className="cursor-pointer rounded-full px-4"
+              >
+                {take.isPending ? "Setting it up…" : "Use this template"}
               </Button>
               {/* With the other actions, always: the panel beside it is hidden
                   below md, so anything living there goes missing with it. */}
@@ -236,6 +246,12 @@ export function TemplateDialog({
                 Customise with Rivervoice
               </Button>
             </div>
+
+            {take.error ? (
+              <p role="alert" className="mt-3 text-[13px] text-destructive">
+                {take.error.message}
+              </p>
+            ) : null}
 
             <Tabs defaultValue="about" className="mt-6 flex min-h-0 flex-col gap-3">
               <TabsList variant="line" className="h-8">

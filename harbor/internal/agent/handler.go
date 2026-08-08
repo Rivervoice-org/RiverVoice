@@ -20,6 +20,7 @@ func NewHandler(pool *pgxpool.Pool, sessions *auth.Handler) *Handler {
 
 func (h *Handler) Routes(mux *http.ServeMux) {
 	h.guard(mux, "GET /v1/agent-templates", httpx.Handle(h.listTemplates))
+	h.guard(mux, "POST /v1/agent-templates/{id}/use", httpx.Handle(h.useTemplate))
 
 	h.guard(mux, "GET /v1/agents", httpx.Handle(h.list))
 	h.guard(mux, "POST /v1/agents", httpx.Handle(h.create))
