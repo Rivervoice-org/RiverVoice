@@ -210,7 +210,7 @@ function SidebarSections({
     <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-1.5 pt-1 pb-2">
       <div className="flex flex-col gap-px">
         <Row icon={Search} label="Search" collapsed={collapsed} />
-        <Row icon={Sparkles} label="Ask Rivervoice" collapsed={collapsed} />
+        <Row icon={Sparkles} label="Ask Rivervoice" href="/ask" collapsed={collapsed} />
       </div>
 
       <div className="mt-3 flex flex-col gap-px">
