@@ -22,24 +22,14 @@ import { Button } from "@/components/ui/button";
  * the same order.
  */
 const SCRIPT: CampaignScript = {
-  rows: [
-    "+91 98450 22118",
-    "+91 99012 47730",
-    "+91 90080 15562",
-    "+91 96320 88401",
-    "+91 94487 30219",
-  ],
-  outcomes: {
-    booked: "Booked",
-    noAnswer: "No answer",
-    optedOut: "Removed",
-    held: "Held · after 9pm",
-  },
+  numbers: ["+91 98450 22118", "+91 99012 47730", "+91 90080 15562"],
+  outcomes: { booked: "Booked", optedOut: "Removed", held: "Held" },
+  holdReason: "after 9pm there",
   optOut: "मुझे दोबारा मत बुलाना।",
-  tally: "4 dialled · 2 booked · 1 removed",
+  tally: "2 dialled · 1 booked · 1 removed",
   captions: [
-    "Your list, called one at a time.",
-    "What happened, written back beside each.",
+    "Your list, dialled one at a time.",
+    "It rings out, and waits for an answer.",
     "Asked to stop — struck off for good.",
     "And nobody rung outside their hours.",
   ],

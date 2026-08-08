@@ -1,159 +1,173 @@
 "use client";
 
 import { Rover } from "@/motion/bots/rover";
+import { Dialer } from "@/motion/props/dialer";
 import { box } from "@/motion/shapes";
 import { interpolate, seconds } from "@/motion/timeline";
 
 /**
  * "It works down the list, and it knows when to stop."
  *
- * A campaign drawn as the only thing it really is: a list of people, called one
- * at a time, with what happened written back beside each name. The list is the
- * subject and Rover is the one working it — the opposite arrangement to the
- * knowledge scene, where the shelf sat behind the reader.
+ * Three numbers and one phone. A campaign is easy to draw as rows filling in,
+ * and that drawing lies a little: it makes the calling look like a spreadsheet
+ * updating. A dial that winds to the stop and springs back, once per digit,
+ * makes it plain that somebody is being rung.
  *
- * Two of the five rows are the point. One asks not to be called again and is
- * struck off for good; one is never dialled at all, because it is outside that
- * person's hours. An illustration that only showed four cheerful connections
- * would be selling a robocaller, which is the thing nobody wants to buy.
+ * Two of the three calls are the point. One asks not to be rung again, and the
+ * receiver goes down mid-call; one is never dialled at all, because it is
+ * outside that person's hours — no spin, no lift, nothing. An illustration that
+ * only showed three cheerful connections would be selling a robocaller.
  */
 export type CampaignScript = {
-  /** Five, because the list has to look like a list without filling the frame. */
-  rows: string[];
-  /** Written back beside a row once it is done. */
-  outcomes: {
-    booked: string;
-    noAnswer: string;
-    optedOut: string;
-    /** Held rather than dialled — the row that is never rung. */
-    held: string;
-  };
-  /** What the third person says, which is what stops it. */
+  /** Three, because each one has to be watched being dialled. */
+  numbers: [string, string, string];
+  outcomes: { booked: string; optedOut: string; held: string };
+  /** Written on the third slip, which is why it is never rung. */
+  holdReason: string;
+  /** What the second person says, which is what stops it. */
   optOut: string;
-  /** The line at the foot, once the list is worked. */
   tally: string;
   captions: [string, string, string, string];
 };
 
 export const CAMPAIGN_VIEW = { w: 460, h: 440 };
 
-/* The list. */
+/* Who is where matters more than it looks. Rover holds the list, so the slip is
+   on its side; the far end of the line is beyond the phone, so the answer comes
+   in from the other side of the frame. The reverse arrangement is what made this
+   read as a call being taken rather than one being made. */
+/** Tall enough for a second line, since the held one carries a reason as well
+    as a number — the two used to be written over each other. */
+const SLIP = { x: 232, y: 62, w: 190, h: 62 };
+const SAID = { x: 30, y: 62, w: 180, h: 44 };
+/* The phone stands at Rover's elbow rather than across the frame. A receiver
+   flown that far turned the cord into a washing line and laid the handset over
+   the body like a plank; from here it only has to come up to the head. */
+const PHONE = { x: 192, y: 302, size: 0.8 };
+const BOT = { x: 348, y: 258, size: 1 };
+const GROUND = 340;
+/* The held pose, worked out from where Rover stands — and it is the pose every
+   drawing of a phone call uses: the handset near-vertical BESIDE the head, cups
+   pointing at it, earpiece at eye height, mouthpiece down by the chest, hand
+   round the middle. It hugs the body's near edge and never crosses the face —
+   Rover's face is its eyes, so anything laid across it lands on a lens.
+   Rotated -88 so the cups, which hang down at rest, turn to face the head. */
+const CARRY = { dx: 147, dy: -38, angle: -88 };
+const CHIP = { x: 192, y: 382 };
+const TALLY = { x: 84, y: 398, w: 292, h: 34 };
 
-const LIST = { x: 34, y: 66, w: 258, h: 268, r: 14 };
-const ROWS = [112, 160, 208, 256, 304];
-const ROW_H = 34;
-/** Where the outcome is written, right-aligned inside the card. */
-const CHIP = { right: LIST.x + LIST.w - 16, h: 22 };
+/* Beats. One call at a time, and the two that matter get longer. */
 
-const BOT = { x: 372, y: 244, size: 0.84 };
-/** What the third person says back, above the head so it reads as incoming. */
-const SAID = { x: 300, y: 92, w: 146, h: 34 };
-const TALLY = { x: 34, y: 352, w: 258, h: 46 };
+const CALLS = [
+  { slip: seconds(0.4), dial: seconds(1.1), ring: seconds(2.2), done: seconds(3.0) },
+  { slip: seconds(3.9), dial: seconds(4.5), ring: seconds(5.6), done: seconds(7.2) },
+  // Never dialled, so it has neither a dial nor a ring.
+  { slip: seconds(8.0), dial: 0, ring: 0, done: seconds(8.9) },
+];
 
-/* Beats. One row at a time, and the two that matter get longer. */
+/** The second caller asks, and the receiver goes down before the outcome. */
+const HEARD = seconds(6.3);
+const DOWN = seconds(6.9);
 
-const DRAWN = seconds(0.3);
-const CALL = [seconds(1.1), seconds(2.5), seconds(3.9), seconds(6.0), seconds(7.2)];
-/** How long the line is open before the outcome lands. */
-const HOLD = seconds(0.9);
-/** The one that asks to stop, which needs a beat to be heard.  */
-const HEARD = CALL[2] + seconds(1.0);
-const STRUCK = HEARD + seconds(0.5);
-/** The fourth is never dialled, so it resolves without a call. */
-const TALLIED = seconds(8.6);
-const RESET = seconds(10.2);
+const TALLIED = seconds(9.8);
+const RESET = seconds(11.6);
 
-export const CAMPAIGN_LENGTH = seconds(10.8);
-/** The list worked, one struck off, one held, and the tally under it. */
-export const CAMPAIGN_STILL = seconds(9.4);
+export const CAMPAIGN_LENGTH = seconds(12.2);
+/** Two dialled, one struck off, one held, and the tally under it. */
+export const CAMPAIGN_STILL = seconds(10.8);
 
 const clamp = (n: number) => Math.min(1, Math.max(0, n));
 const out = (t: number) => 1 - Math.pow(1 - clamp(t), 3);
 
+/** Wound to the stop and let go, once per digit — never a steady rotation. */
+function dialSpin(f: number, from: number, to: number, digits = 3) {
+  if (from === 0 || f < from || f >= to) return 0;
+  const per = (to - from) / digits;
+  const t = ((f - from) % per) / per;
+  return t < 0.62 ? (t / 0.62) * 250 : (1 - (t - 0.62) / 0.38) * 250;
+}
+
 const captionText = "fill-current text-[14px] [font-family:var(--font-sans)]";
-const rowText = "fill-current text-[13px] font-medium [font-family:var(--font-sans)]";
-const chipText = "fill-current text-[11.5px] [font-family:var(--font-sans)]";
+const slipText = "fill-current text-[14px] font-medium [font-family:var(--font-sans)]";
+const noteText = "fill-current text-[11.5px] [font-family:var(--font-sans)]";
 const talkText = "fill-current text-[13px] [font-family:var(--font-sans)]";
 
 const S = ({ d, w = 2, o = 1 }: { d: string; w?: number; o?: number }) => (
   <path d={d} fill="none" stroke="currentColor" strokeWidth={w} strokeLinecap="round" opacity={o} />
 );
 
-/** What happened, written where the eye already is: at the end of the row. */
-function Chip({ y, label, t, soft }: { y: number; label: string; t: number; soft?: boolean }) {
-  if (t <= 0) return null;
-  const w = 22 + label.length * 6.6;
-  const x = CHIP.right - w;
-  const show = out(t);
-
-  return (
-    <g opacity={show} transform={`translate(${(1 - show) * 6} 0)`}>
-      <path
-        d={box(x, y - CHIP.h / 2, w, CHIP.h, 11)}
-        fill="currentColor"
-        fillOpacity={soft ? 0 : 0.07}
-        stroke="currentColor"
-        strokeWidth={1.5}
-        opacity={soft ? 0.45 : 0.8}
-      />
-      <text
-        x={x + w / 2}
-        y={y + 4}
-        textAnchor="middle"
-        className={chipText}
-        opacity={soft ? 0.55 : 0.9}
-      >
-        {label}
-      </text>
-    </g>
-  );
-}
-
 export function Campaign({ f, script }: { f: number; script: CampaignScript }) {
   const gone = 1 - interpolate(f, [RESET, RESET + seconds(0.6)], [0, 1]);
-  const rows = script.rows.slice(0, 5);
 
-  const drawn = out(interpolate(f, [DRAWN, DRAWN + seconds(0.7)], [0, 1]));
+  /* Which number is on the spike. Each slip stays until the next arrives, so
+     there is always exactly one, and the third simply never leaves. */
+  let index = 0;
+  for (let i = 0; i < CALLS.length; i += 1) if (f >= CALLS[i].slip) index = i;
+  const call = CALLS[index];
+  const held = index === 2;
 
-  /* Which row the line is open on. The fourth is skipped outright: it is outside
-     that person's hours, so there is never a call to be on. */
-  const live = CALL.findIndex((at, i) => i !== 3 && f >= at && f < at + HOLD);
-  const onCall = live !== -1;
+  const slip = out(interpolate(f, [call.slip, call.slip + seconds(0.4)], [0, 1]));
+  const struck = out(interpolate(f, [DOWN, DOWN + seconds(0.5)], [0, 1]));
 
-  const struck = out(interpolate(f, [STRUCK, STRUCK + seconds(0.5)], [0, 1]));
+  // The dial winds only while it is being dialled; nothing turns for the third.
+  const spin = dialSpin(f, call.dial, call.ring);
+
+  /* Off the cradle from the first digit, down again when the call ends — and
+     for the second, down early, on the word rather than after it. */
+  const lifted = held
+    ? 0
+    : out(interpolate(f, [call.dial - seconds(0.3), call.dial], [0, 1])) *
+      (1 -
+        out(
+          interpolate(
+            f,
+            [index === 1 ? DOWN : call.done, (index === 1 ? DOWN : call.done) + seconds(0.4)],
+            [0, 1],
+          ),
+        ));
+
+  const ring = call.ring
+    ? clamp(
+        Math.min(
+          interpolate(f, [call.ring, call.ring + seconds(0.2)], [0, 1]),
+          1 - interpolate(f, [call.ring + seconds(0.8), call.ring + seconds(1.1)], [0, 1]),
+        ),
+      )
+    : 0;
+
   const heard = clamp(
     Math.min(
-      interpolate(f, [HEARD - seconds(0.5), HEARD], [0, 1]),
-      1 - interpolate(f, [STRUCK + seconds(0.6), STRUCK + seconds(1)], [0, 1]),
+      interpolate(f, [HEARD, HEARD + seconds(0.3)], [0, 1]),
+      1 - interpolate(f, [DOWN + seconds(0.5), DOWN + seconds(0.9)], [0, 1]),
     ),
   );
+
+  const outcome = held
+    ? { label: script.outcomes.held, at: call.done, soft: true }
+    : index === 1
+      ? { label: script.outcomes.optedOut, at: call.done, soft: false }
+      : { label: script.outcomes.booked, at: call.done, soft: false };
+
+  const chip = out(interpolate(f, [outcome.at, outcome.at + seconds(0.45)], [0, 1]));
   const tally = out(interpolate(f, [TALLIED, TALLIED + seconds(0.6)], [0, 1]));
 
-  /* Each row's outcome, and when it arrives. The held one has no call before it,
-     which is the whole of what that row is saying. */
-  const outcome = [
-    { at: CALL[0] + HOLD, label: script.outcomes.booked, soft: false },
-    { at: CALL[1] + HOLD, label: script.outcomes.noAnswer, soft: true },
-    { at: STRUCK, label: script.outcomes.optedOut, soft: false },
-    { at: CALL[3], label: script.outcomes.held, soft: true },
-    { at: CALL[4] + HOLD, label: script.outcomes.booked, soft: false },
-  ];
+  // A touch toward the handset while on a call — the tilt does the listening —
+  // and up at the caller when it is being told to stop.
+  const look = heard > 0.3 ? -12 : lifted > 0.3 ? -5 : held ? -8 : 0;
+  const nod = Math.sin(Math.PI * clamp(interpolate(f, [DOWN, DOWN + seconds(0.5)], [0, 1]))) * -2;
 
-  // Down the list as it works, and up at the caller when it is being told to stop.
-  const look = heard > 0.3 ? -10 : onCall ? (live - 2) * 5 : 0;
-  const nod =
-    Math.sin(Math.PI * clamp(interpolate(f, [STRUCK, STRUCK + seconds(0.5)], [0, 1]))) * -2;
-
-  const capIndex = f >= CALL[3] ? 3 : f >= HEARD - seconds(0.5) ? 2 : f >= CALL[0] ? 1 : 0;
+  const capIndex = f >= CALLS[2].slip ? 3 : f >= HEARD ? 2 : f >= CALLS[0].dial ? 1 : 0;
   const capAt =
-    f >= CALL[3]
-      ? CALL[3]
-      : f >= HEARD - seconds(0.5)
-        ? HEARD - seconds(0.5)
-        : f >= CALL[0]
-          ? CALL[0]
+    f >= CALLS[2].slip
+      ? CALLS[2].slip
+      : f >= HEARD
+        ? HEARD
+        : f >= CALLS[0].dial
+          ? CALLS[0].dial
           : 0;
   const capShow = Math.min(interpolate(f, [capAt, capAt + seconds(0.3)], [0, 1]), gone);
+
+  const chipWidth = 26 + outcome.label.length * 7;
 
   return (
     <g>
@@ -168,132 +182,116 @@ export function Campaign({ f, script }: { f: number; script: CampaignScript }) {
         {script.captions[capIndex]}
       </text>
 
-      {/* The list itself */}
-      <g opacity={gone}>
-        <S d={box(LIST.x, LIST.y, LIST.w, LIST.h, LIST.r)} w={2} o={0.5 * drawn} />
+      {/* The number being rung, on its own slip */}
+      <g opacity={slip * gone} transform={`translate(0 ${(1 - slip) * -6})`}>
+        <S d={box(SLIP.x, SLIP.y, SLIP.w, SLIP.h, 10)} w={1.9} o={0.65} />
+        <text x={SLIP.x + 18} y={SLIP.y + 28} className={slipText} opacity={1 - struck * 0.5}>
+          {script.numbers[index]}
+        </text>
 
-        {rows.map((number, i) => {
-          const arrive = out(
-            interpolate(
-              f,
-              [DRAWN + i * seconds(0.1), DRAWN + seconds(0.6) + i * seconds(0.1)],
-              [0, 1],
-            ),
-          );
-          const done = f >= outcome[i].at;
-          // The struck row keeps its number visible: it is a record of a person
-          // who asked, not a row that was quietly dropped.
-          const dim = i === 2 ? 1 - struck * 0.55 : done ? 0.9 : 0.55;
+        {/* Struck, not thrown away: a record of somebody who asked */}
+        {index === 1 && struck > 0 ? (
+          <S
+            d={`M${SLIP.x + 14},${SLIP.y + 23} h${(script.numbers[1].length * 8 + 8) * struck}`}
+            w={1.8}
+            o={0.7}
+          />
+        ) : null}
 
-          return (
-            <g key={number} opacity={arrive * gone}>
-              {/* The line being worked, lit behind the row */}
-              {onCall && live === i ? (
-                <rect
-                  x={LIST.x + 8}
-                  y={ROWS[i] - ROW_H / 2}
-                  width={LIST.w - 16}
-                  height={ROW_H}
-                  rx={9}
-                  fill="currentColor"
-                  opacity={0.06}
-                />
-              ) : null}
-
-              <text x={LIST.x + 20} y={ROWS[i] + 5} className={rowText} opacity={dim}>
-                {number}
-              </text>
-
-              {/* Struck through, not deleted */}
-              {i === 2 && struck > 0 ? (
-                <S
-                  d={`M${LIST.x + 16},${ROWS[i]} h${(number.length * 7.6 + 8) * struck}`}
-                  w={1.8}
-                  o={0.6}
-                />
-              ) : null}
-
-              <Chip
-                y={ROWS[i]}
-                label={outcome[i].label}
-                t={interpolate(f, [outcome[i].at, outcome[i].at + seconds(0.4)], [0, 1])}
-                soft={outcome[i].soft}
-              />
-
-              {i < rows.length - 1 ? (
-                <S
-                  d={`M${LIST.x + 16},${ROWS[i] + 24} H${LIST.x + LIST.w - 16}`}
-                  w={1.4}
-                  o={0.16}
-                />
-              ) : null}
-            </g>
-          );
-        })}
+        {/* Why the third is never rung — under the number rather than beside it,
+            which is where the two used to overlap. */}
+        {held ? (
+          <text x={SLIP.x + 18} y={SLIP.y + 48} className={noteText} opacity={0.6}>
+            {script.holdReason}
+          </text>
+        ) : null}
       </g>
 
-      {/* The line open, drawn from the row it is on to the one making the call */}
-      {onCall
-        ? [0, 1].map((n) => {
-            const at = CALL[live] + n * seconds(0.22);
-            const t = clamp(interpolate(f, [at, at + seconds(0.6)], [0, 1]));
-            if (t <= 0 || t >= 1) return null;
-            return (
-              <path
-                key={n}
-                d={`M${BOT.x - 44},${BOT.y - 30} q${-16 - t * 26},${(ROWS[live] - BOT.y + 30) / 2} ${-30 - t * 40},${ROWS[live] - BOT.y + 30}`}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.4}
-                strokeLinecap="round"
-                opacity={0.3 * (1 - t) * gone}
-              />
-            );
-          })
-        : null}
-
-      {/* What the third person says, which is the only thing that overrides it */}
+      {/* What the second person says, which is the only thing that overrides it */}
       {heard > 0 ? (
         <g opacity={heard * gone} transform={`translate(0 ${(1 - heard) * 4})`}>
           <S d={box(SAID.x, SAID.y, SAID.w, SAID.h, 10)} w={1.8} o={0.7} />
-          <S d={`M${SAID.x + 30},${SAID.y + SAID.h} l-4,10 l14,-10`} w={1.8} o={0.7} />
+          <S d={`M${SAID.x + 34},${SAID.y + SAID.h} l-4,11 l15,-11`} w={1.8} o={0.7} />
           <text
             x={SAID.x + SAID.w / 2}
-            y={SAID.y + 22}
+            y={SAID.y + 27}
             textAnchor="middle"
             className={talkText}
-            opacity={0.8}
+            opacity={0.82}
           >
             {script.optOut}
           </text>
         </g>
       ) : null}
 
-      {/* The one working it */}
+      {/* What they are both standing on */}
+      <S d={`M52,${GROUND} H408`} w={2.2} o={0.4 * gone} />
+
       <g opacity={gone}>
         <Rover
           x={BOT.x}
           y={BOT.y + nod}
           size={BOT.size}
           look={look}
+          // Cocked into the earpiece while the call is on, which is the half of
+          // the pose the handset cannot do by itself.
+          tilt={-lifted * 7}
           blink={f % 98 < 4 ? 0.1 : 1}
-          // Lit only while a line is actually open.
-          lit={onCall ? 1 : 0}
-          // Pleased when the list is worked, never at the row that opted out.
+          // The hand closes round the handle for as long as the receiver is up —
+          // the point is where the handset's middle lands, in Rover's own units.
+          reach={lifted > 0.3 ? { x: -38, y: -10 } : undefined}
+          lit={lifted}
+          // Pleased when the list is done, never at the one that asked to stop.
           smile={heard > 0.2 ? 0 : tally}
         />
+
+        {/* Drawn after Rover, because the receiver ends up against its head and
+            has to pass in front of it. The base is nowhere near, so nothing else
+            in the phone cares about the order. */}
+        <Dialer
+          x={PHONE.x}
+          y={PHONE.y}
+          size={PHONE.size}
+          spin={spin}
+          lifted={lifted}
+          carry={CARRY}
+          ring={ring}
+        />
       </g>
+
+      {/* What happened, under the phone that did it */}
+      {chip > 0 ? (
+        <g opacity={chip * gone} transform={`translate(0 ${(1 - chip) * -4})`}>
+          <path
+            d={box(CHIP.x - chipWidth / 2, CHIP.y - 13, chipWidth, 26, 13)}
+            fill="currentColor"
+            fillOpacity={outcome.soft ? 0 : 0.07}
+            stroke="currentColor"
+            strokeWidth={1.6}
+            opacity={outcome.soft ? 0.45 : 0.8}
+          />
+          <text
+            x={CHIP.x}
+            y={CHIP.y + 5}
+            textAnchor="middle"
+            className={talkText}
+            opacity={outcome.soft ? 0.6 : 0.9}
+          >
+            {outcome.label}
+          </text>
+        </g>
+      ) : null}
 
       {/* What it comes to */}
       {tally > 0 ? (
         <g opacity={tally * gone} transform={`translate(0 ${(1 - tally) * -5})`}>
-          <S d={box(TALLY.x, TALLY.y, TALLY.w, TALLY.h, 12)} w={1.8} o={0.6} />
+          <S d={box(TALLY.x, TALLY.y, TALLY.w, TALLY.h, 11)} w={1.8} o={0.55} />
           <text
             x={TALLY.x + TALLY.w / 2}
-            y={TALLY.y + 28}
+            y={TALLY.y + 22}
             textAnchor="middle"
             className={talkText}
-            opacity={0.85}
+            opacity={0.8}
           >
             {script.tally}
           </text>

@@ -34,6 +34,12 @@ type Props = {
   smile?: number;
   /** Arms out in front, as though holding whatever is drawn there. */
   holding?: boolean;
+  /**
+   * One arm reaching to a point, in Rover's own coordinates, with a gripper
+   * closed round it — for holding a prop drawn by the scene, which is the only
+   * thing that stops the prop floating beside the body.
+   */
+  reach?: { x: number; y: number };
   /** The lenses lit, for when it is the one talking. */
   lit?: number;
 };
@@ -55,6 +61,7 @@ export function Rover({
   blink = 1,
   smile = 0,
   holding = false,
+  reach,
   lit = 0,
 }: Props) {
   /* The brows are the whole face, and which way they slope is the whole mood.
@@ -99,8 +106,22 @@ export function Rover({
           <circle key={i} cx={12 + i * 7} cy={-13} r={1.6} fill="currentColor" opacity={0.4} />
         ))}
 
-        {/* Arms. Out in front when it is carrying something, tucked otherwise. */}
-        {holding ? (
+        {/* Arms. Reaching for what the scene put in its hand, out in front when
+            it is carrying something, tucked otherwise. */}
+        {reach ? (
+          <>
+            <path
+              d={`M-39,-8 C-48,-10 ${reach.x + 10},${reach.y + 12} ${reach.x},${reach.y}`}
+              strokeWidth={2.4}
+            />
+            {/* The gripper, closed round whatever is at the point */}
+            <path
+              d={`M${reach.x + 2},${reach.y + 2} l-8,-3 M${reach.x + 1},${reach.y - 1} l-4,-7`}
+              strokeWidth={2.2}
+            />
+            <path d="M39,-8 C46,-4 47,8 42,16" strokeWidth={2.4} />
+          </>
+        ) : holding ? (
           <>
             <path d="M-39,-6 C-50,-2 -52,10 -44,20" strokeWidth={2.4} />
             <path d="M39,-6 C50,-2 52,10 44,20" strokeWidth={2.4} />
