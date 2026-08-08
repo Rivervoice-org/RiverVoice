@@ -12,6 +12,190 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cloneAgentRow = `-- name: CloneAgentRow :one
+insert into
+  agents (org_id, name, mascot, purpose, created_by)
+select
+  app.current_org_id (),
+  $1,
+  a.mascot,
+  a.purpose,
+  app.current_user_id ()
+from
+  my_agents a
+where
+  a.id = $2
+returning
+  id
+`
+
+type CloneAgentRowParams struct {
+	Name     string `json:"name"`
+	SourceID string `json:"sourceId"`
+}
+
+// Cloning one of your own. The same three statements as the template clone
+// above, sourced from my_agents instead of the roster — templates are read by
+// everyone and agents are not, so the two cannot share a source table.
+func (q *Queries) CloneAgentRow(ctx context.Context, arg CloneAgentRowParams) (string, error) {
+	row := q.db.QueryRow(ctx, cloneAgentRow, arg.Name, arg.SourceID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const cloneAgentTools = `-- name: CloneAgentTools :exec
+insert into
+  agent_tools (
+    agent_id,
+    org_id,
+    kind,
+    name,
+    description,
+    trigger,
+    enabled,
+    position,
+    config,
+    created_by
+  )
+select
+  $1,
+  app.current_org_id (),
+  tool.kind,
+  tool.name,
+  tool.description,
+  tool.trigger,
+  tool.enabled,
+  tool.position,
+  tool.config,
+  app.current_user_id ()
+from
+  agent_tools tool
+  join my_agents a on a.id = tool.agent_id
+where
+  tool.agent_id = $2
+`
+
+type CloneAgentToolsParams struct {
+	AgentID  string `json:"agentId"`
+	SourceID string `json:"sourceId"`
+}
+
+// Tools hang off the agent rather than the version, so they are copied once.
+// Nothing is carried over from the source's own row — created_by and the
+// timestamps are the caller's, because this is a new tool, not a shared one.
+func (q *Queries) CloneAgentTools(ctx context.Context, arg CloneAgentToolsParams) error {
+	_, err := q.db.Exec(ctx, cloneAgentTools, arg.AgentID, arg.SourceID)
+	return err
+}
+
+const cloneAgentVersion = `-- name: CloneAgentVersion :exec
+insert into
+  agent_versions (
+    agent_id,
+    org_id,
+    version,
+    state,
+    created_by,
+    greeting,
+    instructions,
+    tts_provider,
+    tts_model,
+    voice,
+    speed,
+    pitch,
+    llm_provider,
+    llm_model,
+    creativity,
+    knowledge_only,
+    stt_provider,
+    stt_model,
+    interruptible,
+    reply_delay,
+    noise_filter,
+    switch_language,
+    languages,
+    starting_language,
+    switch_after,
+    indic_numerals,
+    background_sound,
+    background_volume,
+    nudge_quiet_callers,
+    hangup_after_nudges,
+    leave_voicemail,
+    voicemail_message,
+    max_call_minutes,
+    system_tools
+  )
+select
+  $1,
+  app.current_org_id (),
+  1,
+  'draft',
+  app.current_user_id (),
+  v.greeting,
+  v.instructions,
+  v.tts_provider,
+  v.tts_model,
+  v.voice,
+  v.speed,
+  v.pitch,
+  v.llm_provider,
+  v.llm_model,
+  v.creativity,
+  v.knowledge_only,
+  v.stt_provider,
+  v.stt_model,
+  v.interruptible,
+  v.reply_delay,
+  v.noise_filter,
+  v.switch_language,
+  v.languages,
+  v.starting_language,
+  v.switch_after,
+  v.indic_numerals,
+  v.background_sound,
+  v.background_volume,
+  v.nudge_quiet_callers,
+  v.hangup_after_nudges,
+  v.leave_voicemail,
+  v.voicemail_message,
+  v.max_call_minutes,
+  v.system_tools
+from
+  my_agents a
+  join lateral (
+    select
+      id, agent_id, org_id, version, state, greeting, instructions, tts_provider, tts_model, voice, speed, pitch, llm_provider, llm_model, creativity, knowledge_only, stt_provider, stt_model, interruptible, reply_delay, noise_filter, switch_language, languages, starting_language, switch_after, indic_numerals, background_sound, background_volume, nudge_quiet_callers, hangup_after_nudges, leave_voicemail, voicemail_message, max_call_minutes, system_tools, created_by, created_at, updated_at
+    from
+      agent_versions
+    where
+      agent_id = a.id
+    order by
+      version desc
+    limit
+      1
+  ) v on true
+where
+  a.id = $2
+`
+
+type CloneAgentVersionParams struct {
+	AgentID  string `json:"agentId"`
+	SourceID string `json:"sourceId"`
+}
+
+// The source's newest settings, into a v1 draft so the builder opens on
+// something editable. Always v1 whatever it was copied from: the new agent has
+// its own history rather than the original's.
+//
+// Column by column rather than `select *`: a new setting should fail to compile
+// here rather than silently stop being copied.
+func (q *Queries) CloneAgentVersion(ctx context.Context, arg CloneAgentVersionParams) error {
+	_, err := q.db.Exec(ctx, cloneAgentVersion, arg.AgentID, arg.SourceID)
+	return err
+}
+
 const cloneTemplateAgent = `-- name: CloneTemplateAgent :one
 insert into
   agents (org_id, name, mascot, purpose, created_by)
@@ -247,6 +431,26 @@ func (q *Queries) CreateFirstVersion(ctx context.Context, agentID string) error 
 	return err
 }
 
+const deleteAgent = `-- name: DeleteAgent :execrows
+delete from my_agents
+where
+  id = $1
+`
+
+// Through the view, not the table: agents_read lets templates past on purpose,
+// so deleting from `agents` would let a customer take the shared roster down.
+// Versions and tools go with it on their cascades.
+//
+// The row count is the only way to tell "deleted" from "there was nothing
+// there": RLS makes another org's agent look exactly like a uuid nobody owns.
+func (q *Queries) DeleteAgent(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAgent, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const freeAgentName = `-- name: FreeAgentName :one
 select
   c.candidate::text as name
@@ -446,6 +650,25 @@ func (q *Queries) GetAgent(ctx context.Context, arg GetAgentParams) (GetAgentRow
 		&i.EditedAt,
 	)
 	return i, err
+}
+
+const getAgentName = `-- name: GetAgentName :one
+select
+  name
+from
+  my_agents
+where
+  id = $1
+`
+
+// The name a copy starts from, and the check that there is an agent there to
+// copy. my_agents rather than agents, so the shared roster cannot be cloned
+// through this route and another org's agent reads as absent, not forbidden.
+func (q *Queries) GetAgentName(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, getAgentName, id)
+	var name string
+	err := row.Scan(&name)
+	return name, err
 }
 
 const getTemplateName = `-- name: GetTemplateName :one

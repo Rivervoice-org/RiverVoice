@@ -148,6 +148,17 @@ order by
   position,
   created_at;
 
+-- name: DeleteAgent :execrows
+-- Through the view, not the table: agents_read lets templates past on purpose,
+-- so deleting from `agents` would let a customer take the shared roster down.
+-- Versions and tools go with it on their cascades.
+--
+-- The row count is the only way to tell "deleted" from "there was nothing
+-- there": RLS makes another org's agent look exactly like a uuid nobody owns.
+delete from my_agents
+where
+  id = @id;
+
 -- name: GetTemplateName :one
 -- The name a clone starts from, and the check that the id names a template at
 -- all. `is_template` matters: without it this would read any agent the read
@@ -341,6 +352,166 @@ from
 where
   tool.agent_id = @template_id
   and t.is_template;
+
+-- name: GetAgentName :one
+-- The name a copy starts from, and the check that there is an agent there to
+-- copy. my_agents rather than agents, so the shared roster cannot be cloned
+-- through this route and another org's agent reads as absent, not forbidden.
+select
+  name
+from
+  my_agents
+where
+  id = @id;
+
+-- name: CloneAgentRow :one
+-- Cloning one of your own. The same three statements as the template clone
+-- above, sourced from my_agents instead of the roster — templates are read by
+-- everyone and agents are not, so the two cannot share a source table.
+insert into
+  agents (org_id, name, mascot, purpose, created_by)
+select
+  app.current_org_id (),
+  @name,
+  a.mascot,
+  a.purpose,
+  app.current_user_id ()
+from
+  my_agents a
+where
+  a.id = @source_id
+returning
+  id;
+
+-- name: CloneAgentVersion :exec
+-- The source's newest settings, into a v1 draft so the builder opens on
+-- something editable. Always v1 whatever it was copied from: the new agent has
+-- its own history rather than the original's.
+--
+-- Column by column rather than `select *`: a new setting should fail to compile
+-- here rather than silently stop being copied.
+insert into
+  agent_versions (
+    agent_id,
+    org_id,
+    version,
+    state,
+    created_by,
+    greeting,
+    instructions,
+    tts_provider,
+    tts_model,
+    voice,
+    speed,
+    pitch,
+    llm_provider,
+    llm_model,
+    creativity,
+    knowledge_only,
+    stt_provider,
+    stt_model,
+    interruptible,
+    reply_delay,
+    noise_filter,
+    switch_language,
+    languages,
+    starting_language,
+    switch_after,
+    indic_numerals,
+    background_sound,
+    background_volume,
+    nudge_quiet_callers,
+    hangup_after_nudges,
+    leave_voicemail,
+    voicemail_message,
+    max_call_minutes,
+    system_tools
+  )
+select
+  @agent_id,
+  app.current_org_id (),
+  1,
+  'draft',
+  app.current_user_id (),
+  v.greeting,
+  v.instructions,
+  v.tts_provider,
+  v.tts_model,
+  v.voice,
+  v.speed,
+  v.pitch,
+  v.llm_provider,
+  v.llm_model,
+  v.creativity,
+  v.knowledge_only,
+  v.stt_provider,
+  v.stt_model,
+  v.interruptible,
+  v.reply_delay,
+  v.noise_filter,
+  v.switch_language,
+  v.languages,
+  v.starting_language,
+  v.switch_after,
+  v.indic_numerals,
+  v.background_sound,
+  v.background_volume,
+  v.nudge_quiet_callers,
+  v.hangup_after_nudges,
+  v.leave_voicemail,
+  v.voicemail_message,
+  v.max_call_minutes,
+  v.system_tools
+from
+  my_agents a
+  join lateral (
+    select
+      *
+    from
+      agent_versions
+    where
+      agent_id = a.id
+    order by
+      version desc
+    limit
+      1
+  ) v on true
+where
+  a.id = @source_id;
+
+-- name: CloneAgentTools :exec
+-- Tools hang off the agent rather than the version, so they are copied once.
+-- Nothing is carried over from the source's own row — created_by and the
+-- timestamps are the caller's, because this is a new tool, not a shared one.
+insert into
+  agent_tools (
+    agent_id,
+    org_id,
+    kind,
+    name,
+    description,
+    trigger,
+    enabled,
+    position,
+    config,
+    created_by
+  )
+select
+  @agent_id,
+  app.current_org_id (),
+  tool.kind,
+  tool.name,
+  tool.description,
+  tool.trigger,
+  tool.enabled,
+  tool.position,
+  tool.config,
+  app.current_user_id ()
+from
+  agent_tools tool
+  join my_agents a on a.id = tool.agent_id
+where
+  tool.agent_id = @source_id;
 
 -- name: ListAgentTemplates :many
 -- The roster on the agents page. No org filter: agents_read lets templates
