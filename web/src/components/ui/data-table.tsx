@@ -107,6 +107,20 @@ export function DataTable<TData>({
   // Local in both modes: server-side search is debounced, so binding the field
   // to the url would undo every keystroke until the navigation lands.
   const [globalFilter, setGlobalFilter] = React.useState(searchQuery ?? "");
+  const [focused, setFocused] = React.useState(false);
+  const [lastQuery, setLastQuery] = React.useState(searchQuery ?? "");
+
+  // A search that arrives from outside — the back button, a shared link — has to
+  // show in the field, or it reads the last thing typed while the rows below it
+  // answer something else.
+  //
+  // Not while the field has focus, though: the url trails the typing by a
+  // debounce, so adopting it then would replace "desk" with the "des" that is
+  // only now coming back.
+  if ((searchQuery ?? "") !== lastQuery) {
+    setLastQuery(searchQuery ?? "");
+    if (!focused) setGlobalFilter(searchQuery ?? "");
+  }
 
   const manual = Boolean(pagination);
 
@@ -169,6 +183,8 @@ export function DataTable<TData>({
                   setGlobalFilter(event.target.value);
                   onSearch?.(event.target.value);
                 }}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
                 placeholder={searchPlaceholder}
                 aria-label={searchPlaceholder}
                 className="rounded-full pr-3 pl-8.5"

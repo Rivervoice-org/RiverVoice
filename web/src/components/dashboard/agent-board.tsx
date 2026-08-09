@@ -217,14 +217,17 @@ export function AgentBoard({ agents, total, page, size, search, failed }: BoardP
           searchQuery={search}
           onSearch={runSearch}
           isPending={isNavigating}
-          // Three states, not two: nothing on the board, nothing matching, and
-          // nothing reachable.
+          // Four states: nothing reachable, nothing matching, a page past the
+          // end, and an actually empty board. Only the last one is an invitation
+          // to create something.
           empty={
             failed
               ? "Could not reach the server. Refresh to try again."
               : search
                 ? `No agent matches “${search}”.`
-                : "No agents yet. Describe one above to get started."
+                : total > 0
+                  ? "Nothing on this page."
+                  : "No agents yet. Describe one above to get started."
           }
           onRowClick={(agent) => router.push(`/build-agent/${agent.id}`)}
         />

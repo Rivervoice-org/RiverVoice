@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { AgentBoard } from "@/components/dashboard/agent-board";
 import { AgentComposer } from "@/components/dashboard/agent-composer";
 import { AgentTemplates } from "@/components/dashboard/agent-templates";
@@ -51,6 +53,23 @@ export default async function AgentsPage({
   } else {
     failed = true;
     console.error("agents page: could not read templates", templatesResult.reason);
+  }
+
+  // Deleting the last agent on the last page leaves the url pointing past the
+  // end: harbor answers with no rows while the total still says there are some,
+  // and the board would claim it is empty while the pager counts "21–20 of 20".
+  //
+  // Not while harbor is unreachable, though — a total of zero is then a failure
+  // to count rather than an answer, and rewriting the url over a blip is worse
+  // than the wrong page number.
+  const lastPage = Math.max(1, Math.ceil(board.total / size));
+  if (!failed && page > lastPage) {
+    const corrected = new URLSearchParams(params);
+    if (lastPage > 1) corrected.set("page", String(lastPage));
+    else corrected.delete("page");
+
+    const query = corrected.toString();
+    redirect(query ? `/agents?${query}` : "/agents");
   }
 
   return (
