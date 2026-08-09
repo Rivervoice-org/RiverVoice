@@ -1,12 +1,19 @@
-import { RequireSession } from "@/components/auth/require-session";
+import { redirect } from "next/navigation";
+
 import { MascotNavIcon } from "@/mascots";
 import { MobileNav, Sidebar } from "@/components/dashboard/sidebar";
 import { Splash } from "@/components/dashboard/splash";
+import { UserProvider } from "@/providers/user-provider";
+import { getSession } from "@/lib/auth/session";
 
-/** The app shell: splash, rail, and the one scrolling content panel. */
-export default function AppLayout({ children }: LayoutProps<"/">) {
+export const dynamic = "force-dynamic";
+
+export default async function AppLayout({ children }: LayoutProps<"/">) {
+  const me = await getSession();
+  if (!me) redirect("/sign-in");
+
   return (
-    <RequireSession>
+    <UserProvider me={me}>
       <div className="flex h-svh gap-2 overflow-hidden bg-canvas p-2">
         <Splash />
         <Sidebar agentsMark={<MascotNavIcon size={18} />} />
@@ -14,13 +21,11 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           <MobileNav agentsMark={<MascotNavIcon size={18} />} />
 
-          {/* Sections must not shrink: this column scrolls, and a flex item that
-            shrinks below its content gets clipped when it also hides overflow. */}
           <main className="panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-3 *:shrink-0 sm:p-4">
             {children}
           </main>
         </div>
       </div>
-    </RequireSession>
+    </UserProvider>
   );
 }

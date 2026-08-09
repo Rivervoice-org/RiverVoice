@@ -38,7 +38,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { useMe, useSignOut } from "@/lib/auth/queries";
+import { useSignOut } from "@/lib/auth/queries";
+import { useUserContext } from "@/hooks/use-user-context";
 import { originOf, useThemeTransition } from "@/lib/use-theme-transition";
 import { cn } from "@/lib/utils";
 
@@ -66,7 +67,7 @@ const sections: { title: string; items: NavItem[] }[] = [
     title: "Deploy",
     items: [
       { label: "Inbound calls", icon: PhoneIncoming, badge: "3" },
-      { label: "Outbound campaigns", icon: CampaignIcon },
+      { label: "Outbound campaigns", icon: CampaignIcon, href: "/campaigns" },
       { label: "Deploy with code", icon: DeployCodeIcon },
     ],
   },
@@ -238,7 +239,7 @@ function SidebarSections({
 }
 
 function SidebarFooter({ collapsed }: { collapsed?: boolean }) {
-  const { data: me } = useMe();
+  const { me } = useUserContext();
   const signOut = useSignOut();
   const { theme, changeTheme } = useThemeTransition();
   const minutesLeft = usage.minutes.included - usage.minutes.used;
@@ -272,15 +273,15 @@ function SidebarFooter({ collapsed }: { collapsed?: boolean }) {
         >
           <Avatar size="sm">
             <AvatarFallback className="bg-muted text-[11px]">
-              {me ? initials(me.user.name) : ""}
+              {initials(me.user.name)}
             </AvatarFallback>
           </Avatar>
           {collapsed ? null : (
             <>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm">{me?.user.name}</span>
+                <span className="block truncate text-sm">{me.user.name}</span>
                 <span className="block truncate text-[11px] text-muted-foreground">
-                  {me?.org.name}
+                  {me.org.name}
                 </span>
               </span>
               <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/user:opacity-100" />
@@ -290,8 +291,8 @@ function SidebarFooter({ collapsed }: { collapsed?: boolean }) {
 
         <DropdownMenuContent align="start" side="top" className="w-56 p-1">
           <div className="px-2 pt-1.5 pb-2">
-            <p className="truncate text-[13px] font-medium">{me?.user.name}</p>
-            <p className="truncate text-[11px] text-muted-foreground">{me?.user.email}</p>
+            <p className="truncate text-[13px] font-medium">{me.user.name}</p>
+            <p className="truncate text-[11px] text-muted-foreground">{me.user.email}</p>
           </div>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="cursor-pointer gap-2.5 px-2 py-2 text-[13px]">
