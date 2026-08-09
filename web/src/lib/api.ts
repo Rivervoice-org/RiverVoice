@@ -16,13 +16,18 @@ export class ApiError extends Error {
   }
 }
 
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/** `baseUrl` is for the server, which reaches harbor on a different address. */
+type RequestOptions = RequestInit & { baseUrl?: string };
+
+export async function request<T>(path: string, init?: RequestOptions): Promise<T> {
+  const { baseUrl = BASE_URL, ...rest } = init ?? {};
+
   let response: Response;
   try {
-    response = await fetch(`${BASE_URL}${path}`, {
-      ...init,
+    response = await fetch(`${baseUrl}${path}`, {
+      ...rest,
       // After the spread, or a caller passing headers would drop the type.
-      headers: { "Content-Type": "application/json", ...init?.headers },
+      headers: { "Content-Type": "application/json", ...rest.headers },
     });
   } catch {
     throw new ApiError("Could not reach the server", 0);
