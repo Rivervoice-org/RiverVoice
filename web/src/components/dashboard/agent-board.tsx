@@ -23,6 +23,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
+import { useNavigationContext } from "@/hooks/use-navigation-context";
 import { useCloneAgent, useDeleteAgent } from "@/lib/agents/queries";
 import type { AgentSummary } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/time";
@@ -126,7 +128,13 @@ const columns: ColumnDef<AgentSummary, unknown>[] = [
     accessorKey: "editedAt",
     header: "Last modified",
     size: 104,
-    cell: ({ row }) => timeAgo(row.original.editedAt),
+    // "29 seconds ago" on the server is "31 seconds ago" once the browser
+    // hydrates. The clock moving is not a mismatch worth regenerating over.
+    cell: ({ row }) => (
+      <time dateTime={row.original.editedAt} suppressHydrationWarning>
+        {timeAgo(row.original.editedAt)}
+      </time>
+    ),
     meta: { className: "text-xs text-muted-foreground truncate" },
   },
   {
@@ -139,11 +147,45 @@ const columns: ColumnDef<AgentSummary, unknown>[] = [
   },
 ];
 
+/** As it arrives off the url, which is where the board keeps its state. */
+type BoardProps = {
+  agents: AgentSummary[];
+  total: number;
+  page: number;
+  size: number;
+  search: string;
+  failed?: boolean;
+};
+
 /** The agents you already have, read as lines on a switchboard. */
-export function AgentBoard({ agents, failed }: { agents: AgentSummary[]; failed?: boolean }) {
+export function AgentBoard({ agents, total, page, size, search, failed }: BoardProps) {
   const router = useRouter();
+  const { searchParams, navigate, isNavigating } = useNavigationContext();
   const cloneAgent = useCloneAgent();
   const deleteAgent = useDeleteAgent();
+
+  // Defaults stay out of the url, so /agents is clean until someone acts.
+  const set = React.useCallback(
+    (key: string, value: string | number, fallback: string | number) => {
+      if (String(value) === String(fallback)) searchParams.delete(key);
+      else searchParams.set(key, String(value));
+    },
+    [searchParams],
+  );
+
+  const goToPage = ({ pageIndex, pageSize }: { pageIndex: number; pageSize: number }) => {
+    set("size", pageSize, 10);
+    set("page", pageSize === size ? pageIndex + 1 : 1, 1);
+    navigate({ searchParams });
+  };
+
+  // replace rather than push, or the back button walks you through your own
+  // keystrokes.
+  const runSearch = useDebouncedCallback((value: string) => {
+    set("q", value.trim(), "");
+    searchParams.delete("page");
+    navigate({ searchParams, replace: true });
+  }, 300);
 
   // Asked rather than done: an agent answers a phone, and there is no undo.
   const [pending, setPending] = React.useState<AgentSummary | null>(null);
@@ -167,15 +209,25 @@ export function AgentBoard({ agents, failed }: { agents: AgentSummary[]; failed?
           columns={columns}
           data={agents}
           searchPlaceholder="Find an agent"
-          pageSize={10}
           initialSorting={[{ id: "editedAt", desc: true }]}
           toolbar={<h2 className="text-sm font-medium">On the board</h2>}
-          // An empty board and an unreachable one look identical otherwise, and
-          // telling someone they have no agents when they do is the worse lie.
+          rowCount={total}
+          pagination={{ pageIndex: page - 1, pageSize: size }}
+          onPaginationChange={goToPage}
+          searchQuery={search}
+          onSearch={runSearch}
+          isPending={isNavigating}
+          // Four states: nothing reachable, nothing matching, a page past the
+          // end, and an actually empty board. Only the last one is an invitation
+          // to create something.
           empty={
             failed
               ? "Could not reach the server. Refresh to try again."
-              : "No agents yet. Describe one above to get started."
+              : search
+                ? `No agent matches “${search}”.`
+                : total > 0
+                  ? "Nothing on this page."
+                  : "No agents yet. Describe one above to get started."
           }
           onRowClick={(agent) => router.push(`/build-agent/${agent.id}`)}
         />

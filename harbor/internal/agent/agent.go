@@ -16,21 +16,51 @@ import (
 	"github.com/steverogersX/RiverVoice/harbor/internal/validate"
 )
 
-func (h *Handler) list(w http.ResponseWriter, r *http.Request) httpx.APIResponse[[]dbgen.ListAgentsRow] {
+// One page of the board, narrowed by name when the caller asks. The search and
+// the paging are the database's work rather than the browser's: filtering a
+// page the browser already holds can only find what happens to be on it.
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) httpx.APIResponse[AgentPage] {
 	session, ok := auth.SessionFrom(r.Context())
 	if !ok {
-		return httpx.Fail[[]dbgen.ListAgentsRow](http.StatusUnauthorized, "Sign in to continue")
+		return httpx.Fail[AgentPage](http.StatusUnauthorized, "Sign in to continue")
 	}
 
-	var out []dbgen.ListAgentsRow
-	err := db.AsUser(r.Context(), h.pool, session.UserID, func(tx pgx.Tx) error {
+	limit, offset, err := readPaging(r.URL.Query())
+	if err != nil {
+		return httpx.Fail[AgentPage](http.StatusBadRequest, "Limit and offset must be whole numbers")
+	}
+
+	req := ListAgentsRequest{
+		Search: strings.TrimSpace(r.URL.Query().Get("q")),
+		Limit:  limit,
+		Offset: offset,
+	}
+
+	if err := validate.Struct(req); err != nil {
+		return httpx.Fail[AgentPage](http.StatusBadRequest, validate.FirstMessage(err))
+	}
+
+	var rows []dbgen.ListAgentsRow
+	err = db.AsUser(r.Context(), h.pool, session.UserID, func(tx pgx.Tx) error {
 		var err error
-		out, err = dbgen.New(tx).ListAgents(r.Context())
+		rows, err = dbgen.New(tx).ListAgents(r.Context(), dbgen.ListAgentsParams{
+			Search:     req.Search,
+			PageSize:   req.Limit,
+			PageOffset: req.Offset,
+		})
 		return err
 	})
 	if err != nil {
 		log.Printf("list agents: %v", err)
-		return httpx.Fail[[]dbgen.ListAgentsRow](http.StatusInternalServerError, "Could not load your agents")
+		return httpx.Fail[AgentPage](http.StatusInternalServerError, "Could not load your agents")
+	}
+
+	out := AgentPage{Agents: rows, Limit: req.Limit, Offset: req.Offset}
+
+	// The window count rides on every row, so it is only there when a row is.
+	// Past the last page that is correct: no matches to count from here.
+	if len(rows) > 0 {
+		out.Total = rows[0].Total
 	}
 
 	return httpx.Ok(http.StatusOK, out)

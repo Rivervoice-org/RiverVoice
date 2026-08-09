@@ -28,8 +28,16 @@ values
   );
 
 -- name: ListAgents :many
--- One row per board line. The lateral takes each agent's newest version, which
+-- One page of the board. The lateral takes each agent's newest version, which
 -- the (agent_id, version desc) index answers without sorting.
+--
+-- An empty search is the whole board: sqlc has no optional arguments, so the
+-- filter opts out of itself rather than needing a second query that would drift
+-- from this one.
+--
+-- The count is a window, not a second statement. Windows are computed before
+-- the limit, so it counts the whole match rather than the page, and it cannot
+-- disagree with the rows it came back with.
 select
   a.id,
   a.name,
@@ -39,7 +47,8 @@ select
   v.updated_at as edited_at,
   -- Coalesced because the left join is null once the person who last edited it
   -- has left the org, and the cast alone would tell sqlc it never is.
-  coalesce(u.email::text, '') as edited_by
+  coalesce(u.email::text, '') as edited_by,
+  count(*) over () as total
 from
   -- The view, not the table: agents_read lets templates through on purpose, so
   -- selecting from agents here would put the roster on everyone's board.
@@ -58,8 +67,17 @@ from
       1
   ) v on true
   left join users u on u.id = v.created_by
+where
+  -- Anywhere in the name and case-insensitive: someone hunting for "Front desk"
+  -- by typing "desk" is after the same agent.
+  sqlc.arg (search)::text = ''
+  or a.name ilike '%' || sqlc.arg (search)::text || '%'
 order by
-  v.updated_at desc;
+  v.updated_at desc
+limit
+  sqlc.arg (page_size)
+offset
+  sqlc.arg (page_offset);
 
 -- name: GetAgent :one
 -- An agent at one version: identity, plus every setting that version holds.

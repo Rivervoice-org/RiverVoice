@@ -30,6 +30,17 @@ export type AgentSummary = {
   editedBy: string;
 };
 
+/**
+ * One page of the board. `total` counts the whole match rather than the page,
+ * which is what the pager needs in order to know how many pages there are.
+ */
+export type AgentPage = {
+  agents: AgentSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export type ApiToolConfig = {
   method: string;
   url: string;

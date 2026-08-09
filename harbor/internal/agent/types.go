@@ -12,6 +12,25 @@ type AgentDetail struct {
 	Tools []dbgen.ListAgentToolsRow `json:"tools"`
 }
 
+// The query of a board read: which agents, and which slice of them. The bounds
+// live here so a search cannot hand Postgres a megabyte to match against, and
+// nobody can ask for every row at once.
+type ListAgentsRequest struct {
+	Search string `json:"q" validate:"omitempty,max=100"`
+	Limit  int32  `json:"limit" validate:"gte=1,lte=100"`
+	Offset int32  `json:"offset" validate:"gte=0"`
+}
+
+// A page of the board, and the size of the whole match rather than of the page
+// — that is what the pager counts against. It sits beside the rows because the
+// count rides on each one, so an empty page would otherwise carry no total.
+type AgentPage struct {
+	Agents []dbgen.ListAgentsRow `json:"agents"`
+	Total  int64                 `json:"total"`
+	Limit  int32                 `json:"limit"`
+	Offset int32                 `json:"offset"`
+}
+
 // The path and query of a read, checked before anything touches the database.
 type GetAgentRequest struct {
 	ID string `json:"id" validate:"required,uuid"`
