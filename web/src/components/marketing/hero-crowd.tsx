@@ -6,8 +6,11 @@ import { Mascot } from "@/mascots";
  * ran off the page and got clipped.
  *
  * Here they keep to the two gutters and their bubbles open *inward*, toward the
- * centre, so nothing can leave the viewport. They only appear from xl up, where
- * there is actually a gutter to stand in.
+ * centre, so nothing can leave the viewport. They appear from lg up, which is
+ * where a gutter first exists — xl meant most visitors never saw them at all.
+ *
+ * Each is dimmed except while its own bubble is up, so attention always lands
+ * on whoever is currently speaking rather than on eight faces at once.
  */
 type Member = {
   seed: string;
@@ -106,16 +109,37 @@ function Bubbles({ member }: { member: Member }) {
   );
 }
 
+/**
+ * Dims whoever is between phrases, so the eye lands on the one that is talking
+ * rather than on eight faces at once. One turn per line, which is why the
+ * duration is the member's cycle divided by however many lines it has.
+ */
+function Speaker({ member, children }: { member: Member; children: React.ReactNode }) {
+  return (
+    <span
+      className="animate-speaking"
+      style={{
+        animationDuration: `${member.cycle / member.lines.length}s`,
+        animationDelay: `${member.offset}s`,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function HeroCrowd() {
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 hidden select-none xl:block">
+    <div aria-hidden className="pointer-events-none absolute inset-0 hidden select-none lg:block">
       {LEFT.map((member) => (
         <div
           key={member.seed}
           className="animate-drift absolute flex items-center gap-2.5"
           style={{ left: member.inset, top: member.top, animationDelay: member.delay }}
         >
-          <Mascot seed={member.seed} size={member.size} talking talkDelay={member.delay} />
+          <Speaker member={member}>
+            <Mascot seed={member.seed} size={member.size} talking talkDelay={member.delay} />
+          </Speaker>
           <Bubbles member={member} />
         </div>
       ))}
@@ -127,7 +151,9 @@ export function HeroCrowd() {
           className="animate-drift absolute flex flex-row-reverse items-center gap-2.5"
           style={{ right: member.inset, top: member.top, animationDelay: member.delay }}
         >
-          <Mascot seed={member.seed} size={member.size} talking talkDelay={member.delay} />
+          <Speaker member={member}>
+            <Mascot seed={member.seed} size={member.size} talking talkDelay={member.delay} />
+          </Speaker>
           <Bubbles member={member} />
         </div>
       ))}

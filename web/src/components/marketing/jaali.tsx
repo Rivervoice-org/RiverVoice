@@ -14,7 +14,11 @@ export function Jaali({ className, style }: { className?: string; style?: React.
     <div
       aria-hidden
       style={style}
-      className={cn("pointer-events-none absolute inset-0 text-foreground", className)}
+      // Over-wide, so a drifting lattice never uncovers the right-hand edge.
+      className={cn(
+        "pointer-events-none absolute -inset-x-16 inset-y-0 text-foreground",
+        className,
+      )}
     >
       <svg className="size-full" aria-hidden>
         <defs>
