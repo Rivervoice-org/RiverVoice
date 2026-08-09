@@ -23,7 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAgents, useCloneAgent, useDeleteAgent } from "@/lib/agents/queries";
+import { useCloneAgent, useDeleteAgent } from "@/lib/agents/queries";
 import type { AgentSummary } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -140,9 +140,8 @@ const columns: ColumnDef<AgentSummary, unknown>[] = [
 ];
 
 /** The agents you already have, read as lines on a switchboard. */
-export function AgentBoard() {
+export function AgentBoard({ agents, failed }: { agents: AgentSummary[]; failed?: boolean }) {
   const router = useRouter();
-  const agents = useAgents();
   const cloneAgent = useCloneAgent();
   const deleteAgent = useDeleteAgent();
 
@@ -166,26 +165,21 @@ export function AgentBoard() {
       <RowMenu.Provider value={menu}>
         <DataTable
           columns={columns}
-          data={agents.data ?? []}
+          data={agents}
           searchPlaceholder="Find an agent"
           pageSize={10}
           initialSorting={[{ id: "editedAt", desc: true }]}
           toolbar={<h2 className="text-sm font-medium">On the board</h2>}
+          // An empty board and an unreachable one look identical otherwise, and
+          // telling someone they have no agents when they do is the worse lie.
           empty={
-            agents.isPending
-              ? "Loading…"
-              : (agents.error?.message ?? "No agents yet. Describe one above to get started.")
+            failed
+              ? "Could not reach the server. Refresh to try again."
+              : "No agents yet. Describe one above to get started."
           }
           onRowClick={(agent) => router.push(`/build-agent/${agent.id}`)}
         />
       </RowMenu.Provider>
-
-      {/* A clone has no dialog of its own, so a failure has nowhere else to go. */}
-      {cloneAgent.error ? (
-        <p role="alert" className="mt-3 text-[13px] text-destructive">
-          {cloneAgent.error.message}
-        </p>
-      ) : null}
 
       <Dialog
         open={pending !== null}
