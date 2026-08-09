@@ -19,7 +19,7 @@ export function SiteFooter() {
 
       <Reveal className="flex flex-col gap-6 pt-8 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
-          <Wordmark />
+          <Wordmark standUp />
           <p className="text-sm text-muted-foreground">
             Voice agents that answer the phone, in the language it rang in.
           </p>
