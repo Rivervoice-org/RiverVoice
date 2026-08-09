@@ -6,7 +6,6 @@ import { ArrowRight } from "lucide-react";
 import { Mascot } from "@/mascots";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TemplateDialog } from "@/components/dashboard/template-dialog";
-import { useAgentTemplates } from "@/lib/agents/queries";
 import type { AgentTemplate } from "@/lib/agents/types";
 
 function Roster({
@@ -57,19 +56,22 @@ function Roster({
 }
 
 /** Ready-made agents, waiting to be put on a line. */
-export function AgentTemplates() {
-  const templates = useAgentTemplates();
+export function AgentTemplates({
+  templates: items,
+  failed,
+}: {
+  templates: AgentTemplate[];
+  failed?: boolean;
+}) {
   // Held here rather than per card, or closing the dialog would unmount it.
   const [picked, setPicked] = React.useState<AgentTemplate | null>(null);
-  const items = templates.data ?? [];
 
   // From the rows, so seeding a new category does not need a deploy.
   const categories = [...new Set(items.map((item) => item.category))].filter(Boolean);
 
-  const empty = templates.isPending
-    ? "Reading the roster…"
-    : (templates.error?.message ??
-      "Nobody here for that job yet. Write the opening line above instead.");
+  const empty = failed
+    ? "Could not reach the server. Refresh to try again."
+    : "Nobody here for that job yet. Write the opening line above instead.";
 
   return (
     <section

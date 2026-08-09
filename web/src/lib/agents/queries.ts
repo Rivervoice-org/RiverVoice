@@ -1,20 +1,14 @@
-import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useMutation, useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
 import { ApiError, api } from "@/lib/api";
-import { agentQueryKey, agentsQueryKey, templatesQueryKey } from "@/lib/agents/keys";
+import { toast } from "@/lib/toast";
 import type { CreateAgentValues } from "@/lib/agents/schemas";
-import type { Agent, AgentSummary, AgentTemplate } from "@/lib/agents/types";
+import type { Agent } from "@/lib/agents/types";
 
-export { agentQueryKey, agentsQueryKey, templatesQueryKey };
-
-export function useAgents(): UseQueryResult<AgentSummary[]> {
-  return useQuery({
-    queryKey: agentsQueryKey,
-    queryFn: () => api.get<AgentSummary[]>("/v1/agents"),
-    staleTime: 30 * 1000,
-  });
-}
+/** Version in the key, so switching versions is a cache hit on the way back. */
+export const agentQueryKey = (id: string, version?: number) =>
+  ["agents", id, version ?? "latest"] as const;
 
 export function useAgent(id: string, version?: number, enabled = true): UseQueryResult<Agent> {
   return useQuery({
@@ -29,17 +23,28 @@ export function useAgent(id: string, version?: number, enabled = true): UseQuery
 /** `name` is only set by a clone, where the server settled it. */
 type CreatedAgent = { message: string; agent_id: string; name?: string };
 
+/** Harbor's wording under the title. Anything else is a stack trace in a toast. */
+function detail(error: unknown) {
+  return error instanceof ApiError ? { description: error.message } : {};
+}
+
+/**
+ * The board is server-rendered, so a new agent is picked up by re-running the
+ * page rather than by invalidating a client cache. refresh() before push(), or
+ * the stale roster is what greets you on the way back.
+ */
 export function useCreateAgent() {
   const router = useRouter();
-  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (values: CreateAgentValues) =>
       api.post<CreatedAgent>("/v1/agents", { name: values.name, mascot: values.mascot }),
-    onSuccess: async (created) => {
-      await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+    onSuccess: (created, values) => {
+      toast.add({ title: `${created.name ?? values.name} is on the board` });
+      router.refresh();
       router.push(`/build-agent/${created.agent_id}`);
     },
+    onError: (error) => toast.add({ title: "Could not create the agent", ...detail(error) }),
   });
 }
 
@@ -51,23 +56,20 @@ export function useCreateAgent() {
  */
 export function useTemplate() {
   const router = useRouter();
-  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (templateId: string) =>
       api.post<CreatedAgent>(`/v1/agent-templates/${templateId}/use`),
-    onSuccess: async (created) => {
-      await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+    onSuccess: (created) => {
+      // The name is worth repeating back: hire a second "Front desk" and the
+      // server lands it as "Front desk 2".
+      toast.add({
+        title: created.name ? `${created.name} is yours` : "Copied to your board",
+        description: "Change anything — it starts from the template, it does not stay one.",
+      });
+      router.refresh();
       router.push(`/build-agent/${created.agent_id}`);
     },
-  });
-}
-
-export function useAgentTemplates(): UseQueryResult<AgentTemplate[]> {
-  return useQuery({
-    queryKey: templatesQueryKey,
-    queryFn: () => api.get<AgentTemplate[]>("/v1/agent-templates"),
-    // The roster changes on a deploy, not while you are looking at it.
-    staleTime: 60 * 60 * 1000,
+    onError: (error) => toast.add({ title: "Could not hire from the roster", ...detail(error) }),
   });
 }
