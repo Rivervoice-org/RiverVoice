@@ -104,9 +104,8 @@ export function DataTable<TData>({
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
   const [size, setSize] = React.useState(pageSize ?? 10);
-  // Owns the field's text in both modes. Server-side search is debounced, so
-  // the url trails the typing by a beat — binding the input to it instead would
-  // undo every keystroke until the navigation lands.
+  // Local in both modes: server-side search is debounced, so binding the field
+  // to the url would undo every keystroke until the navigation lands.
   const [globalFilter, setGlobalFilter] = React.useState(searchQuery ?? "");
 
   const manual = Boolean(pagination);
@@ -126,13 +125,12 @@ export function DataTable<TData>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     // The rows are already the match and already the page, so filtering or
-    // slicing them here would hide part of what the server just sent.
+    // slicing them again would hide part of what the server sent.
     manualFiltering: Boolean(onSearch),
     manualPagination: manual,
-    // And sorting them would reorder the page rather than the list: sort by
-    // name and you get this page's ten in alphabetical order, not the first ten
-    // alphabetically. Off until the server can sort, so the headers stop
-    // offering something they cannot honour.
+    // Sorting them would order the page, not the list — this page's ten in
+    // alphabetical order, not the first ten alphabetically. Off until the
+    // server can sort.
     enableSorting: !manual,
     ...(manual
       ? {
@@ -270,12 +268,10 @@ export function DataTable<TData>({
             onValueChange={(next) => {
               const parsed = Number(next);
               if (!manual) setSize(parsed);
-              // One call rather than setPageSize then setPageIndex: each raises
-              // a change of its own, and the second is computed from the size
-              // that was showing before the first — which lands back on it.
-              //
-              // Page one either way: page four of five-row pages does not exist
-              // once the rows are twenty at a time.
+              // One call, not setPageSize then setPageIndex: the second would be
+              // computed from the size showing before the first, landing back
+              // on it. Page one, since page four of five-row pages does not
+              // exist once the rows are twenty at a time.
               table.setPagination({ pageIndex: 0, pageSize: parsed });
             }}
           >

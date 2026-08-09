@@ -128,10 +128,8 @@ const columns: ColumnDef<AgentSummary, unknown>[] = [
     accessorKey: "editedAt",
     header: "Last modified",
     size: 104,
-    // "29 seconds ago" on the server is "31 seconds ago" by the time the
-    // browser hydrates. The clock moving is not a mismatch worth regenerating
-    // the tree over, so the reading is allowed to differ and the machine
-    // readable value carries the fact.
+    // "29 seconds ago" on the server is "31 seconds ago" once the browser
+    // hydrates. The clock moving is not a mismatch worth regenerating over.
     cell: ({ row }) => (
       <time dateTime={row.original.editedAt} suppressHydrationWarning>
         {timeAgo(row.original.editedAt)}
@@ -220,8 +218,7 @@ export function AgentBoard({ agents, total, page, size, search, failed }: BoardP
           onSearch={runSearch}
           isPending={isNavigating}
           // Three states, not two: nothing on the board, nothing matching, and
-          // nothing reachable. Telling someone they have no agents when their
-          // search simply missed is the worse lie.
+          // nothing reachable.
           empty={
             failed
               ? "Could not reach the server. Refresh to try again."
