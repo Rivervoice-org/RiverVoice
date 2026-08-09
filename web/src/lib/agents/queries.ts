@@ -2,6 +2,7 @@ import { useMutation, useQuery, type UseQueryResult } from "@tanstack/react-quer
 import { useRouter } from "next/navigation";
 
 import { ApiError, api } from "@/lib/api";
+import { toast } from "@/lib/toast";
 import type { CreateAgentValues } from "@/lib/agents/schemas";
 import type { Agent } from "@/lib/agents/types";
 
@@ -22,6 +23,11 @@ export function useAgent(id: string, version?: number, enabled = true): UseQuery
 /** `name` is only set by a clone, where the server settled it. */
 type CreatedAgent = { message: string; agent_id: string; name?: string };
 
+/** Harbor's wording under the title. Anything else is a stack trace in a toast. */
+function detail(error: unknown) {
+  return error instanceof ApiError ? { description: error.message } : {};
+}
+
 /**
  * The board is server-rendered, so a new agent is picked up by re-running the
  * page rather than by invalidating a client cache. refresh() before push(), or
@@ -33,10 +39,12 @@ export function useCreateAgent() {
   return useMutation({
     mutationFn: (values: CreateAgentValues) =>
       api.post<CreatedAgent>("/v1/agents", { name: values.name, mascot: values.mascot }),
-    onSuccess: (created) => {
+    onSuccess: (created, values) => {
+      toast.add({ title: `${created.name ?? values.name} is on the board` });
       router.refresh();
       router.push(`/build-agent/${created.agent_id}`);
     },
+    onError: (error) => toast.add({ title: "Could not create the agent", ...detail(error) }),
   });
 }
 
@@ -53,8 +61,15 @@ export function useTemplate() {
     mutationFn: (templateId: string) =>
       api.post<CreatedAgent>(`/v1/agent-templates/${templateId}/use`),
     onSuccess: (created) => {
+      // The name is worth repeating back: hire a second "Front desk" and the
+      // server lands it as "Front desk 2".
+      toast.add({
+        title: created.name ? `${created.name} is yours` : "Copied to your board",
+        description: "Change anything — it starts from the template, it does not stay one.",
+      });
       router.refresh();
       router.push(`/build-agent/${created.agent_id}`);
     },
+    onError: (error) => toast.add({ title: "Could not hire from the roster", ...detail(error) }),
   });
 }
