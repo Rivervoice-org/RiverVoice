@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { MascotNavIcon } from "@/mascots";
+import { AgentsGlyph } from "@/motion/bots/agents-glyph";
 import { MobileNav, Sidebar } from "@/components/dashboard/sidebar";
 import { Splash } from "@/components/dashboard/splash";
 import { UserProvider } from "@/providers/user-provider";
@@ -16,10 +16,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     <UserProvider me={me}>
       <div className="flex h-svh gap-2 overflow-hidden bg-canvas p-2">
         <Splash />
-        <Sidebar agentsMark={<MascotNavIcon size={18} />} />
+        <Sidebar agentsMark={<AgentsGlyph size={16} />} />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
-          <MobileNav agentsMark={<MascotNavIcon size={18} />} />
+          <MobileNav agentsMark={<AgentsGlyph size={16} />} />
 
           <main className="panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-3 *:shrink-0 sm:p-4">
             {children}
