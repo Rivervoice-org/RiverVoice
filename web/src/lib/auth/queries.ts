@@ -1,5 +1,4 @@
 import { useMutation } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 
 import { api } from "@/lib/api";
 import type { SignInValues, SignUpValues } from "@/lib/auth/schemas";
@@ -7,17 +6,14 @@ import type { SignInValues, SignUpValues } from "@/lib/auth/schemas";
 export type { Me } from "@/lib/auth/types";
 
 /**
- * The session is read by the server on every request, so a sign-in is finished
- * by asking the server to look again: refresh() re-runs the auth layout with
- * the new cookie, and replace() keeps the form out of the back history.
+ * A full page load, the mirror of signing out. The tab may still be holding the
+ * last person's cached queries and prefetched pages, and starting a session on
+ * top of them is how one account's data ends up on another's screen.
+ *
+ * replace(), so the form is not what Back returns to.
  */
 function useAuthSuccess() {
-  const router = useRouter();
-
-  return () => {
-    router.refresh();
-    router.replace("/home");
-  };
+  return () => window.location.replace("/home");
 }
 
 export function useSignUp() {
@@ -48,15 +44,15 @@ export function useSignIn() {
 }
 
 export function useSignOut() {
-  const router = useRouter();
-
   return useMutation({
     mutationFn: () => api.post<string>("/v1/auth/logout"),
-    // Runs even when the request failed: the cookie may already be gone, and
+    // A full page load, not a soft navigation. Signing out has to leave nothing
+    // behind, and only a fresh document guarantees that: the query cache, the
+    // router's prefetched payloads and every provider holding this account go
+    // with the old page rather than surviving into the next person's session.
+    //
+    // Runs even when the request failed — the cookie may already be gone, and
     // leaving stale account data on screen is worse than an extra sign-in.
-    // The gate does the rest — with no cookie, the layout redirects on its own.
-    onSettled: () => {
-      router.refresh();
-    },
+    onSettled: () => window.location.replace("/sign-in"),
   });
 }
