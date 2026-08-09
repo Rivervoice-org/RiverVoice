@@ -26,7 +26,7 @@ import {
   type AskSource,
 } from "@/components/ask/ask-data";
 import { AskComposer } from "@/components/ask/ask-composer";
-import { Mascot } from "@/mascots";
+import { Mitra } from "@/motion/bots/mitra";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -211,7 +211,7 @@ function TurnBlock({ turn }: { turn: Turn }) {
       </p>
 
       <div className="group/answer mt-6 flex gap-3">
-        <Mascot seed="Rivervoice" size={28} className="mt-0.5" talking={!turn.answer} />
+        <Mitra size={28} className="mt-0.5 shrink-0 text-foreground/80" talking={!turn.answer} />
 
         <div className="min-w-0 flex-1">
           {turn.answer ? (
@@ -320,7 +320,7 @@ export function AskWorkspace() {
         </div>
       ) : (
         <section className="mx-auto flex w-full max-w-2xl min-w-0 flex-col items-center justify-center px-2 py-10 sm:min-h-[68svh]">
-          <Mascot seed="Rivervoice" size={44} className="opacity-90" />
+          <Mitra size={44} className="text-foreground/85" />
 
           <h1 className="mt-5 text-center font-serif text-3xl leading-tight font-light tracking-tight sm:text-4xl">
             What do you want to know?
