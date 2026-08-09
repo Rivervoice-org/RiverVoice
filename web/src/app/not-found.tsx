@@ -91,7 +91,7 @@ export default function NotFound() {
         </p>
 
         <div className="animate-rise mt-8" style={{ animationDelay: "0.22s" }}>
-          <Button size="lg" className="h-11 px-5 text-[15px]" render={<Link href="/home" />}>
+          <Button size="lg" className="h-11 px-5 text-[15px]" render={<Link href="/" />}>
             Go home
           </Button>
         </div>
