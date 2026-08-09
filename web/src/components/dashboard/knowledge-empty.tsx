@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
  * Only languages whose script we can set correctly get a book, which is the
  * same rule the landing page's greeting rail is held to.
  */
-const SCRIPT: Omit<LibraryScript, "reader"> = {
+const SCRIPT: LibraryScript = {
   shelf: ["हिन्दी", "বাংলা", "தமிழ்", "ಕನ್ನಡ", "తెలుగు", "ગુજરાતી"],
   known: {
     ask: "வணக்கம், வாபஸ்?",
@@ -44,7 +44,7 @@ const SCRIPT: Omit<LibraryScript, "reader"> = {
   ],
 };
 
-export function KnowledgeEmpty({ reader }: { reader: string }) {
+export function KnowledgeEmpty() {
   return (
     <section className="animate-rise mx-auto grid w-full max-w-4xl min-w-0 overflow-hidden rounded-2xl border border-border md:grid-cols-[1.1fr_1fr]">
       {/* Below md there is no room beside the copy, so the copy carries it
@@ -56,7 +56,7 @@ export function KnowledgeEmpty({ reader }: { reader: string }) {
           viewBox={`0 0 ${LIBRARY_VIEW.w} ${LIBRARY_VIEW.h}`}
           className="absolute inset-0 size-full text-foreground/75"
         >
-          {(f) => <Library f={f} script={{ ...SCRIPT, reader }} />}
+          {(f) => <Library f={f} script={SCRIPT} />}
         </Loop>
       </div>
 

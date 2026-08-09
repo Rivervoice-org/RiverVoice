@@ -32,22 +32,24 @@ export function SignUpForm() {
         form.handleSubmit();
       }}
     >
-      <form.Field name="organizationName">
-        {(field) => (
-          <FormField
-            field={field}
-            label="Company name"
-            autoComplete="organization"
-            placeholder="Riverside Dental"
-          />
-        )}
-      </form.Field>
+      <div className="grid grid-cols-2 gap-3">
+        <form.Field name="userName">
+          {(field) => (
+            <FormField field={field} label="Your name" autoComplete="name" placeholder="Pavan" />
+          )}
+        </form.Field>
 
-      <form.Field name="userName">
-        {(field) => (
-          <FormField field={field} label="Your name" autoComplete="name" placeholder="Pavan" />
-        )}
-      </form.Field>
+        <form.Field name="organizationName">
+          {(field) => (
+            <FormField
+              field={field}
+              label="Company"
+              autoComplete="organization"
+              placeholder="Riverside Dental"
+            />
+          )}
+        </form.Field>
+      </div>
 
       <form.Field name="email">
         {(field) => (
@@ -73,28 +75,25 @@ export function SignUpForm() {
         )}
       </form.Field>
 
-      <form.Field name="password">
-        {(field) => (
-          <FormField
-            field={field}
-            label="Password"
-            type="password"
-            autoComplete="new-password"
-            hint="At least 8 characters."
-          />
-        )}
-      </form.Field>
+      <div className="grid grid-cols-2 gap-3">
+        <form.Field name="password">
+          {(field) => (
+            <FormField
+              field={field}
+              label="Password"
+              type="password"
+              autoComplete="new-password"
+              hint="At least 8 characters."
+            />
+          )}
+        </form.Field>
 
-      <form.Field name="confirmPassword">
-        {(field) => (
-          <FormField
-            field={field}
-            label="Confirm password"
-            type="password"
-            autoComplete="new-password"
-          />
-        )}
-      </form.Field>
+        <form.Field name="confirmPassword">
+          {(field) => (
+            <FormField field={field} label="Confirm" type="password" autoComplete="new-password" />
+          )}
+        </form.Field>
+      </div>
 
       {signUp.error ? (
         <p role="alert" className="text-[13px] text-destructive">

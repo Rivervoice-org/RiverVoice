@@ -2,14 +2,11 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tan
 import { useRouter } from "next/navigation";
 
 import { ApiError, api } from "@/lib/api";
+import { agentQueryKey, agentsQueryKey, templatesQueryKey } from "@/lib/agents/keys";
 import type { CreateAgentValues } from "@/lib/agents/schemas";
 import type { Agent, AgentSummary, AgentTemplate } from "@/lib/agents/types";
 
-export const agentsQueryKey = ["agents"] as const;
-
-/** Version in the key, so switching versions is a cache hit on the way back. */
-export const agentQueryKey = (id: string, version?: number) =>
-  ["agents", id, version ?? "latest"] as const;
+export { agentQueryKey, agentsQueryKey, templatesQueryKey };
 
 export function useAgents(): UseQueryResult<AgentSummary[]> {
   return useQuery({
@@ -65,8 +62,6 @@ export function useTemplate() {
     },
   });
 }
-
-export const templatesQueryKey = ["agent-templates"] as const;
 
 export function useAgentTemplates(): UseQueryResult<AgentTemplate[]> {
   return useQuery({

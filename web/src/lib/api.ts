@@ -1,6 +1,6 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-type APIResponse<T> = {
+export type APIResponse<T> = {
   statusCode: number;
   data?: T;
   error?: { message: string };
@@ -16,15 +16,13 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${BASE_URL}${path}`, {
-      // Harbor's session lives in an HttpOnly cookie, which is not sent
-      // cross-origin without this.
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
       ...init,
+      // After the spread, or a caller passing headers would drop the type.
+      headers: { "Content-Type": "application/json", ...init?.headers },
     });
   } catch {
     throw new ApiError("Could not reach the server", 0);
@@ -40,7 +38,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  get: <T>(path: string) => request<T>(path, { credentials: "include" }),
   post: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "POST", body: JSON.stringify(body ?? {}) }),
+    request<T>(path, {
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify(body ?? {}),
+    }),
 };

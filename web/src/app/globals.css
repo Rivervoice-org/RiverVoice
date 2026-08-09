@@ -344,6 +344,198 @@
       transform: none;
     }
   }
+
+  /* The sign-up chorus. Six large greetings share one 15.6s cycle, 2.6s each:
+     in while rising, held long enough to actually read, out while still rising —
+     the next starts as this one ends, so there is never a gap and never two. */
+  --animate-chorus-hero: chorus-hero 15.6s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+
+  @keyframes chorus-hero {
+    0% {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    2.4% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    13.8% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    16.6%,
+    100% {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+  }
+
+  /* The svg holds two periods, so -50% wraps without a seam. */
+  --animate-chorus-wave: chorus-wave 9s linear infinite;
+  --animate-chorus-wave-slow: chorus-wave 14s linear infinite;
+
+  @keyframes chorus-wave {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  /* Three of these, staggered, so a ring leaves the centre every 1.3s. */
+  --animate-chorus-ring: chorus-ring 3.9s cubic-bezier(0, 0, 0.2, 1) infinite;
+
+  @keyframes chorus-ring {
+    0% {
+      opacity: 0.3;
+      transform: scale(0.08);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1);
+    }
+  }
+
+  /* The scattered greetings arrive at the line rather than float away from it:
+     up to nearly full, held, then carried toward the centre while fading. Each
+     word supplies its own direction through the two custom properties. */
+  --animate-chorus-drift: chorus-drift 7.8s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+
+  @keyframes chorus-drift {
+    0% {
+      opacity: 0;
+      transform: translate(0, 0);
+    }
+    8% {
+      opacity: 0.9;
+    }
+    33% {
+      opacity: 0.9;
+      transform: translate(0, 0);
+    }
+    56%,
+    100% {
+      opacity: 0;
+      transform: translate(var(--chorus-dx, 0px), var(--chorus-dy, 0px));
+    }
+  }
+
+  --animate-chorus-glow: chorus-glow 4s ease-in-out infinite;
+
+  @keyframes chorus-glow {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 0.85;
+    }
+  }
+
+  /* Blocks stagger by 140ms, so no two arrive at the same moment. */
+  --animate-chorus-enter: chorus-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+
+  @keyframes chorus-enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* ── The landing page ─────────────────────────────────────────────────── */
+
+  /* The lattice drifts a little under the hero, so the section is never quite a
+     screenshot. One pattern cell over forty seconds — below noticing. */
+  --animate-hero-breathe: hero-breathe 40s linear infinite;
+
+  @keyframes hero-breathe {
+    to {
+      transform: translateX(-12px);
+    }
+  }
+
+  /* The three city names warm up as the subhead settles: a whisper, not a
+     highlight, so the eye travels the line the way an accent would. */
+  --animate-city-warm: city-warm 0.4s ease-out both;
+
+  @keyframes city-warm {
+    from {
+      opacity: 0.6;
+    }
+    to {
+      opacity: 0.9;
+    }
+  }
+
+  /* The rails ease up to speed rather than snapping into motion. The wrapper
+     carries this while the track carries the marquee, since one element cannot
+     hold two transforms. */
+  --animate-marquee-settle: marquee-settle 1.2s cubic-bezier(0.33, 1, 0.68, 1) both;
+
+  @keyframes marquee-settle {
+    from {
+      transform: translateX(2.4%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  /* The tail of language names, read out one at a time. One pass, then still. */
+  --animate-roll-call: roll-call 0.5s ease-out both;
+
+  @keyframes roll-call {
+    from {
+      opacity: 0.4;
+    }
+    to {
+      opacity: 0.7;
+    }
+  }
+
+  /* The step numeral arrives after its card and before its title. */
+  --animate-count-in: count-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+  @keyframes count-in {
+    from {
+      opacity: 0.4;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* The footer's one motion: the mark stands up once, then the page is still. */
+  --animate-bar-once: bar 1.1s ease-in-out both;
+
+  /* Whoever is mid-phrase comes up; the rest sit back. One turn per line, so
+     the envelope matches the bubble that is riding animate-phrase beside it. */
+  --animate-speaking: speaking 12s ease-in-out infinite;
+
+  @keyframes speaking {
+    0%,
+    62% {
+      opacity: 1;
+    }
+    72%,
+    100% {
+      opacity: 0.42;
+    }
+  }
+}
+
+@layer utilities {
+  /* Nothing off-screen keeps a loop running. With the marquee, the drift, the
+     mouth flips and the phrase cycles all live at once, this is the difference
+     between a page and a space heater. */
+  [data-idle="true"],
+  [data-idle="true"] * {
+    animation-play-state: paused !important;
+  }
 }
 
 @layer base {
@@ -386,6 +578,27 @@
   animation: swash-draw 0.9s cubic-bezier(0.65, 0, 0.35, 1) 0.5s both;
 }
 
+/* The line between the three steps: drawn once after the last card lands, then
+   settled back to a quarter so it joins them without competing with them. */
+@keyframes thread-draw {
+  from {
+    stroke-dashoffset: 1;
+    opacity: 0.6;
+  }
+  80% {
+    stroke-dashoffset: 0;
+    opacity: 0.6;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 0.25;
+  }
+}
+
+@utility thread-draw {
+  animation: thread-draw 1.4s cubic-bezier(0.65, 0, 0.35, 1) 0.4s both;
+}
+
 @utility panel {
   background: var(--card);
   border-radius: var(--radius-2xl);
@@ -413,6 +626,31 @@
   &:hover {
     background: var(--muted);
   }
+}
+
+/* Theme change. The default cross-fade is switched off: the new palette sits on
+   top of the old one and clips itself open as a circle, which is animated from
+   use-theme-transition.ts where the click coordinates live. Scoped to the
+   attribute that hook sets, so any other view transition keeps its own look. */
+html[data-theme-transition]::view-transition-old(root),
+html[data-theme-transition]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html[data-theme-transition]::view-transition-old(root) {
+  z-index: 0;
+}
+
+html[data-theme-transition]::view-transition-new(root) {
+  z-index: 1;
+}
+
+/* The selected pill travels between the three options while the wipe runs. */
+html[data-theme-transition]::view-transition-group(theme-pill) {
+  animation-duration: 480ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 2;
 }
 
 @media (prefers-reduced-motion: reduce) {

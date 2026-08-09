@@ -30,14 +30,30 @@ const ROW_TWO = [
   { hello: "Hello", lang: "English", code: "en" },
 ];
 
-const ALSO =
-  "Assamese · Maithili · Santali · Kashmiri · Nepali · Konkani · Sindhi · Dogri · Manipuri · Bodo · Sanskrit";
+const ALSO = [
+  "Assamese",
+  "Maithili",
+  "Santali",
+  "Kashmiri",
+  "Nepali",
+  "Konkani",
+  "Sindhi",
+  "Dogri",
+  "Manipuri",
+  "Bodo",
+  "Sanskrit",
+];
 
 type Greeting = { hello: string; lang: string; code: string; rtl?: boolean };
 
 function GreetingCard({ greeting }: { greeting: Greeting }) {
   return (
-    <Card className="shrink-0 flex-row items-baseline gap-3 px-6 py-4 transition-shadow duration-300 hover:shadow-(--shadow-float)">
+    <Card className="group/card relative shrink-0 flex-row items-baseline gap-3 px-6 py-4 transition-[box-shadow,border-color,opacity] duration-300 hover:border-amber/60 hover:shadow-(--shadow-float) group-hover/rail:opacity-40 hover:!opacity-100">
+      {/* The card answers back once when you stop on it */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-[inherit] border border-amber opacity-0 group-hover/card:animate-ring motion-reduce:hidden"
+      />
       <span
         lang={greeting.code}
         dir={greeting.rtl ? "rtl" : undefined}
@@ -55,29 +71,33 @@ function GreetingCard({ greeting }: { greeting: Greeting }) {
 function Rail({ items, reverse }: { items: Greeting[]; reverse?: boolean }) {
   return (
     <div
-      className="group overflow-hidden py-2"
+      className="group/rail overflow-hidden py-2"
       style={{
         maskImage: "linear-gradient(90deg, transparent, black 8%, black 92%, transparent)",
         WebkitMaskImage: "linear-gradient(90deg, transparent, black 8%, black 92%, transparent)",
       }}
     >
-      {/* The rail holds still while you are reading it */}
-      <div
-        className={cn(
-          "animate-marquee flex w-max gap-3 group-hover:[animation-play-state:paused]",
-          reverse && "[animation-direction:reverse]",
-        )}
-      >
-        {items.map((greeting) => (
-          <GreetingCard key={greeting.lang} greeting={greeting} />
-        ))}
+      {/* Two nested animations, because one element cannot hold two transforms:
+          the outer eases the rail up to speed once, the inner runs the loop. */}
+      <div className="animate-marquee-settle motion-reduce:animate-none">
+        {/* The rail holds still while you are reading it */}
+        <div
+          className={cn(
+            "animate-marquee flex w-max gap-3 group-hover/rail:[animation-play-state:paused]",
+            reverse && "[animation-direction:reverse]",
+          )}
+        >
+          {items.map((greeting) => (
+            <GreetingCard key={greeting.lang} greeting={greeting} />
+          ))}
 
-        {/* The second pass is scenery, not content */}
-        {items.map((greeting) => (
-          <div key={`${greeting.lang}-repeat`} aria-hidden>
-            <GreetingCard greeting={greeting} />
-          </div>
-        ))}
+          {/* The second pass is scenery, not content */}
+          {items.map((greeting) => (
+            <div key={`${greeting.lang}-repeat`} aria-hidden>
+              <GreetingCard greeting={greeting} />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -106,8 +126,24 @@ export function Languages() {
         </Reveal>
       </div>
 
-      <Reveal className="mx-auto mt-12 max-w-2xl px-4 text-center text-sm leading-7 text-muted-foreground">
-        <span className="text-foreground">Also answers in</span> {ALSO}
+      {/* The tail read out one name at a time, 90ms apart — a list being said
+          aloud rather than a paragraph appearing. One pass, then still. */}
+      <Reveal
+        delay={600}
+        className="mx-auto mt-12 max-w-2xl px-4 text-center text-sm leading-7 text-muted-foreground"
+      >
+        <span className="text-foreground">Also answers in</span>{" "}
+        {ALSO.map((name, i) => (
+          <span key={name}>
+            <span
+              className="animate-roll-call motion-reduce:animate-none"
+              style={{ animationDelay: `${900 + i * 90}ms` }}
+            >
+              {name}
+            </span>
+            {i < ALSO.length - 1 ? " · " : ""}
+          </span>
+        ))}
       </Reveal>
     </section>
   );

@@ -55,6 +55,9 @@ export function Reveal({
   return (
     <Tag
       ref={ref as React.Ref<HTMLDivElement & HTMLLIElement>}
+      // Published so a child can hold its own one-shot animation until the
+      // block is actually on screen, rather than playing it below the fold.
+      data-shown={shown ? "true" : undefined}
       style={{ transitionDelay: `${delay}ms` }}
       className={cn(
         "transition-[opacity,transform] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
