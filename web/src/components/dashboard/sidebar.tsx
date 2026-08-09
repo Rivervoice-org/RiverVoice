@@ -110,13 +110,24 @@ function Row({
 
   const content = (
     <>
-      {mark ??
-        (Icon ? (
-          <Icon
-            className={cn("size-4 shrink-0 text-muted-foreground", active && "text-foreground")}
-            strokeWidth={1.75}
-          />
-        ) : null)}
+      {/* The mark gets the same tone and active treatment as the lucide icons,
+          or it sits in the rail louder and larger than every sibling — which is
+          exactly how it had been rendering. */}
+      {mark ? (
+        <span
+          className={cn(
+            "flex size-4 shrink-0 items-center justify-center text-muted-foreground",
+            active && "text-foreground",
+          )}
+        >
+          {mark}
+        </span>
+      ) : Icon ? (
+        <Icon
+          className={cn("size-4 shrink-0 text-muted-foreground", active && "text-foreground")}
+          strokeWidth={1.75}
+        />
+      ) : null}
       {collapsed ? null : (
         <>
           {/* leading-5 keeps descenders (the g in "Agents") inside the clipped box */}
