@@ -1,38 +1,45 @@
-import { HydrationBoundary, QueryClient, dehydrate } from "@tanstack/react-query";
-
 import { AgentBoard } from "@/components/dashboard/agent-board";
 import { AgentComposer } from "@/components/dashboard/agent-composer";
 import { AgentTemplates } from "@/components/dashboard/agent-templates";
 import { CreateAgentDialog } from "@/components/dashboard/create-agent-dialog";
 import { PageHeader } from "@/components/dashboard/page-header";
-import { agentsQueryKey, templatesQueryKey } from "@/lib/agents/keys";
+import { getAgents, getAgentTemplates } from "@/lib/agents/server";
 import type { AgentSummary, AgentTemplate } from "@/lib/agents/types";
-import { serverGet } from "@/lib/api-server";
 
 export const metadata = { title: "Agents" };
 
-export default async function AgentsPage() {
-  // Thrown away with the request. A shared client would serve one tenant's
-  // agents to the next visitor.
-  const queryClient = new QueryClient();
+/** Per-user data. Stated outright rather than left to infer from the cookie read. */
+export const dynamic = "force-dynamic";
 
-  // prefetchQuery swallows its own errors, so harbor being down leaves the
-  // cache empty and the client retries after hydration.
-  await Promise.all([
-    queryClient.prefetchQuery({
-      queryKey: agentsQueryKey,
-      queryFn: () => serverGet<AgentSummary[]>("/v1/agents"),
-    }),
-    queryClient.prefetchQuery({
-      queryKey: templatesQueryKey,
-      queryFn: () => serverGet<AgentTemplate[]>("/v1/agent-templates"),
-    }),
+export default async function AgentsPage() {
+  let agents: AgentSummary[] = [];
+  let templates: AgentTemplate[] = [];
+  let failed = false;
+
+  // Both are read together; neither is worth failing the page over. A harbor
+  // that is down leaves the sections empty and says so, rather than trading a
+  // usable page for an error screen.
+  const [agentsResult, templatesResult] = await Promise.allSettled([
+    getAgents(),
+    getAgentTemplates(),
   ]);
 
+  if (agentsResult.status === "fulfilled") {
+    agents = agentsResult.value;
+  } else {
+    failed = true;
+    console.error("agents page: could not read agents", agentsResult.reason);
+  }
+
+  if (templatesResult.status === "fulfilled") {
+    templates = templatesResult.value;
+  } else {
+    failed = true;
+    console.error("agents page: could not read templates", templatesResult.reason);
+  }
+
   return (
-    // Carries both results down in the payload, so useAgents and
-    // useAgentTemplates resolve from cache instead of asking again.
-    <HydrationBoundary state={dehydrate(queryClient)}>
+    <>
       <PageHeader
         title="Agents"
         description="Everyone who answers your phones — live, paused, and still in draft."
@@ -40,8 +47,8 @@ export default async function AgentsPage() {
       />
 
       <AgentComposer />
-      <AgentBoard />
-      <AgentTemplates />
-    </HydrationBoundary>
+      <AgentBoard agents={agents} failed={failed} />
+      <AgentTemplates templates={templates} failed={failed} />
+    </>
   );
 }
