@@ -104,7 +104,10 @@ export function DataTable<TData>({
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
   const [size, setSize] = React.useState(pageSize ?? 10);
-  const [globalFilter, setGlobalFilter] = React.useState("");
+  // Owns the field's text in both modes. Server-side search is debounced, so
+  // the url trails the typing by a beat — binding the input to it instead would
+  // undo every keystroke until the navigation lands.
+  const [globalFilter, setGlobalFilter] = React.useState(searchQuery ?? "");
 
   const manual = Boolean(pagination);
 
@@ -126,6 +129,11 @@ export function DataTable<TData>({
     // slicing them here would hide part of what the server just sent.
     manualFiltering: Boolean(onSearch),
     manualPagination: manual,
+    // And sorting them would reorder the page rather than the list: sort by
+    // name and you get this page's ten in alphabetical order, not the first ten
+    // alphabetically. Off until the server can sort, so the headers stop
+    // offering something they cannot honour.
+    enableSorting: !manual,
     ...(manual
       ? {
           onPaginationChange: (updater) =>
@@ -158,11 +166,11 @@ export function DataTable<TData>({
               <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="search"
-                defaultValue={onSearch ? searchQuery : undefined}
-                value={onSearch ? undefined : globalFilter}
-                onChange={(event) =>
-                  onSearch ? onSearch(event.target.value) : setGlobalFilter(event.target.value)
-                }
+                value={globalFilter}
+                onChange={(event) => {
+                  setGlobalFilter(event.target.value);
+                  onSearch?.(event.target.value);
+                }}
                 placeholder={searchPlaceholder}
                 aria-label={searchPlaceholder}
                 className="rounded-full pr-3 pl-8.5"
@@ -262,11 +270,13 @@ export function DataTable<TData>({
             onValueChange={(next) => {
               const parsed = Number(next);
               if (!manual) setSize(parsed);
+              // One call rather than setPageSize then setPageIndex: each raises
+              // a change of its own, and the second is computed from the size
+              // that was showing before the first — which lands back on it.
+              //
               // Page one either way: page four of five-row pages does not exist
               // once the rows are twenty at a time.
-              table.setPageSize(parsed);
-
-              table.setPageIndex(0);
+              table.setPagination({ pageIndex: 0, pageSize: parsed });
             }}
           >
             <SelectTrigger size="sm" className="h-7 w-16 rounded-full px-2.5 font-mono text-xs">

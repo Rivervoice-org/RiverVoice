@@ -128,7 +128,15 @@ const columns: ColumnDef<AgentSummary, unknown>[] = [
     accessorKey: "editedAt",
     header: "Last modified",
     size: 104,
-    cell: ({ row }) => timeAgo(row.original.editedAt),
+    // "29 seconds ago" on the server is "31 seconds ago" by the time the
+    // browser hydrates. The clock moving is not a mismatch worth regenerating
+    // the tree over, so the reading is allowed to differ and the machine
+    // readable value carries the fact.
+    cell: ({ row }) => (
+      <time dateTime={row.original.editedAt} suppressHydrationWarning>
+        {timeAgo(row.original.editedAt)}
+      </time>
+    ),
     meta: { className: "text-xs text-muted-foreground truncate" },
   },
   {
