@@ -6,12 +6,11 @@ import { UserContext } from "@/contexts/user-context";
 import type { Me } from "@/lib/auth/types";
 
 /**
- * The account, read once by the layout on the server and handed down from
- * there. Client components read it without a request of their own, and without
- * being threaded through every component in between.
+ * The account, read once by the layout on the server. Client components get it
+ * without a request of their own, and without being threaded through every
+ * component in between.
  *
- * Held in state rather than passed straight through, so an edit to the profile
- * can show immediately; the server stays the source of truth on the next load.
+ * Held in state so an edit to the profile can show immediately.
  */
 export function UserProvider({ me, children }: { me: Me; children: React.ReactNode }) {
   const [user, setUser] = React.useState(me);

@@ -16,9 +16,8 @@ export default async function AgentsPage() {
   let templates: AgentTemplate[] = [];
   let failed = false;
 
-  // Both are read together; neither is worth failing the page over. A harbor
-  // that is down leaves the sections empty and says so, rather than trading a
-  // usable page for an error screen.
+  // Neither is worth failing the page over: a harbor that is down leaves the
+  // sections empty and says so.
   const [agentsResult, templatesResult] = await Promise.allSettled([
     getAgents(),
     getAgentTemplates(),
