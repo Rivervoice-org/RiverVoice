@@ -91,7 +91,11 @@ export default function NotFound() {
         </p>
 
         <div className="animate-rise mt-8" style={{ animationDelay: "0.22s" }}>
-          <Button size="lg" className="h-11 px-5 text-[15px]" render={<Link href="/home" />}>
+          {/* The public front page, like the wordmark above: this 404 serves
+              signed-out visitors too, and /home would bounce them to a sign-in
+              form — which is nobody's idea of "home". Signed-in people are one
+              click from the dashboard either way. */}
+          <Button size="lg" className="h-11 px-5 text-[15px]" render={<Link href="/" />}>
             Go home
           </Button>
         </div>
