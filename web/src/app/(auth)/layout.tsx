@@ -22,7 +22,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             </Link>
 
             <main className="flex flex-1 items-center py-10">
-              <div className="mx-auto w-full max-w-[22rem]">{children}</div>
+              {/* Wide enough for the sign-up form to pair short fields two-up;
+                  sign-in's two fields sit fine at this width as well. */}
+              <div className="mx-auto w-full max-w-[24rem]">{children}</div>
             </main>
 
             <p className="text-[11px] text-muted-foreground">© Rivervoice · Terms · Privacy</p>
