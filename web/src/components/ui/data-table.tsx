@@ -9,6 +9,7 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type PaginationState,
   type RowData,
   type SortingState,
 } from "@tanstack/react-table";
@@ -58,6 +59,20 @@ export type DataTableProps<TData> = {
   initialSorting?: SortingState;
   /** Turns on paging at this size. Omit to show everything. */
   pageSize?: number;
+
+  /* Server-driven mode: `pagination` hands paging to the caller, `onSearch`
+     hands over searching. */
+
+  /** The size of the whole match, not of the page handed over. */
+  rowCount?: number;
+  pagination?: PaginationState;
+  onPaginationChange?: (next: PaginationState) => void;
+  /** Controlled search text. Set alongside `onSearch`. */
+  searchQuery?: string;
+  onSearch?: (value: string) => void;
+  /** Dims the rows while the next page is on its way. */
+  isPending?: boolean;
+
   onRowClick?: (row: TData) => void;
   rowClassName?: (row: TData) => string;
   className?: string;
@@ -77,6 +92,12 @@ export function DataTable<TData>({
   empty = "Nothing here yet.",
   initialSorting = [],
   pageSize,
+  rowCount,
+  pagination,
+  onPaginationChange,
+  searchQuery,
+  onSearch,
+  isPending,
   onRowClick,
   rowClassName,
   className,
@@ -84,6 +105,8 @@ export function DataTable<TData>({
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
   const [size, setSize] = React.useState(pageSize ?? 10);
   const [globalFilter, setGlobalFilter] = React.useState("");
+
+  const manual = Boolean(pagination);
 
   // TanStack Table hands back functions that read mutable internal state, so the
   // compiler bails on this component rather than memoize them and serve stale
@@ -93,23 +116,36 @@ export function DataTable<TData>({
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter },
+    rowCount,
+    state: { sorting, globalFilter, ...(pagination ? { pagination } : {}) },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    ...(pageSize
+    // The rows are already the match and already the page, so filtering or
+    // slicing them here would hide part of what the server just sent.
+    manualFiltering: Boolean(onSearch),
+    manualPagination: manual,
+    ...(manual
       ? {
-          getPaginationRowModel: getPaginationRowModel(),
-          initialState: { pagination: { pageSize, pageIndex: 0 } },
+          onPaginationChange: (updater) =>
+            onPaginationChange?.(typeof updater === "function" ? updater(pagination!) : updater),
         }
-      : {}),
+      : {
+          getFilteredRowModel: getFilteredRowModel(),
+          ...(pageSize
+            ? {
+                getPaginationRowModel: getPaginationRowModel(),
+                initialState: { pagination: { pageSize, pageIndex: 0 } },
+              }
+            : {}),
+        }),
   });
 
   const rows = table.getRowModel().rows;
-  const total = table.getFilteredRowModel().rows.length;
-  const pageIndex = table.getState().pagination.pageIndex;
+  const total = manual ? (rowCount ?? 0) : table.getFilteredRowModel().rows.length;
+  const { pageIndex, pageSize: shownSize } = table.getState().pagination;
+  const paged = manual || Boolean(pageSize);
   const showToolbar = Boolean(searchPlaceholder || toolbar || actions);
 
   return (
@@ -122,8 +158,11 @@ export function DataTable<TData>({
               <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="search"
-                value={globalFilter}
-                onChange={(event) => setGlobalFilter(event.target.value)}
+                defaultValue={onSearch ? searchQuery : undefined}
+                value={onSearch ? undefined : globalFilter}
+                onChange={(event) =>
+                  onSearch ? onSearch(event.target.value) : setGlobalFilter(event.target.value)
+                }
                 placeholder={searchPlaceholder}
                 aria-label={searchPlaceholder}
                 className="rounded-full pr-3 pl-8.5"
@@ -134,7 +173,8 @@ export function DataTable<TData>({
         </div>
       ) : null}
 
-      <div className="surface overflow-hidden">
+      {/* Dimmed rather than emptied, so the rows being read stay put. */}
+      <div className={cn("surface overflow-hidden transition-opacity", isPending && "opacity-60")}>
         <Table className="table-fixed">
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -214,15 +254,18 @@ export function DataTable<TData>({
         </Table>
       </div>
 
-      {pageSize ? (
+      {paged ? (
         <div className="flex flex-wrap items-center gap-3 px-1 text-xs text-muted-foreground">
           <span>Rows</span>
           <Select
-            value={String(size)}
+            value={String(manual ? shownSize : size)}
             onValueChange={(next) => {
               const parsed = Number(next);
-              setSize(parsed);
+              if (!manual) setSize(parsed);
+              // Page one either way: page four of five-row pages does not exist
+              // once the rows are twenty at a time.
               table.setPageSize(parsed);
+
               table.setPageIndex(0);
             }}
           >
@@ -239,7 +282,8 @@ export function DataTable<TData>({
           </Select>
 
           <span className="font-mono tabular-nums">
-            {total === 0 ? 0 : pageIndex * size + 1}–{pageIndex * size + rows.length} of {total}
+            {total === 0 ? 0 : pageIndex * shownSize + 1}–{pageIndex * shownSize + rows.length} of{" "}
+            {total}
           </span>
 
           <div className="ml-auto flex items-center gap-1">

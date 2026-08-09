@@ -4,27 +4,43 @@ import { AgentTemplates } from "@/components/dashboard/agent-templates";
 import { CreateAgentDialog } from "@/components/dashboard/create-agent-dialog";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { getAgents, getAgentTemplates } from "@/lib/agents/server";
-import type { AgentSummary, AgentTemplate } from "@/lib/agents/types";
+import { readPositive, toSearchParams } from "@/lib/search-params";
+import type { AgentPage as Board, AgentTemplate } from "@/lib/agents/types";
 
 export const metadata = { title: "Agents" };
 
 /** Per-user data. Stated outright rather than left to infer from the cookie read. */
 export const dynamic = "force-dynamic";
 
-export default async function AgentsPage() {
-  let agents: AgentSummary[] = [];
+const DEFAULT_SIZE = 10;
+
+export default async function AgentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = toSearchParams(await searchParams);
+
+  const search = (params.get("q") ?? "").trim();
+  // Capped at harbor's own ceiling, so a url asking for ten thousand rows gets
+  // a page rather than a 400.
+  const size = readPositive(params.get("size"), DEFAULT_SIZE, 100);
+
+  const page = readPositive(params.get("page"), 1);
+
+  let board: Board = { agents: [], total: 0, limit: size, offset: 0 };
   let templates: AgentTemplate[] = [];
   let failed = false;
 
   // Neither is worth failing the page over: a harbor that is down leaves the
   // sections empty and says so.
   const [agentsResult, templatesResult] = await Promise.allSettled([
-    getAgents(),
+    getAgents({ search, limit: size, offset: (page - 1) * size }),
     getAgentTemplates(),
   ]);
 
   if (agentsResult.status === "fulfilled") {
-    agents = agentsResult.value;
+    board = agentsResult.value;
   } else {
     failed = true;
     console.error("agents page: could not read agents", agentsResult.reason);
@@ -46,7 +62,14 @@ export default async function AgentsPage() {
       />
 
       <AgentComposer />
-      <AgentBoard agents={agents} failed={failed} />
+      <AgentBoard
+        agents={board.agents}
+        total={board.total}
+        page={page}
+        size={size}
+        search={search}
+        failed={failed}
+      />
       <AgentTemplates templates={templates} failed={failed} />
     </>
   );
