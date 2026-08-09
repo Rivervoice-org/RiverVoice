@@ -449,6 +449,22 @@
     }
   }
 
+  /* The zero in 404 is a rotary dial: wound to the stop and let go, twice, as
+     though trying the number again — then it gives up and sits still. */
+  --animate-dial-wind: dial-wind 1.7s cubic-bezier(0.65, 0, 0.35, 1) 0.5s 2 both;
+
+  @keyframes dial-wind {
+    0% {
+      transform: rotate(0deg);
+    }
+    58% {
+      transform: rotate(250deg);
+    }
+    100% {
+      transform: rotate(0deg);
+    }
+  }
+
   /* ── The landing page ─────────────────────────────────────────────────── */
 
   /* The lattice drifts a little under the hero, so the section is never quite a

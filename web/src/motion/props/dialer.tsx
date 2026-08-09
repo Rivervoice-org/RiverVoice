@@ -59,9 +59,15 @@ const DIAL = { x: 0, y: 12, r: 30, holes: 21, numbers: 27.5, hub: 8.5 };
 const DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
 const AT = DIGITS.map((_, i) => ((-8 - i * 30) * Math.PI) / 180);
 
+/* Rounded, and not for looks: Math.cos and Math.sin are not required to be
+   bit-identical across engines, so Node and Chrome disagree in the fifteenth
+   decimal — which React reports as a hydration mismatch on every path these
+   feed. Two decimals is a fraction of a hair at this scale. */
+const rnd = (n: number) => Math.round(n * 100) / 100;
+
 const on = (angle: number, radius: number) => ({
-  x: DIAL.x + Math.cos(angle) * radius,
-  y: DIAL.y + Math.sin(angle) * radius,
+  x: rnd(DIAL.x + Math.cos(angle) * radius),
+  y: rnd(DIAL.y + Math.sin(angle) * radius),
 });
 
 /** The handset turns about its middle; the cup that meets a head is the left. */
@@ -100,8 +106,8 @@ export function Dialer({
   const a = (held.angle * Math.PI) / 180;
   const rel = { x: CUP.x - PIVOT.x, y: CUP.y - PIVOT.y };
   const anchor = {
-    x: held.dx + rel.x * Math.cos(a) - rel.y * Math.sin(a) + PIVOT.x,
-    y: held.dy + rel.x * Math.sin(a) + rel.y * Math.cos(a) + PIVOT.y,
+    x: rnd(held.dx + rel.x * Math.cos(a) - rel.y * Math.sin(a) + PIVOT.x),
+    y: rnd(held.dy + rel.x * Math.sin(a) + rel.y * Math.cos(a) + PIVOT.y),
   };
   const reach = Math.hypot(anchor.x - 58, anchor.y - 24);
 
