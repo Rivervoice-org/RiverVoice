@@ -50,4 +50,6 @@ export const api = {
       credentials: "include",
       body: JSON.stringify(body ?? {}),
     }),
+  // No body: what to remove is named by the path.
+  del: <T>(path: string) => request<T>(path, { method: "DELETE", credentials: "include" }),
 };

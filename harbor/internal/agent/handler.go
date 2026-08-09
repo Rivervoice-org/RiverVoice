@@ -25,6 +25,7 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	h.guard(mux, "GET /v1/agents", httpx.Handle(h.list))
 	h.guard(mux, "POST /v1/agents", httpx.Handle(h.create))
 	h.guard(mux, "GET /v1/agents/{id}", httpx.Handle(h.get))
+	h.guard(mux, "POST /v1/agents/{id}/clone", httpx.Handle(h.clone))
 	h.guard(mux, "PATCH /v1/agents/{id}", httpx.Handle(h.rename))
 	h.guard(mux, "DELETE /v1/agents/{id}", httpx.Handle(h.remove))
 

@@ -33,6 +33,19 @@ type UseTemplateRequest struct {
 	TemplateID string `json:"template_id" validate:"required,uuid"`
 }
 
+// The whole of a delete: no body, and no version — a delete takes the agent and
+// every version with it, so naming one would be misleading.
+type DeleteAgentRequest struct {
+	ID string `json:"id" validate:"required,uuid"`
+}
+
+// The whole of a clone. No body either: the copy takes its settings, its tools
+// and its name from the agent being copied, and the name is settled server-side
+// so cloning twice cannot collide.
+type CloneAgentRequest struct {
+	ID string `json:"id" validate:"required,uuid"`
+}
+
 type CreateAgentResponse struct {
 	Message string `json:"message"`
 	AgentID string `json:"agent_id"`

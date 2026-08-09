@@ -1,4 +1,4 @@
-import { useMutation, useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
 import { ApiError, api } from "@/lib/api";
@@ -24,8 +24,8 @@ export function useAgent(id: string, version?: number, enabled = true): UseQuery
 type CreatedAgent = { message: string; agent_id: string; name?: string };
 
 /** Harbor's wording under the title. Anything else is a stack trace in a toast. */
-function detail(error: unknown) {
-  return error instanceof ApiError ? { description: error.message } : {};
+function reason(error: unknown) {
+  return error instanceof ApiError ? { description: error.message } : undefined;
 }
 
 /**
@@ -40,11 +40,11 @@ export function useCreateAgent() {
     mutationFn: (values: CreateAgentValues) =>
       api.post<CreatedAgent>("/v1/agents", { name: values.name, mascot: values.mascot }),
     onSuccess: (created, values) => {
-      toast.add({ title: `${created.name ?? values.name} is on the board` });
+      toast.success(`${created.name ?? values.name} is on the board`);
       router.refresh();
       router.push(`/build-agent/${created.agent_id}`);
     },
-    onError: (error) => toast.add({ title: "Could not create the agent", ...detail(error) }),
+    onError: (error) => toast.error("Could not create the agent", reason(error)),
   });
 }
 
@@ -63,13 +63,55 @@ export function useTemplate() {
     onSuccess: (created) => {
       // The name is worth repeating back: hire a second "Front desk" and the
       // server lands it as "Front desk 2".
-      toast.add({
-        title: created.name ? `${created.name} is yours` : "Copied to your board",
+      toast.success(created.name ? `${created.name} is yours` : "Copied to your board", {
         description: "Change anything — it starts from the template, it does not stay one.",
       });
       router.refresh();
       router.push(`/build-agent/${created.agent_id}`);
     },
-    onError: (error) => toast.add({ title: "Could not hire from the roster", ...detail(error) }),
+    onError: (error) => toast.error("Could not hire from the roster", reason(error)),
+  });
+}
+
+/**
+ * Cloning copies the agent's settings, its tools and its name into a fresh v1
+ * draft. There is no body: harbor settles the name — "Front desk 2" when the
+ * first is already on the board — so this cannot collide and has nothing to ask.
+ *
+ * It stays on the board rather than opening the copy: you cloned from a list, so
+ * the list is where the new row belongs.
+ */
+export function useCloneAgent() {
+  const router = useRouter();
+
+  return useMutation({
+    mutationFn: (id: string) => api.post<CreatedAgent>(`/v1/agents/${id}/clone`),
+    onSuccess: (created) => {
+      toast.success(created.name ? `${created.name} is on the board` : "Copy is on the board");
+      router.refresh();
+    },
+    onError: (error) => toast.error("Could not clone the agent", reason(error)),
+  });
+}
+
+/**
+ * Deleting takes the agent and every version with it. Nothing optimistic here:
+ * the row stays on the board until harbor confirms, because an agent that
+ * vanishes and comes back would be worse than one that takes a moment to go.
+ */
+export function useDeleteAgent() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+
+  return useMutation({
+    mutationFn: (id: string) => api.del<string>(`/v1/agents/${id}`),
+    onSuccess: (_message, id) => {
+      // Whatever is cached under this agent is about to 404 on any refetch.
+      queryClient.removeQueries({ queryKey: ["agents", id] });
+      toast.success("Agent deleted", { description: "Every version went with it." });
+      router.refresh();
+    },
+    // No toast on failure: the dialog stays open and says so in place, which is
+    // where the person is already looking.
   });
 }
