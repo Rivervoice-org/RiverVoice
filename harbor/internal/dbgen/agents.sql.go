@@ -817,7 +817,8 @@ select
   v.updated_at as edited_at,
   -- Coalesced because the left join is null once the person who last edited it
   -- has left the org, and the cast alone would tell sqlc it never is.
-  coalesce(u.email::text, '') as edited_by
+  coalesce(u.email::text, '') as edited_by,
+  count(*) over () as total
 from
   -- The view, not the table: agents_read lets templates through on purpose, so
   -- selecting from agents here would put the roster on everyone's board.
@@ -836,9 +837,24 @@ from
       1
   ) v on true
   left join users u on u.id = v.created_by
+where
+  -- Anywhere in the name and case-insensitive: someone hunting for "Front desk"
+  -- by typing "desk" is after the same agent.
+  $1::text = ''
+  or a.name ilike '%' || $1::text || '%'
 order by
   v.updated_at desc
+limit
+  $3
+offset
+  $2
 `
+
+type ListAgentsParams struct {
+	Search     string `json:"search"`
+	PageOffset int32  `json:"pageOffset"`
+	PageSize   int32  `json:"pageSize"`
+}
 
 type ListAgentsRow struct {
 	ID       string             `json:"id"`
@@ -848,12 +864,21 @@ type ListAgentsRow struct {
 	Status   AgentStatus        `json:"status"`
 	EditedAt pgtype.Timestamptz `json:"editedAt"`
 	EditedBy interface{}        `json:"editedBy"`
+	Total    int64              `json:"total"`
 }
 
-// One row per board line. The lateral takes each agent's newest version, which
+// One page of the board. The lateral takes each agent's newest version, which
 // the (agent_id, version desc) index answers without sorting.
-func (q *Queries) ListAgents(ctx context.Context) ([]ListAgentsRow, error) {
-	rows, err := q.db.Query(ctx, listAgents)
+//
+// An empty search is the whole board: sqlc has no optional arguments, so the
+// filter opts out of itself rather than needing a second query that would drift
+// from this one.
+//
+// The count is a window, not a second statement. Windows are computed before
+// the limit, so it counts the whole match rather than the page, and it cannot
+// disagree with the rows it came back with.
+func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]ListAgentsRow, error) {
+	rows, err := q.db.Query(ctx, listAgents, arg.Search, arg.PageOffset, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -869,6 +894,7 @@ func (q *Queries) ListAgents(ctx context.Context) ([]ListAgentsRow, error) {
 			&i.Status,
 			&i.EditedAt,
 			&i.EditedBy,
+			&i.Total,
 		); err != nil {
 			return nil, err
 		}
