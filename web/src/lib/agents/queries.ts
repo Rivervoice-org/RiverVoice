@@ -24,8 +24,8 @@ export function useAgent(id: string, version?: number, enabled = true): UseQuery
 type CreatedAgent = { message: string; agent_id: string; name?: string };
 
 /** Harbor's wording under the title. Anything else is a stack trace in a toast. */
-function detail(error: unknown) {
-  return error instanceof ApiError ? { description: error.message } : {};
+function reason(error: unknown) {
+  return error instanceof ApiError ? { description: error.message } : undefined;
 }
 
 /**
@@ -40,11 +40,11 @@ export function useCreateAgent() {
     mutationFn: (values: CreateAgentValues) =>
       api.post<CreatedAgent>("/v1/agents", { name: values.name, mascot: values.mascot }),
     onSuccess: (created, values) => {
-      toast.add({ title: `${created.name ?? values.name} is on the board` });
+      toast.success(`${created.name ?? values.name} is on the board`);
       router.refresh();
       router.push(`/build-agent/${created.agent_id}`);
     },
-    onError: (error) => toast.add({ title: "Could not create the agent", ...detail(error) }),
+    onError: (error) => toast.error("Could not create the agent", reason(error)),
   });
 }
 
@@ -63,14 +63,13 @@ export function useTemplate() {
     onSuccess: (created) => {
       // The name is worth repeating back: hire a second "Front desk" and the
       // server lands it as "Front desk 2".
-      toast.add({
-        title: created.name ? `${created.name} is yours` : "Copied to your board",
+      toast.success(created.name ? `${created.name} is yours` : "Copied to your board", {
         description: "Change anything — it starts from the template, it does not stay one.",
       });
       router.refresh();
       router.push(`/build-agent/${created.agent_id}`);
     },
-    onError: (error) => toast.add({ title: "Could not hire from the roster", ...detail(error) }),
+    onError: (error) => toast.error("Could not hire from the roster", reason(error)),
   });
 }
 
@@ -88,12 +87,10 @@ export function useCloneAgent() {
   return useMutation({
     mutationFn: (id: string) => api.post<CreatedAgent>(`/v1/agents/${id}/clone`),
     onSuccess: (created) => {
-      toast.add({
-        title: created.name ? `${created.name} is on the board` : "Copy is on the board",
-      });
+      toast.success(created.name ? `${created.name} is on the board` : "Copy is on the board");
       router.refresh();
     },
-    onError: (error) => toast.add({ title: "Could not clone the agent", ...detail(error) }),
+    onError: (error) => toast.error("Could not clone the agent", reason(error)),
   });
 }
 
@@ -111,7 +108,7 @@ export function useDeleteAgent() {
     onSuccess: (_message, id) => {
       // Whatever is cached under this agent is about to 404 on any refetch.
       queryClient.removeQueries({ queryKey: ["agents", id] });
-      toast.add({ title: "Agent deleted", description: "Every version went with it." });
+      toast.success("Agent deleted", { description: "Every version went with it." });
       router.refresh();
     },
     // No toast on failure: the dialog stays open and says so in place, which is
