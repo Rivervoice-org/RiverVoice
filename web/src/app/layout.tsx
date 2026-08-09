@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist_Mono, Inter, Newsreader } from "next/font/google";
 import { QueryProvider } from "@/components/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/toast";
 import "./globals.css";
 
 const inter = Inter({
@@ -42,7 +43,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           which otherwise reports as a hydration mismatch. */}
       <body suppressHydrationWarning className="flex min-h-full flex-col">
         <QueryProvider>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider>
+            {/* Before the app, not after: the manager drops anything emitted
+                while nothing is subscribed, and sibling effects run in tree
+                order — so a toast raised on mount needs this listening first. */}
+            <Toaster />
+            {children}
+          </ThemeProvider>
         </QueryProvider>
       </body>
     </html>
