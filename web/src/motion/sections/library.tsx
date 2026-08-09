@@ -1,5 +1,6 @@
 "use client";
 
+import { Rover } from "@/motion/bots/rover";
 import { box } from "@/motion/shapes";
 import { interpolate, seconds } from "@/motion/timeline";
 
@@ -22,15 +23,6 @@ import { interpolate, seconds } from "@/motion/timeline";
  * be selling a different, worse product.
  */
 export type LibraryScript = {
-  /**
-   * The reader, as DiceBear markup rather than a seed — drawn on the server and
-   * passed in, the way the sidebar's agent glyph is, so the avatar library stays
-   * out of the client bundle this scene ships in.
-   *
-   * Embedded as a nested <svg> through innerHTML rather than an <image href>,
-   * which is what the roster scenes tried first and what silently drew nothing.
-   */
-  reader: string;
   /** A book per language, spine-on, each named in its own script. */
   shelf: string[];
   /** Rung in a language on the shelf. */
@@ -53,9 +45,9 @@ const KNOWN = 2;
 const slotX = (n: number, i: number) =>
   (LIBRARY_VIEW.w - (SHELF.w * n + SHELF.gap * (n - 1))) / 2 + i * (SHELF.w + SHELF.gap);
 
-/** Centre of the bust. The open book sits across its lower edge, so the reader
-    is holding the book rather than standing next to it. */
-const READER = { x: 230, y: 208, size: 96 };
+/** Centre of its body block. The open book sits across the reach of its arms, so
+    it is holding the book rather than standing next to it. */
+const READER = { x: 230, y: 222, size: 0.92 };
 /** Open, held in front of the reader. */
 const BOOK = { x: 230, y: 302, w: 176, h: 96 };
 /** Left of the open book, and kept narrow enough never to run under it. */
@@ -364,13 +356,24 @@ export function Library({ f, script }: { f: number; script: LibraryScript }) {
         </g>
       ) : null}
 
-      {/* The reader. The turn of the head is a rotation about where the neck
-          would be, not the middle of the tile, or he pivots off his shoulders. */}
-      <g
-        opacity={gone}
-        transform={`translate(${READER.x - READER.size / 2} ${READER.y + nod - READER.size / 2}) rotate(${look} ${READER.size / 2} ${READER.size * 0.86})`}
-        dangerouslySetInnerHTML={{ __html: script.reader }}
-      />
+      {/* The reader. Rover turns its head on the neck rather than the whole body
+          swivelling, so looking along the shelf reads as looking rather than
+          walking. The lenses light while it is the one talking. */}
+      <g opacity={gone}>
+        <Rover
+          x={READER.x}
+          y={READER.y + nod}
+          size={READER.size}
+          look={look}
+          // Down at the page while a book is open, level while it searches.
+          tilt={down.travel * 5}
+          blink={f % 104 < 4 ? 0.1 : 1}
+          // Only when it found the answer — not when it had to decline.
+          smile={saying.soft ? 0 : lit}
+          holding={opened > 0.4}
+          lit={sayShow * (saying.soft ? 0.4 : 1)}
+        />
+      </g>
 
       {/* Open, in front of it */}
       {opened > 0 ? <OpenBook line={page.line} lit={lit} o={opened * gone} /> : null}
