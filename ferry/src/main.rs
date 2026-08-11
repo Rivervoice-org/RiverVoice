@@ -1,5 +1,6 @@
 mod frames;
 mod http;
+mod processor;
 mod serializer;
 mod transport;
 
