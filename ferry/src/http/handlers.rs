@@ -1,4 +1,5 @@
 use crate::audio::rnnoise::RnnoiseFilter;
+use crate::http::response::ApiResponse;
 use crate::pipeline::pipeline::Pipeline;
 use crate::serializer::browser::BrowserSerializer;
 use crate::stages::denoiser::DenoiserStage;
@@ -26,7 +27,8 @@ pub async fn browser_stream(ws: WebSocketUpgrade, header: HeaderMap) -> Response
         .unwrap_or_default();
 
     if !ALLOWED_ORIGINS.contains(&origin) {
-        return StatusCode::FORBIDDEN.into_response();
+        return ApiResponse::<()>::fail(StatusCode::FORBIDDEN, "Origin not allowed")
+            .into_response();
     }
 
     // Stages in order; the pipeline creates the channels between them,
