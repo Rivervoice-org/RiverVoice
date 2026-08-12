@@ -1,3 +1,5 @@
+mod audio;
+mod auth;
 mod frames;
 mod http;
 mod processor;
