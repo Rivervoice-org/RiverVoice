@@ -66,7 +66,10 @@ export function Toaster() {
   return (
     <Toast.Provider toastManager={toastManager}>
       <Toast.Portal>
-        <Toast.Viewport className="fixed right-4 bottom-4 z-50 flex w-[min(22rem,calc(100vw-2rem))] outline-none">
+        {/* Above the z-50 overlay layer, not level with it: dialogs, sheets and
+            popovers all sit at 50, and a notice raised from inside one of them
+            has to be readable over it rather than lost behind it. */}
+        <Toast.Viewport className="fixed right-4 bottom-4 z-[100] flex w-[min(22rem,calc(100vw-2rem))] outline-none">
           <ToastList />
         </Toast.Viewport>
       </Toast.Portal>
