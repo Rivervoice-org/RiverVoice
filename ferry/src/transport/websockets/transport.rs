@@ -1,51 +1,58 @@
 use axum::{
-    extract::ws::{WebSocket, WebSocketUpgrade},
-    http::HeaderMap,
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::Response,
 };
+use futures_util::{SinkExt, StreamExt};
 
-use crate::serializer::serializer::FrameSerializer;
+use crate::transport::base::BaseTransport;
 
+/// The WebSocket doorway: connection upgrade and the socket read/write
+/// loop. Everything pipeline-facing lives in `BaseTransport`.
 pub struct WebSocketClient {
-    serializer: Box<dyn FrameSerializer>,
+    base: BaseTransport,
+}
+
+enum Event {
+    Incoming(Option<Result<Message, axum::Error>>),
+    Outgoing(Option<Message>),
 }
 
 impl WebSocketClient {
-    pub fn new(serializer: Box<dyn FrameSerializer>) -> Self {
-        Self { serializer }
+    pub fn new(base: BaseTransport) -> Self {
+        Self { base }
     }
-}
 
-pub struct WebSocketConnectParams<'a> {
-    ws: WebSocketUpgrade,
-    headers: HeaderMap,
-    allowed_origins: &'a [&'a str],
-}
+    pub fn connect(self, ws: WebSocketUpgrade) -> Response {
+        ws.on_upgrade(move |socket| self.on_connect(socket))
+    }
 
-impl<'a> WebSocketConnectParams<'a> {
-    pub fn new(ws: WebSocketUpgrade, headers: HeaderMap, allowed_origins: &'a [&'a str]) -> Self {
-        Self {
-            ws,
-            headers,
-            allowed_origins,
+    async fn on_connect(mut self, socket: WebSocket) {
+        let (mut wire_out, mut wire_in) = socket.split();
+
+        loop {
+            let event = tokio::select! {
+                msg = wire_in.next() => Event::Incoming(msg),
+                msg = self.base.next_wire_message() => Event::Outgoing(msg),
+            };
+
+            match event {
+                Event::Incoming(Some(Ok(Message::Close(_))))
+                | Event::Incoming(Some(Err(_)))
+                | Event::Incoming(None)
+                | Event::Outgoing(None) => break,
+
+                Event::Incoming(Some(Ok(msg))) => {
+                    if !self.base.push_wire_message(msg).await {
+                        break;
+                    }
+                }
+
+                Event::Outgoing(Some(msg)) => {
+                    if wire_out.send(msg).await.is_err() {
+                        break;
+                    }
+                }
+            }
         }
     }
-}
-
-impl WebSocketClient {
-    pub fn connect(params: WebSocketConnectParams) -> Result<Response, Box<dyn std::error::Error>> {
-        let origin = params
-            .headers
-            .get(axum::http::header::ORIGIN)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or_default();
-
-        if !params.allowed_origins.contains(&origin) {
-            return Err("origin not allowed".into());
-        }
-
-        Ok(params.ws.on_upgrade(Self::on_connect))
-    }
-
-    pub async fn on_connect(_ws: WebSocket) {}
 }
