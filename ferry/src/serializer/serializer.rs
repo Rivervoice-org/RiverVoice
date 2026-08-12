@@ -8,7 +8,7 @@ use crate::frames::frames::Frame;
 /// differently — Twilio's format isn't Exotel's — so each provider gets
 /// its own `FrameSerializer` implementation to translate its messages
 /// into `Frame`s the rest of the pipeline understands, and back.
-pub trait FrameSerializer {
-    fn serialize(&self, frame: Frame) -> Result<Message, Box<dyn std::error::Error>>;
-    fn deserialize(&self, msg: Message) -> Result<Frame, Box<dyn std::error::Error>>;
+pub trait FrameSerializer: Send + Sync {
+    fn serialize(&self, frame: Frame) -> anyhow::Result<Message>;
+    fn deserialize(&self, msg: Message) -> anyhow::Result<Frame>;
 }

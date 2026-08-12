@@ -21,13 +21,13 @@ impl BrowserSerializer {
 }
 
 impl FrameSerializer for BrowserSerializer {
-    fn serialize(&self, frame: Frame) -> Result<Message, Box<dyn std::error::Error>> {
+    fn serialize(&self, frame: Frame) -> anyhow::Result<Message> {
         match frame.into_kind() {
             FrameKind::RawAudio(audio) => Ok(Message::Binary(audio.audio.into())),
         }
     }
 
-    fn deserialize(&self, msg: Message) -> Result<Frame, Box<dyn std::error::Error>> {
+    fn deserialize(&self, msg: Message) -> anyhow::Result<Frame> {
         match msg {
             Message::Binary(bytes) => {
                 let num_frames = bytes.len() as u32 / 2 / u32::from(self.num_channels);
@@ -38,7 +38,7 @@ impl FrameSerializer for BrowserSerializer {
                     num_frames,
                 })))
             }
-            other => Err(format!("browser serializer: unexpected message: {other:?}").into()),
+            other => anyhow::bail!("browser serializer: unexpected message: {other:?}"),
         }
     }
 }
