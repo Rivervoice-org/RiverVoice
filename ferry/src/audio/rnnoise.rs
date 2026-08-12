@@ -14,13 +14,13 @@ const RNNOISE_RATE: u32 = 48_000;
 /// chunks of whatever size the transport sends. So every call does the
 /// same four steps:
 ///
-/// 1. Stretch the audio up to 48 kHz — for each sample we get, invent
+/// 1. Stretch the audio up to 48 kHz: for each sample we get, invent
 ///    `ratio - 1` more between it and the last one.
 /// 2. Feed RNNoise as many whole 480-sample chunks as that produced.
 /// 3. Squash the cleaned result back down to our rate.
 /// 4. Return exactly as many samples as we were handed.
 ///
-/// Only step 2 is denoising. Everything else — and every field below —
+/// Only step 2 is denoising. Everything else, and every field below,
 /// exists to make our audio fit through RNNoise's fixed-size door.
 ///
 /// Cost: up to 10 ms of delay from the buffering, on top of the one-frame
@@ -32,7 +32,7 @@ pub struct RnnoiseFilter {
     /// `48000 / our rate`. 3 at 16 kHz, 6 at 8 kHz, 1 at 48 kHz.
     ///
     /// `None` before `start`, and for any rate that does not divide
-    /// 48 kHz evenly — then audio passes through untouched, because
+    /// 48 kHz evenly. Then audio passes through untouched, because
     /// half-filtering it would sound worse than not filtering it.
     ratio: Option<usize>,
 
@@ -40,7 +40,7 @@ pub struct RnnoiseFilter {
     ///
     /// Stretching works by drawing a line from the previous sample to
     /// the current one. At the start of a new chunk the previous sample
-    /// belongs to the chunk before, which is already gone — so we keep
+    /// belongs to the chunk before, which is already gone, so we keep
     /// it here. Without it every chunk would start its line at zero and
     /// click, ~33 times a second.
     last_in: f32,
@@ -52,7 +52,7 @@ pub struct RnnoiseFilter {
 
     /// Cleaned samples, already squashed back to our rate, waiting to be
     /// handed out. One call can finish two chunks and produce more
-    /// samples than it was given, or finish none and produce zero — this
+    /// samples than it was given, or finish none and produce zero. This
     /// queue absorbs the difference so we always return the right count.
     ready: VecDeque<i16>,
 
@@ -122,7 +122,7 @@ impl AudioFilter for RnnoiseFilter {
         // Step 1: stretch up to 48 kHz.
         //
         // Accumulating samples would only give us more audio at the same
-        // rate — rate is samples per second, not a count. To raise it we
+        // rate: rate is samples per second, not a count. To raise it we
         // invent samples in between, walking in a straight line from the
         // previous value to this one.
         for sample in samples.iter() {
@@ -143,7 +143,7 @@ impl AudioFilter for RnnoiseFilter {
         // it back to our rate.
         //
         // Squashing averages each group of `ratio` samples rather than
-        // keeping one and dropping the rest — dropping samples outright
+        // keeping one and dropping the rest. Dropping samples outright
         // folds high frequencies back down as audible artefacts.
         let chunk_size = DenoiseState::FRAME_SIZE;
         let mut consumed = 0;
@@ -163,7 +163,7 @@ impl AudioFilter for RnnoiseFilter {
         // Step 4: hand back exactly the count we were given.
         //
         // On the first call or two, before enough audio has accumulated
-        // to fill a chunk, there is nothing ready yet — those slots get
+        // to fill a chunk, there is nothing ready yet, so those slots get
         // silence. That silence is this filter's start-up delay.
         for slot in samples.iter_mut() {
             *slot = self.ready.pop_front().unwrap_or(0);

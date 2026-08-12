@@ -11,7 +11,7 @@ pub type ProcessorFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
 
 /// A processor's (or transport's) access to the pipeline: where its
 /// frames come from and where it pushes them. Wiring is the pipeline's
-/// job — the holder never knows who is on the other end of either side.
+/// job. The holder never knows who is on the other end of either side.
 pub struct FrameIo {
     name: String,
     upstream: Receiver<Frame>,
@@ -36,13 +36,13 @@ impl FrameIo {
         &self.name
     }
 
-    /// Pushes a frame onward. `false` means downstream is gone — wind down.
+    /// Pushes a frame onward. `false` means downstream is gone, wind down.
     pub async fn push(&self, frame: Frame) -> bool {
         self.downstream.send(frame).await.is_ok()
     }
 
-    /// Next frame for this holder. `None` means upstream closed — the call
-    /// is over; finish in-flight work and return.
+    /// Next frame for this holder. `None` means upstream closed, so the
+    /// call is over; finish in-flight work and return.
     pub async fn take(&mut self) -> Option<Frame> {
         self.upstream.recv().await
     }
@@ -54,7 +54,7 @@ impl FrameIo {
 ///
 /// The rules every processor must follow:
 ///
-/// 1. **Two hands only.** A processor knows `upstream` and `downstream` —
+/// 1. **Two hands only.** A processor knows `upstream` and `downstream`,
 ///    never which processors sit on the other end of either. Wiring is
 ///    the pipeline's job.
 /// 2. **Process what you understand, forward the rest untouched.** A frame
@@ -64,11 +64,11 @@ impl FrameIo {
 ///    closes (the transport hung up), then finishes any in-flight work,
 ///    drops `downstream`, and returns. Closing `downstream` propagates
 ///    shutdown to the next stage in the pipeline.
-/// 4. **On interruption, flush and re-stamp — never signal backward as a
+/// 4. **On interruption, flush and re-stamp; never signal backward as a
 ///    `Frame`.** A processor watches the shared turn number; when it
 ///    changes, drop any in-flight/queued work from the old turn and start
 ///    stamping new frames with the new turn. Signaling "the turn changed"
-///    is the watch channel's job, not a `Frame` sent upstream — frames only
+///    is the watch channel's job, not a `Frame` sent upstream. Frames only
 ///    ever flow downstream, so live user speech can never be mistaken for
 ///    stale work and discarded.
 ///

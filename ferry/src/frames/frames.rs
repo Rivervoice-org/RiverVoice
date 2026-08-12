@@ -52,7 +52,7 @@ impl FrameKind {
     }
 }
 
-/// Raw, unprocessed audio as received from an external source — telephony,
+/// Raw, unprocessed audio as received from an external source: telephony,
 /// a browser API, etc. Any incoming audio must be wrapped in a
 /// `RawAudioFrame` (via `FrameKind::RawAudio`) before it can enter the
 /// pipeline.

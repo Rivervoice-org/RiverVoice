@@ -23,7 +23,7 @@ impl FrameProcessor for DenoiserStage {
 
     fn run(mut self: Box<Self>, mut io: FrameIo) -> ProcessorFuture {
         Box::pin(async move {
-            // The rate is not configured here — it arrives on the audio
+            // The rate is not configured here. It arrives on the audio
             // itself, and the filters are told it once, before any of it
             // reaches them.
             let mut started_at: Option<u32> = None;
@@ -69,7 +69,7 @@ impl FrameProcessor for DenoiserStage {
                 };
 
                 if !pushed {
-                    break; // downstream gone — the call is being torn down
+                    break; // downstream gone, the call is being torn down
                 }
             }
             // upstream closed: run ends, dropping `io`, which closes our

@@ -5,6 +5,7 @@ mod http;
 mod pipeline;
 mod processor;
 mod serializer;
+mod services;
 mod stages;
 mod transport;
 

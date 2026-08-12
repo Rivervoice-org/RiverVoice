@@ -6,8 +6,8 @@ use crate::serializer::serializer::FrameSerializer;
 
 /// What every transport owns, regardless of its wire: access to the
 /// pipeline and the serializer that speaks the wire's dialect. Concrete
-/// transports (WebSocket today, WebRTC later) embed this
-/// and add only their wire-specific plumbing.
+/// transports (WebSocket today, WebRTC later) embed this and add only
+/// their wire-specific plumbing.
 ///
 /// The boundary: `BaseTransport` knows everything pipeline-facing and
 /// nothing wire-facing. no sockets, no connection handling.
@@ -21,7 +21,7 @@ impl BaseTransport {
         Self { io, serializer }
     }
 
-    /// Returns `false` when the pipeline is gone (torn down) — the
+    /// Returns `false` when the pipeline is gone (torn down); the
     /// transport should stop reading its wire. A message that fails to
     /// deserialize is dropped (logged), not fatal to the call.
     pub async fn push_wire_message(&self, msg: Message) -> bool {
@@ -37,7 +37,7 @@ impl BaseTransport {
         }
     }
 
-    /// Returns `None` when the pipeline shut down — the call is over and
+    /// Returns `None` when the pipeline shut down; the call is over and
     /// the transport should close its wire. A frame that fails to serialize
     /// is skipped (logged), and the next frame is tried.
     pub async fn next_wire_message(&mut self) -> Option<Message> {

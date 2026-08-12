@@ -10,7 +10,7 @@ const STAGE_QUEUE_SIZE: usize = 64;
 /// The assembler. Its whole job happens once, before the call starts:
 /// create the channel between each adjacent pair of stages, hand every
 /// stage its two ends, spawn each stage's task, and return the leftover
-/// ends to the transport. During the call the pipeline does nothing —
+/// ends to the transport. During the call the pipeline does nothing:
 /// stages work, channels connect.
 pub struct Pipeline;
 
