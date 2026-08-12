@@ -4,12 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1"
 axum = { version = "0.8.9", features = ["ws"] }
+dotenvy = "0.15"
 futures-util = "0.3"
 jsonwebtoken = "9"
 nnnoiseless = "0.5"
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1.53.1", features = ["full"] }
+tower-http = { version = "0.6", features = ["trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [profile.dev]
 debug = 1
