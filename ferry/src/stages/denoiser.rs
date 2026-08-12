@@ -23,9 +23,21 @@ impl FrameProcessor for DenoiserStage {
 
     fn run(mut self: Box<Self>, mut io: FrameIo) -> ProcessorFuture {
         Box::pin(async move {
+            // The rate is not configured here — it arrives on the audio
+            // itself, and the filters are told it once, before any of it
+            // reaches them.
+            let mut started = false;
+
             while let Some(frame) = io.take().await {
                 let pushed = match frame.into_kind() {
                     FrameKind::RawAudio(mut audio) => {
+                        if !started {
+                            for filter in &mut self.filters {
+                                filter.start(audio.sample_rate);
+                            }
+                            started = true;
+                        }
+
                         // Audio travels as s16le bytes; filters eat i16 samples.
                         let mut samples: Vec<i16> = audio
                             .audio
