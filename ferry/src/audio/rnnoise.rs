@@ -10,9 +10,9 @@ const RNNOISE_RATE: u32 = 48_000;
 /// Noise suppression via RNNoise (`nnnoiseless`, a pure-Rust port).
 ///
 /// RNNoise demands two things and negotiates neither: audio at 48 kHz,
-/// handed over in chunks of exactly 480 samples. Our audio is 16 kHz
-/// (8 kHz from telephony) in chunks of whatever size the transport sends.
-/// So every call does the same four steps:
+/// handed over in chunks of exactly 480 samples. Our audio is 16 kHz, in
+/// chunks of whatever size the transport sends. So every call does the
+/// same four steps:
 ///
 /// 1. Stretch the audio up to 48 kHz — for each sample we get, invent
 ///    `ratio - 1` more between it and the last one.
@@ -90,10 +90,11 @@ impl AudioFilter for RnnoiseFilter {
     fn start(&mut self, sample_rate: u32) {
         let ratio = (RNNOISE_RATE / sample_rate.max(1)) as usize;
 
-        // We only stretch by whole numbers, which covers every rate this
-        // pipeline carries: 8k, 16k, 24k, 48k. The 480-sample chunk must
-        // also divide by the ratio, so squashing it back gives a whole
-        // number of samples.
+        // We only stretch by whole numbers. That serves the pipeline's
+        // 16 kHz and leaves room for the other rates that divide 48 kHz
+        // evenly (8k, 24k, 48k), should a transport ever deliver one.
+        // The 480-sample chunk must divide by the ratio too, so squashing
+        // it back gives a whole number of samples.
         let supported = sample_rate > 0
             && RNNOISE_RATE % sample_rate == 0
             && DenoiseState::FRAME_SIZE % ratio == 0;

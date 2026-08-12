@@ -26,16 +26,30 @@ impl FrameProcessor for DenoiserStage {
             // The rate is not configured here — it arrives on the audio
             // itself, and the filters are told it once, before any of it
             // reaches them.
-            let mut started = false;
+            let mut started_at: Option<u32> = None;
 
             while let Some(frame) = io.take().await {
                 let pushed = match frame.into_kind() {
                     FrameKind::RawAudio(mut audio) => {
-                        if !started {
-                            for filter in &mut self.filters {
-                                filter.start(audio.sample_rate);
+                        match started_at {
+                            None => {
+                                for filter in &mut self.filters {
+                                    filter.start(audio.sample_rate);
+                                }
+                                started_at = Some(audio.sample_rate);
                             }
-                            started = true;
+                            // Filters are set up for one rate and cannot be
+                            // told a new one mid-call, so audio at a
+                            // different rate would be filtered at the wrong
+                            // ratio and quietly distorted. Say so instead.
+                            Some(rate) if rate != audio.sample_rate => {
+                                tracing::warn!(
+                                    expected = rate,
+                                    got = audio.sample_rate,
+                                    "denoiser: sample rate changed mid-call, filtering at the original rate"
+                                );
+                            }
+                            Some(_) => {}
                         }
 
                         // Audio travels as s16le bytes; filters eat i16 samples.
