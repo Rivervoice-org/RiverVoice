@@ -7,6 +7,13 @@ import { BubbleIcon, HandsetIcon, MicIcon } from "@/components/builder/test-icon
 import { ChatScene, PhoneScene, VoiceScene } from "@/motion/builder/test-scenes";
 import { inputVariables } from "@/components/dashboard/data";
 import type { Agent } from "@/lib/agents/types";
+import {
+  BrowserVoice,
+  BrowserVoiceError,
+  BrowserVoiceStatus,
+  type BrowserVoiceCall,
+} from "@/lib/browser-voice";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
@@ -20,36 +27,50 @@ import {
 import { Tabs, TabsIndicator, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-type Mode = "voice" | "phone" | "chat";
+enum Mode {
+  Voice = "voice",
+  Phone = "phone",
+  Chat = "chat",
+}
 
 const MODES = [
-  { value: "voice", label: "Voice", icon: MicIcon },
-  { value: "phone", label: "Phone", icon: HandsetIcon },
-  { value: "chat", label: "Chat", icon: BubbleIcon },
+  { value: Mode.Voice, label: "Voice", icon: MicIcon },
+  { value: Mode.Phone, label: "Phone", icon: HandsetIcon },
+  { value: Mode.Chat, label: "Chat", icon: BubbleIcon },
 ] as const;
 
 const IDLE: Record<
   Mode,
   { scene: React.ComponentType<{ seed: string }>; caption: string; action: string }
 > = {
-  voice: {
+  [Mode.Voice]: {
     scene: VoiceScene,
     caption: "Start a call to test the agent",
     action: "Start call",
   },
-  phone: {
+  [Mode.Phone]: {
     scene: PhoneScene,
     caption: "Enter a number and place an outbound call",
     action: "Call",
   },
-  chat: {
+  [Mode.Chat]: {
     scene: ChatScene,
     caption: "Start testing by sending a message",
     action: "Start chat",
   },
 };
 
-/** The voices this agent could answer in, so the picker is not a free-text box. */
+enum CallLabel {
+  Connecting = "Connecting…",
+  End = "End call",
+}
+
+enum CallHint {
+  Live = "Live — talk and you hear yourself back through the pipeline",
+  Ready = "Runs against the local audio pipeline",
+  Unavailable = "Test runs are not connected yet",
+}
+
 const VOICES = ["Meera", "Ritu", "Aarav", "Kabir", "Ananya"];
 
 function Meta({ icon: Icon, children }: { icon: typeof Globe; children: React.ReactNode }) {
@@ -61,29 +82,75 @@ function Meta({ icon: Icon, children }: { icon: typeof Globe; children: React.Re
   );
 }
 
-/**
- * The panel you try the agent in before anyone real does.
- *
- * Three ways in, one setup. Voice and Chat run against the draft in the browser;
- * Phone dials out to a number you type. The three share the language, the voice
- * and the variables, because changing them per mode would mean you had tested
- * three different agents.
- */
 export function BuilderTester({
   agent,
   mascot,
   onClose,
 }: {
   agent: Agent;
-  /** The face currently picked in the topbar, which may not be saved yet. */
   mascot: string | null;
   onClose: () => void;
 }) {
-  const [mode, setMode] = React.useState<Mode>("voice");
+  const [mode, setMode] = React.useState<Mode>(Mode.Voice);
   const [setupOpen, setSetupOpen] = React.useState(false);
 
-  // Seeded from the agent, then held locally: a test run should not be able to
-  // edit the agent, only to try it a different way.
+  const [call, setCall] = React.useState<BrowserVoiceStatus>(BrowserVoiceStatus.Idle);
+  const callRef = React.useRef<BrowserVoiceCall | null>(null);
+
+  // A ref, not state: this changes at mic-chunk rate (~30ms) and only the
+  // waveform reads it, so state would re-render the whole panel for nothing.
+  const levelRef = React.useRef(0);
+
+  const endCall = React.useCallback(() => {
+    callRef.current?.stop();
+    callRef.current = null;
+    setCall(BrowserVoiceStatus.Idle);
+  }, []);
+
+  React.useEffect(() => () => callRef.current?.stop(), []);
+
+  // Hung up here rather than in an effect on `mode`: leaving a call running
+  // behind a panel that no longer shows it is the thing to avoid, and the tab
+  // change is the event that causes it.
+  const changeMode = React.useCallback(
+    (next: Mode) => {
+      if (next !== Mode.Voice) endCall();
+      setMode(next);
+    },
+    [endCall],
+  );
+
+  const toggleCall = React.useCallback(async () => {
+    if (callRef.current) {
+      endCall();
+      return;
+    }
+    try {
+      callRef.current = await BrowserVoice.start({
+        onStatus: (status) => {
+          setCall(
+            status === BrowserVoiceStatus.Ended || status === BrowserVoiceStatus.Error
+              ? BrowserVoiceStatus.Idle
+              : status,
+          );
+          if (status === BrowserVoiceStatus.Ended || status === BrowserVoiceStatus.Error) {
+            callRef.current = null;
+            levelRef.current = 0;
+          }
+        },
+        onError: (error) => toast.error(error.message),
+        onLevel: (level) => {
+          levelRef.current = level;
+        },
+      });
+    } catch (error) {
+      callRef.current = null;
+      levelRef.current = 0;
+      setCall(BrowserVoiceStatus.Idle);
+      toast.error(error instanceof BrowserVoiceError ? error.message : "Could not start the call.");
+    }
+  }, [endCall]);
+
   const [language, setLanguage] = React.useState(agent.startingLanguage);
   const [voice, setVoice] = React.useState(agent.voice);
   const [number, setNumber] = React.useState("");
@@ -97,7 +164,7 @@ export function BuilderTester({
 
   const idle = IDLE[mode];
   const Scene = idle.scene;
-  const action = mode === "phone" ? (dialled ? "Call 1 number" : "Call") : idle.action;
+  const action = mode === Mode.Phone ? (dialled ? "Call 1 number" : "Call") : idle.action;
 
   return (
     <aside className="panel flex h-full w-full flex-col overflow-hidden">
@@ -127,11 +194,9 @@ export function BuilderTester({
         </div>
       </header>
 
-      {/* The panel arrives in three beats rather than all at once — controls,
-          then what they act on, then the thing you press. */}
       <Tabs
         value={mode}
-        onValueChange={(value) => setMode(value as Mode)}
+        onValueChange={(value) => changeMode(value as Mode)}
         className="animate-rise shrink-0 items-center px-4"
         style={{ animationDelay: "60ms" }}
       >
@@ -146,25 +211,28 @@ export function BuilderTester({
         </TabsList>
       </Tabs>
 
-      {/* Nothing has happened yet, so the body is the mark and the one line that
-          says what to do. The transcript takes this space once a run starts. */}
-      {/* Keyed on the mode, so switching tabs plays the new scene in rather than
-          cutting to it — the drawings are different enough for a cut to jar. */}
+      {/* Keyed on the mode so switching tabs remounts and replays the scene
+          rather than cutting to it mid-animation. */}
       <div
         key={mode}
         className="animate-rise flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6"
         style={{ animationDelay: "120ms" }}
       >
-        {/* Capped rather than filling: the scene is drawn for a wide frame, and
-            letting it grow with the panel would leave the caption stranded. */}
         <div className="h-40 w-full max-w-[17rem]">
-          <Scene seed={mascot ?? agent.name} />
+          {mode === Mode.Voice ? (
+            <VoiceScene
+              seed={mascot ?? agent.name}
+              level={call === BrowserVoiceStatus.Live ? levelRef : undefined}
+            />
+          ) : (
+            <Scene seed={mascot ?? agent.name} />
+          )}
         </div>
         <p className="text-center text-[13px] text-muted-foreground">{idle.caption}</p>
       </div>
 
       <div className="animate-rise shrink-0 space-y-2 p-3" style={{ animationDelay: "180ms" }}>
-        {mode === "phone" ? (
+        {mode === Mode.Phone ? (
           <div className="flex h-12 items-center gap-3 rounded-2xl border border-border px-4">
             <HandsetIcon className="size-4 shrink-0 text-muted-foreground" />
             <span className="shrink-0 text-sm font-medium">Call to</span>
@@ -198,8 +266,7 @@ export function BuilderTester({
                   <span className="text-[13px] text-muted-foreground">Tap to close</span>
                 ) : (
                   <>
-                    {/* Only Voice has a speaker to name; the others are silent. */}
-                    {mode === "voice" ? <Meta icon={Volume2}>{voice}</Meta> : null}
+                    {mode === Mode.Voice ? <Meta icon={Volume2}>{voice}</Meta> : null}
                     <Meta icon={Globe}>{language}</Meta>
                     <Meta icon={Braces}>
                       {set}/{inputVariables.length}
@@ -210,8 +277,6 @@ export function BuilderTester({
             </CollapsibleTrigger>
 
             <CollapsibleContent>
-              {/* Capped and scrolled: the panel is a fixed height, and the
-                  variables list grows with the agent. */}
               <div className="max-h-72 space-y-4 overflow-y-auto border-t border-border px-4 py-4">
                 <div className="space-y-1.5">
                   <label className="text-[13px] font-medium">Initial language</label>
@@ -229,7 +294,7 @@ export function BuilderTester({
                   </Select>
                 </div>
 
-                {mode === "voice" ? (
+                {mode === Mode.Voice ? (
                   <div className="space-y-1.5">
                     <label className="text-[13px] font-medium">Speaker</label>
                     <Select value={voice} onValueChange={(value) => setVoice(value as string)}>
@@ -285,17 +350,25 @@ export function BuilderTester({
           </div>
         </Collapsible>
 
-        {/* Nothing behind it yet — there is no test runner to call. Disabled
-            rather than wired to a stub, so it cannot look like it half-worked. */}
         <Button
           size="lg"
-          disabled
+          disabled={mode !== Mode.Voice || call === BrowserVoiceStatus.Connecting}
+          onClick={mode === Mode.Voice ? toggleCall : undefined}
           className={cn("h-12 w-full rounded-2xl text-sm disabled:opacity-100")}
         >
-          {action}
+          {mode !== Mode.Voice ? action : null}
+          {mode === Mode.Voice && call === BrowserVoiceStatus.Idle ? action : null}
+          {mode === Mode.Voice && call === BrowserVoiceStatus.Connecting
+            ? CallLabel.Connecting
+            : null}
+          {mode === Mode.Voice && call === BrowserVoiceStatus.Live ? CallLabel.End : null}
         </Button>
         <p className="text-center text-[11px] text-muted-foreground">
-          Test runs are not connected yet
+          {mode === Mode.Voice
+            ? call === BrowserVoiceStatus.Live
+              ? CallHint.Live
+              : CallHint.Ready
+            : CallHint.Unavailable}
         </p>
       </div>
     </aside>
