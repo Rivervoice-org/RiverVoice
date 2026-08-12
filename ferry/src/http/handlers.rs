@@ -1,15 +1,14 @@
+use crate::audio::rnnoise::RnnoiseFilter;
+use crate::pipeline::pipeline::Pipeline;
+use crate::serializer::browser::BrowserSerializer;
+use crate::stages::denoiser::DenoiserStage;
+use crate::transport::base::BaseTransport;
+use crate::transport::websockets::transport::WebSocketClient;
 use axum::{
     extract::ws::WebSocketUpgrade,
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use tokio::sync::mpsc;
-
-use crate::frames::frames::Frame;
-use crate::processor::processor::FrameIo;
-use crate::serializer::browser::BrowserSerializer;
-use crate::transport::base::BaseTransport;
-use crate::transport::websockets::transport::WebSocketClient;
 
 pub async fn health() -> StatusCode {
     StatusCode::OK
@@ -30,11 +29,15 @@ pub async fn browser_stream(ws: WebSocketUpgrade, header: HeaderMap) -> Response
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    // No stages exist yet, so wire the transport back onto itself: frames
-    // it pushes come straight back to it, echoing the caller's audio.
-    // Once stages exist, this becomes: transport -> stage1 -> ... -> transport.
-    let (tx, rx) = mpsc::channel::<Frame>(64);
-    let io = FrameIo::new("browser", rx, tx);
+    // Stages in order; the pipeline creates the channels between them,
+    // spawns them, and returns the transport's two ends. The caller hears
+    // their own voice back, denoised.
+    let io = Pipeline::spawn(
+        "browser",
+        vec![Box::new(DenoiserStage::new(vec![Box::new(
+            RnnoiseFilter::new(),
+        )]))],
+    );
 
     let serializer = BrowserSerializer::new(BROWSER_SAMPLE_RATE, BROWSER_NUM_CHANNELS);
     let base = BaseTransport::new(io, Box::new(serializer));

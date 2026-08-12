@@ -1,4 +1,5 @@
 use axum::{Router, middleware, routing::get};
+use tower_http::trace::TraceLayer;
 
 use super::handlers;
 use crate::auth::middleware::require_session;
@@ -13,11 +14,13 @@ fn ws_routes() -> Router {
         .route_layer(middleware::from_fn(require_session))
 }
 
-pub async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
-    let router = http_routes().merge(ws_routes());
+pub async fn start_server() -> anyhow::Result<()> {
+    let router = http_routes()
+        .merge(ws_routes())
+        .layer(TraceLayer::new_for_http());
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
-    println!("listening on http://{}", listener.local_addr()?);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:8085").await?;
+    tracing::info!("listening on http://{}", listener.local_addr()?);
 
     axum::serve(listener, router).await?;
 
