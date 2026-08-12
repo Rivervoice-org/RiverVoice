@@ -1,5 +1,7 @@
 "use client";
 
+import * as React from "react";
+
 import { Mascot } from "@/mascots";
 import { Loop } from "@/motion/loop";
 import { Ink } from "@/motion/agent-templates/stage";
@@ -77,7 +79,23 @@ const V_LENGTH = seconds(4.4);
 
 const BARS = [0, 1, 2, 3, 4, 5, 6, 7];
 
-export function VoiceScene({ seed }: { seed: string }) {
+export function VoiceScene({
+  seed,
+  /** The caller's live input level (0–1), updated imperatively at mic-chunk
+   *  rate. A ref rather than a prop that re-renders: this changes ~30 times a
+   *  second, far faster than the bars need a React commit, and `Loop` already
+   *  re-renders every frame on its own clock — we just read the latest value
+   *  when it does. Omit while there is no live call, and the bars fall back
+   *  to the scripted idle envelope below. */
+  level,
+}: {
+  seed: string;
+  level?: React.RefObject<number>;
+}) {
+  // Smoothed toward `level.current` each frame so real mic input (which
+  // arrives in bursts, not a clean curve) doesn't make the bars stutter.
+  const smoothed = React.useRef(0);
+
   return (
     <Scene
       seed={seed}
@@ -88,17 +106,24 @@ export function VoiceScene({ seed }: { seed: string }) {
       tint="[--tint:var(--color-river)]"
     >
       {(f) => {
-        // Runs up as the line opens and eases off at the end, so the level is
-        // never a loop of identical bars pumping.
-        const level =
-          interpolate(f, [V_SPEAK, V_SPEAK + seconds(0.5)], [0, 1]) *
-          (1 - interpolate(f, [V_END, V_END + seconds(0.6)], [0, 1]));
+        let barLevel: number;
+
+        if (level) {
+          smoothed.current += (level.current - smoothed.current) * 0.35;
+          barLevel = smoothed.current;
+        } else {
+          // Idle: runs up as the line opens and eases off at the end, so it
+          // is never a loop of identical bars pumping.
+          barLevel =
+            interpolate(f, [V_SPEAK, V_SPEAK + seconds(0.5)], [0, 1]) *
+            (1 - interpolate(f, [V_END, V_END + seconds(0.6)], [0, 1]));
+        }
 
         return (
           <g transform={`translate(30 ${VIEW.h / 2})`}>
             {BARS.map((i) => {
               const wobble = Math.sin(f * 0.42 + i * 1.3) * 0.5 + Math.sin(f * 0.7 + i) * 0.5;
-              const h = 4 + level * (10 + Math.abs(wobble) * 30);
+              const h = 4 + barLevel * (10 + Math.abs(wobble) * 30);
 
               return (
                 <rect
@@ -109,7 +134,7 @@ export function VoiceScene({ seed }: { seed: string }) {
                   height={h}
                   rx={2.5}
                   fill="var(--tint)"
-                  opacity={0.32 + level * 0.5}
+                  opacity={0.32 + barLevel * 0.5}
                 />
               );
             })}
