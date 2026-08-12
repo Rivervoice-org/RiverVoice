@@ -1,7 +1,10 @@
+use std::time::Duration;
+
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::Response,
 };
+use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 
 use crate::transport::base::BaseTransport;
@@ -18,10 +21,6 @@ enum Event {
 }
 
 impl WebSocketClient {
-    pub fn new(base: BaseTransport) -> Self {
-        Self { base }
-    }
-
     pub fn connect(self, ws: WebSocketUpgrade) -> Response {
         ws.on_upgrade(move |socket| self.on_connect(socket))
     }
