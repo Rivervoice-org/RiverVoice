@@ -8,17 +8,35 @@ static NEXT_FRAME_ID: AtomicU32 = AtomicU32::new(0);
 /// etc.) must be represented as a `FrameKind` variant to move through it.
 pub struct Frame {
     id: u32,
-    name: String,
     kind: FrameKind,
 }
 
 impl Frame {
-    pub fn get_id() -> u32 {
+    pub fn new(kind: FrameKind) -> Self {
+        Self {
+            id: Self::next_id(),
+            kind,
+        }
+    }
+
+    fn next_id() -> u32 {
         NEXT_FRAME_ID.fetch_add(1, Ordering::Relaxed)
+    }
+
+    pub fn get_id(&self) -> u32 {
+        self.id
     }
 
     pub fn get_name(&self) -> String {
         format!("{}-{}", self.kind.get_name(), self.id)
+    }
+
+    pub fn kind(&self) -> &FrameKind {
+        &self.kind
+    }
+
+    pub fn into_kind(self) -> FrameKind {
+        self.kind
     }
 }
 
@@ -39,9 +57,10 @@ impl FrameKind {
 /// `RawAudioFrame` (via `FrameKind::RawAudio`) before it can enter the
 /// pipeline.
 pub struct RawAudioFrame {
-    frame: Frame,
-    audio: u8,
-    sample_rate: u16,
-    num_channels: u16,
-    num_frames: u16,
+    /// PCM sample bytes (s16le).
+    pub audio: Vec<u8>,
+    pub sample_rate: u32,
+    pub num_channels: u16,
+    /// Samples per channel in `audio`.
+    pub num_frames: u32,
 }
