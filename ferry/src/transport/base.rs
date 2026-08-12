@@ -26,9 +26,12 @@ impl BaseTransport {
     /// deserialize is dropped (logged), not fatal to the call.
     pub async fn push_wire_message(&self, msg: Message) -> bool {
         match self.serializer.deserialize(msg) {
-            Ok(frame) => self.io.push(frame).await,
+            Ok(frame) => {
+                tracing::debug!("{}: pushing frame {}", self.io.name(), frame.get_name());
+                self.io.push(frame).await
+            }
             Err(e) => {
-                eprintln!("{}: dropping undeserializable message: {e}", self.io.name());
+                tracing::warn!("{}: dropping undeserializable message: {e}", self.io.name());
                 true
             }
         }
@@ -42,7 +45,7 @@ impl BaseTransport {
             match self.serializer.serialize(frame) {
                 Ok(msg) => return Some(msg),
                 Err(e) => {
-                    eprintln!("{}: dropping unserializable frame: {e}", self.io.name());
+                    tracing::warn!("{}: dropping unserializable frame: {e}", self.io.name());
                 }
             }
         }
