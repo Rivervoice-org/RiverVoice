@@ -5,6 +5,10 @@ edition = "2024"
 
 [dependencies]
 axum = { version = "0.8.9", features = ["ws"] }
+futures-util = "0.3"
+jsonwebtoken = "9"
+nnnoiseless = "0.5"
+serde = { version = "1", features = ["derive"] }
 tokio = { version = "1.53.1", features = ["full"] }
 
 [profile.dev]
