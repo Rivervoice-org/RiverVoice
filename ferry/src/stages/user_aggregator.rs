@@ -87,10 +87,15 @@ impl FrameProcessor for UserAggregatorStage {
 
             if self.controller.turn_open() {
                 if let FrameKind::Transcription(t) = frame.kind() {
-                    if !self.buffer.is_empty() {
-                        self.buffer.push(' ');
+                    // Interim/eager transcripts are cumulative re-guesses of
+                    // the same utterance, not new text — only a final
+                    // transcript is actually new content to append.
+                    if t.is_final {
+                        if !self.buffer.is_empty() {
+                            self.buffer.push(' ');
+                        }
+                        self.buffer.push_str(&t.text);
                     }
-                    self.buffer.push_str(&t.text);
                 }
             }
 
