@@ -227,6 +227,29 @@ fn flux_language_hint(language: Language) -> Option<&'static str> {
 /// pipeline, see [`build_url`]) and `language_hints` (lives on
 /// [`SttConfig`]'s `languages` field, shared across every provider, same as
 /// classic Deepgram's `language`).
+impl DeepgramFluxSttConfig {
+    /// Deepgram's own documented defaults, written explicitly rather
+    /// than left as `None`/omitted from the request. Functionally the
+    /// same as today, Deepgram applies these same values server-side
+    /// when a parameter is absent, but stated here so they don't
+    /// silently drift if Deepgram ever changes its own default; what
+    /// ferry asks for is then this file, not a synced docs page.
+    /// <https://developers.deepgram.com/docs/flux/quickstart>
+    pub fn new() -> Self {
+        Self {
+            model: Some("flux-general-en".into()),
+            eot_threshold: Some(0.7),
+            eot_timeout_ms: Some(5000),
+            // No documented recommended value: Deepgram gives a usable
+            // range (0.3-0.9) but explicitly declines to prescribe one,
+            // since it's a deployment-specific latency/false-start
+            // tradeoff. Left unset rather than guessing.
+            eager_eot_threshold: None,
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct DeepgramFluxSttConfig {
     /// e.g. "flux-general-en" or "flux-general-multi". Defaults to

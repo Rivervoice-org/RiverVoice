@@ -1,10 +1,7 @@
-use std::time::Duration;
-
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::Response,
 };
-use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 
 use crate::transport::base::BaseTransport;
