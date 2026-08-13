@@ -58,21 +58,36 @@ impl Upsampler {
 /// as audible artefacts.
 pub struct Downsampler {
     ratio: usize,
+    /// Samples carried over from the previous call that didn't yet fill a
+    /// whole group of `ratio` — without this, a call whose length isn't a
+    /// multiple of `ratio` would lose them outright instead of averaging
+    /// them in once enough arrive. Stateful across calls for the same
+    /// reason `Upsampler` carries `last_in`.
+    pending: Vec<f32>,
 }
 
 impl Downsampler {
     pub fn new(ratio: usize) -> Self {
-        Self { ratio }
+        Self {
+            ratio,
+            pending: Vec::new(),
+        }
     }
 
-    /// Appends the downsampled version of `samples` onto `out`.
-    /// `samples.len()` must be a multiple of the ratio; any remainder is
-    /// dropped rather than left half-averaged.
-    pub fn push(&self, samples: &[f32], out: &mut VecDeque<i16>) {
-        for group in samples.chunks_exact(self.ratio) {
+    /// Appends the downsampled version of `samples` onto `out`. Any
+    /// trailing remainder that doesn't fill a whole group is held back
+    /// and completed by the next call, rather than dropped.
+    pub fn push(&mut self, samples: &[f32], out: &mut VecDeque<i16>) {
+        self.pending.extend_from_slice(samples);
+
+        let mut consumed = 0;
+        while self.pending.len() - consumed >= self.ratio {
+            let group = &self.pending[consumed..consumed + self.ratio];
             let mean = group.iter().sum::<f32>() / self.ratio as f32;
             let clamped = mean.round().clamp(f32::from(i16::MIN), f32::from(i16::MAX));
             out.push_back(clamped as i16);
+            consumed += self.ratio;
         }
+        self.pending.drain(..consumed);
     }
 }
