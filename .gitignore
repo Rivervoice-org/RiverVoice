@@ -41,3 +41,6 @@ yarn-error.log*
 
 # Downloaded dev tools
 .tools/
+
+# local scratch notes
+NOTES.md
