@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 
-use crate::frames::frames::{Frame, FrameKind, UserTurnAggregationFrame};
+use crate::audio::vad::{VadStateMachine, VadTransition};
+use crate::frames::frames::{Frame, FrameKind, RawAudioFrame, UserTurnAggregationFrame};
 use crate::processor::processor::{FrameIo, FrameProcessor};
 use crate::turns::controller::{TurnController, TurnEvent};
 
@@ -18,6 +19,13 @@ pub struct UserAggregatorStage {
     /// started, joined with spaces. Cleared when a new turn starts,
     /// flushed and cleared when the current one ends.
     buffer: String,
+    /// Local VAD, consulted on every `RawAudio` frame that passes
+    /// through. `None` if no VAD was configured, a deployment that only
+    /// wants the vendor's own `UserStartedSpeaking` or a configured
+    /// start/stop strategy behaves exactly as if this field didn't
+    /// exist.
+    vad: Option<VadStateMachine>,
+    vad_started_at: Option<u32>,
 }
 
 impl UserAggregatorStage {
@@ -25,7 +33,18 @@ impl UserAggregatorStage {
         Self {
             controller,
             buffer: String::new(),
+            vad: None,
+            vad_started_at: None,
         }
+    }
+
+    /// Adds local VAD. Every `RawAudio` frame that reaches this stage is
+    /// run through it, and a confirmed speech/silence transition is
+    /// folded into the turn exactly like a real `UserStartedSpeaking`/
+    /// `UserStoppedSpeaking` frame would be.
+    pub fn with_vad(mut self, vad: VadStateMachine) -> Self {
+        self.vad = Some(vad);
+        self
     }
 
     /// Pushes the buffered text downstream as one [`UserTurnAggregationFrame`]
@@ -40,6 +59,44 @@ impl UserAggregatorStage {
             UserTurnAggregationFrame { text },
         )))
         .await
+    }
+
+    /// Runs VAD (if configured) on one `RawAudio` frame and, if it
+    /// confirms a transition, folds the equivalent synthetic frame kind
+    /// into the turn controller, the same path a real
+    /// `UserStartedSpeaking`/`UserStoppedSpeaking` frame takes. `None`
+    /// when there's no VAD, or nothing to report yet, matching
+    /// `RawAudio`'s no-op behavior in [`TurnController::observe`] before
+    /// any VAD existed.
+    fn observe_audio(&mut self, audio: &RawAudioFrame) -> Option<TurnEvent> {
+        let vad = self.vad.as_mut()?;
+
+        match self.vad_started_at {
+            None => {
+                vad.start(audio.sample_rate);
+                self.vad_started_at = Some(audio.sample_rate);
+            }
+            Some(rate) if rate != audio.sample_rate => {
+                tracing::warn!(
+                    expected = rate,
+                    got = audio.sample_rate,
+                    "user-aggregator: sample rate changed mid-call, vad still using the original rate"
+                );
+            }
+            Some(_) => {}
+        }
+
+        let samples: Vec<i16> = audio
+            .audio
+            .chunks_exact(2)
+            .map(|b| i16::from_le_bytes([b[0], b[1]]))
+            .collect();
+
+        let kind = match vad.push(&samples)? {
+            VadTransition::Speaking => FrameKind::UserStartedSpeaking,
+            VadTransition::Quiet => FrameKind::UserStoppedSpeaking,
+        };
+        self.controller.observe(&kind)
     }
 }
 
@@ -76,7 +133,10 @@ impl FrameProcessor for UserAggregatorStage {
                 break; // upstream closed: run ends, dropping `io`
             };
 
-            let event = self.controller.observe(frame.kind());
+            let event = match frame.kind() {
+                FrameKind::RawAudio(audio) => self.observe_audio(audio),
+                kind => self.controller.observe(kind),
+            };
 
             // A turn starting clears the buffer before this frame's
             // own text (if any) is added — the frame that opened the
