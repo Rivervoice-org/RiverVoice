@@ -10,7 +10,6 @@ use tokio_tungstenite::tungstenite::Message;
 
 use super::{connect_with_retries, percent_encode};
 use crate::serializer::deepgram::{DeepgramEvent, parse_message};
-use crate::services::stt::language::Language;
 use crate::services::stt::provider::{
     SttConfig, SttConfigKind, SttError, SttEvent, SttProvider, SttSession, Transcript,
     WsOutboundClient,
@@ -305,6 +304,46 @@ fn build_url(config: &SttConfig, vendor: &DeepgramSttConfig) -> String {
 /// - `detect_language`: unsupported for streaming. Deepgram's own docs:
 ///   "Language Detection is not currently supported for streaming."
 ///   <https://developers.deepgram.com/docs/language-detection>
+impl DeepgramSttConfig {
+    /// The subset of Deepgram's knobs ferry benefits from by default,
+    /// not Deepgram's own defaults, which are tuned for a generic
+    /// caller with no turn detection or LLM downstream of its own.
+    ///
+    /// - `interim_results`: on. Required for `utterance_end_ms` to ever
+    ///   fire (see its doc comment), and separately what
+    ///   `MinWordsUserTurnStartStrategy` wants for a fast turn start
+    ///   without waiting on a final transcript.
+    /// - `utterance_end_ms`: 1000. A real `UserStoppedSpeaking` signal
+    ///   from Deepgram itself, rather than relying on `TurnController`'s
+    ///   blunt inactivity watchdog for every turn. 1000ms is also
+    ///   Deepgram's own documented minimum: interim results arrive about
+    ///   once a second, so a lower value has nothing to trigger on.
+    ///   <https://developers.deepgram.com/docs/utterance-end>
+    /// - `vad_events`: on. A fast `UserStartedSpeaking` signal ahead of
+    ///   any transcript. Safe alongside a local VAD too:
+    ///   `TurnController::observe` treats a repeated start as a no-op,
+    ///   so whichever fires first just wins.
+    /// - `smart_format`: on. Every transcript here eventually reaches an
+    ///   LLM; unformatted, unpunctuated text only makes that worse. Not
+    ///   paired with `punctuate`: Deepgram's docs say smart_format
+    ///   already enables punctuation, setting both is redundant.
+    ///   <https://developers.deepgram.com/docs/smart-format>
+    ///
+    /// Everything else (redaction, diarization, billing tags, a
+    /// callback URL, ...) stays unset: opt-in features with real
+    /// cost/behavior/privacy implications a generic default must not
+    /// switch on unasked.
+    pub fn new() -> Self {
+        Self {
+            interim_results: Some(true),
+            utterance_end_ms: Some(1000),
+            vad_events: Some(true),
+            smart_format: Some(true),
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct DeepgramSttConfig {
     /// e.g. "nova-3-general". See Deepgram's model list for what a given
