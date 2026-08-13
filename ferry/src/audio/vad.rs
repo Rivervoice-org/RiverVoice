@@ -121,9 +121,14 @@ impl VadStateMachine {
     /// Feeds one chunk of audio through, running the model on every
     /// whole frame it completes. Returns the transition this chunk
     /// caused, if any; a chunk can complete several model-frames but at
-    /// most one transition is meaningful to report, the most recent one
-    /// (an earlier one in the same chunk is already stale by the time
-    /// the caller sees it).
+    /// most one transition is reported, the most recent one (an earlier
+    /// one in the same chunk is already stale by the time the caller
+    /// sees it). If a single chunk both opens and closes a turn, the
+    /// opening transition is silently dropped along with it. That
+    /// requires a chunk at least as long as `start`/`stop`'s debounce
+    /// window, which the small chunks this pipeline actually uses
+    /// (~20-30ms against a ~200ms debounce) never approach, but a much
+    /// larger chunk size or a much shorter debounce could hit it.
     pub fn push(&mut self, samples: &[i16]) -> Option<VadTransition> {
         self.pending.extend_from_slice(samples);
 
