@@ -6,8 +6,8 @@ use crate::serializer::serializer::FrameSerializer;
 
 /// What every transport owns, regardless of its wire: access to the
 /// pipeline and the serializer that speaks the wire's dialect. Concrete
-/// transports (WebSocket today, WebRTC later) embed this
-/// and add only their wire-specific plumbing.
+/// transports (WebSocket today, WebRTC later) embed this and add only
+/// their wire-specific plumbing.
 ///
 /// The boundary: `BaseTransport` knows everything pipeline-facing and
 /// nothing wire-facing. no sockets, no connection handling.
@@ -21,15 +21,12 @@ impl BaseTransport {
         Self { io, serializer }
     }
 
-    /// Returns `false` when the pipeline is gone (torn down) — the
+    /// Returns `false` when the pipeline is gone (torn down); the
     /// transport should stop reading its wire. A message that fails to
     /// deserialize is dropped (logged), not fatal to the call.
     pub async fn push_wire_message(&self, msg: Message) -> bool {
         match self.serializer.deserialize(msg) {
-            Ok(frame) => {
-                tracing::debug!("{}: pushing frame {}", self.io.name(), frame.get_name());
-                self.io.push(frame).await
-            }
+            Ok(frame) => self.io.push(frame).await,
             Err(e) => {
                 tracing::warn!("{}: dropping undeserializable message: {e}", self.io.name());
                 true
@@ -37,7 +34,7 @@ impl BaseTransport {
         }
     }
 
-    /// Returns `None` when the pipeline shut down — the call is over and
+    /// Returns `None` when the pipeline shut down; the call is over and
     /// the transport should close its wire. A frame that fails to serialize
     /// is skipped (logged), and the next frame is tried.
     pub async fn next_wire_message(&mut self) -> Option<Message> {
@@ -45,7 +42,12 @@ impl BaseTransport {
             match self.serializer.serialize(frame) {
                 Ok(msg) => return Some(msg),
                 Err(e) => {
-                    tracing::warn!("{}: dropping unserializable frame: {e}", self.io.name());
+                    // Routine, not a problem: a pipeline can (and here,
+                    // does) produce frames a given wire format has no
+                    // representation for at all — e.g. a transcript, on
+                    // a serializer that only knows raw audio. Every such
+                    // frame hits this once by design, not by mistake.
+                    tracing::debug!("{}: dropping unserializable frame: {e}", self.io.name());
                 }
             }
         }

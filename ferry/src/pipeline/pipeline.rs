@@ -10,7 +10,7 @@ const STAGE_QUEUE_SIZE: usize = 64;
 /// The assembler. Its whole job happens once, before the call starts:
 /// create the channel between each adjacent pair of stages, hand every
 /// stage its two ends, spawn each stage's task, and return the leftover
-/// ends to the transport. During the call the pipeline does nothing —
+/// ends to the transport. During the call the pipeline does nothing:
 /// stages work, channels connect.
 pub struct Pipeline;
 
@@ -24,14 +24,29 @@ impl Pipeline {
     /// closes and shutdown ripples through every stage in order.
     pub fn spawn(name: &str, stages: Vec<Box<dyn FrameProcessor>>) -> FrameIo {
         let (into_first, mut prev_exit) = mpsc::channel::<Frame>(STAGE_QUEUE_SIZE);
+        let (into_first_control, mut prev_exit_control) = mpsc::channel::<Frame>(STAGE_QUEUE_SIZE);
 
         for stage in stages {
             let (entrance, exit) = mpsc::channel::<Frame>(STAGE_QUEUE_SIZE);
-            let io = FrameIo::new(stage.name(), prev_exit, entrance);
+            let (entrance_control, exit_control) = mpsc::channel::<Frame>(STAGE_QUEUE_SIZE);
+            let io = FrameIo::new(
+                stage.name(),
+                prev_exit,
+                prev_exit_control,
+                entrance,
+                entrance_control,
+            );
             tokio::spawn(stage.run(io));
             prev_exit = exit;
+            prev_exit_control = exit_control;
         }
 
-        FrameIo::new(name, prev_exit, into_first)
+        FrameIo::new(
+            name,
+            prev_exit,
+            prev_exit_control,
+            into_first,
+            into_first_control,
+        )
     }
 }

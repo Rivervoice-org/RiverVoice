@@ -1,33 +1,39 @@
-use std::future::Future;
-use std::pin::Pin;
-
+use async_trait::async_trait;
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::frames::frames::Frame;
-
-/// The future a processor's `run` returns. Boxed so the pipeline can hold
-/// any processor as `Box<dyn FrameProcessor>` without knowing its type.
-pub type ProcessorFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
+use crate::frames::frames::{Frame, FrameKind};
 
 /// A processor's (or transport's) access to the pipeline: where its
 /// frames come from and where it pushes them. Wiring is the pipeline's
-/// job — the holder never knows who is on the other end of either side.
+/// job. The holder never knows who is on the other end of either side.
+///
+/// Two queues run between each pair of stages, not one: `upstream`/
+/// `downstream` carry ordinary work, and `control`/`downstream_control`
+/// carry frames that must be seen ahead of whatever's already backed up
+/// (see [`FrameKind::is_control`](crate::frames::frames::FrameKind::is_control)).
+/// [`FrameIo::take`] always drains the control queue first.
 pub struct FrameIo {
     name: String,
     upstream: Receiver<Frame>,
+    control: Receiver<Frame>,
     downstream: Sender<Frame>,
+    downstream_control: Sender<Frame>,
 }
 
 impl FrameIo {
     pub fn new(
         name: impl Into<String>,
         upstream: Receiver<Frame>,
+        control: Receiver<Frame>,
         downstream: Sender<Frame>,
+        downstream_control: Sender<Frame>,
     ) -> Self {
         Self {
             name: name.into(),
             upstream,
+            control,
             downstream,
+            downstream_control,
         }
     }
 
@@ -36,15 +42,45 @@ impl FrameIo {
         &self.name
     }
 
-    /// Pushes a frame onward. `false` means downstream is gone — wind down.
+    /// Pushes a frame onward, onto whichever of the two queues it belongs
+    /// on. `false` means downstream is gone, wind down.
     pub async fn push(&self, frame: Frame) -> bool {
-        self.downstream.send(frame).await.is_ok()
+        let queue = if frame.kind().is_control() {
+            &self.downstream_control
+        } else {
+            &self.downstream
+        };
+        queue.send(frame).await.is_ok()
     }
 
-    /// Next frame for this holder. `None` means upstream closed — the call
-    /// is over; finish in-flight work and return.
+    /// Next frame for this holder, control queue first. `None` means both
+    /// queues are closed and drained, so the call is over; finish
+    /// in-flight work and return.
     pub async fn take(&mut self) -> Option<Frame> {
-        self.upstream.recv().await
+        tokio::select! {
+            biased;
+            control = self.control.recv() => match control {
+                Some(frame) => {
+                    if matches!(frame.kind(), FrameKind::Interruption) {
+                        self.flush();
+                    }
+                    Some(frame)
+                }
+                // The control queue is closed and drained, but the
+                // regular queue may still have work buffered — fall
+                // through to it instead of ending the call early.
+                None => self.upstream.recv().await,
+            },
+            work = self.upstream.recv() => work,
+        }
+    }
+
+    /// Drops every frame currently buffered in the work queue. Called
+    /// when an interruption arrives on the control queue, so a processor
+    /// picks its next frame up fresh instead of still grinding through
+    /// work from before the user cut in.
+    fn flush(&mut self) {
+        while self.upstream.try_recv().is_ok() {}
     }
 }
 
@@ -54,7 +90,7 @@ impl FrameIo {
 ///
 /// The rules every processor must follow:
 ///
-/// 1. **Two hands only.** A processor knows `upstream` and `downstream` —
+/// 1. **Two hands only.** A processor knows `upstream` and `downstream`,
 ///    never which processors sit on the other end of either. Wiring is
 ///    the pipeline's job.
 /// 2. **Process what you understand, forward the rest untouched.** A frame
@@ -64,18 +100,18 @@ impl FrameIo {
 ///    closes (the transport hung up), then finishes any in-flight work,
 ///    drops `downstream`, and returns. Closing `downstream` propagates
 ///    shutdown to the next stage in the pipeline.
-/// 4. **On interruption, flush and re-stamp — never signal backward as a
-///    `Frame`.** A processor watches the shared turn number; when it
-///    changes, drop any in-flight/queued work from the old turn and start
-///    stamping new frames with the new turn. Signaling "the turn changed"
-///    is the watch channel's job, not a `Frame` sent upstream — frames only
-///    ever flow downstream, so live user speech can never be mistaken for
-///    stale work and discarded.
+/// 4. **Interruptions travel the control queue.** An
+///    [`Interruption`](crate::frames::frames::FrameKind::Interruption)
+///    frame is pushed like any other, but [`FrameIo`] routes it onto the
+///    control queue, where it's seen ahead of whatever work is already
+///    backed up. A processor only has to actually forward it downstream
+///    (per rule 2) for the next stage to get the same head start.
 ///
+#[async_trait]
 pub trait FrameProcessor: Send {
     /// Name used in logs and metrics (e.g. "stt", "vad").
     fn name(&self) -> &'static str;
 
     /// Consumes the processor and runs it as one stage of a call's pipeline.
-    fn run(self: Box<Self>, io: FrameIo) -> ProcessorFuture;
+    async fn run(self: Box<Self>, io: FrameIo);
 }

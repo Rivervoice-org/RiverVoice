@@ -26,9 +26,9 @@ pub enum AuthError {
 
 /// Verifies a harbor-issued session JWT (the `rv_session` cookie value).
 ///
-/// Pins the algorithm to HS256 — same protection as harbor's
+/// Pins the algorithm to HS256, same protection as harbor's
 /// `jwt.WithValidMethods`, so a token claiming `alg=none` is rejected before
-/// its signature is ever checked — and requires `exp` to be present, same as
+/// its signature is ever checked. Also requires `exp` to be present, same as
 /// harbor's `jwt.WithExpirationRequired()`.
 pub fn verify_token(token: &str, secret: &[u8]) -> Result<Session, AuthError> {
     let mut validation = Validation::new(Algorithm::HS256);

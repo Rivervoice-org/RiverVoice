@@ -1,15 +1,14 @@
-mod audio;
-mod auth;
-mod frames;
-mod http;
-mod pipeline;
-mod processor;
-mod serializer;
-mod stages;
-mod transport;
+use ferry::http;
 
 #[tokio::main]
 async fn main() {
+    // rustls 0.23 no longer auto-selects a crypto backend; without this,
+    // the first outbound wss:// connection (e.g. to an STT vendor) panics.
+    // Must run before anything opens a TLS connection.
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("failed to install rustls crypto provider");
+
     // Repo root first, so one .env serves compose and every service. Missing
     // is fine: deployed environments set real variables.
     let _ = dotenvy::from_filename("../.env");
