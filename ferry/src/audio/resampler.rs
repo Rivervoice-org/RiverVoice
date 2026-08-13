@@ -1,9 +1,13 @@
 use std::collections::VecDeque;
 
-/// The whole-number factor between two rates, or `None` if one does not
-/// divide the other evenly. Only whole-number ratios are supported: it
-/// covers every rate this pipeline carries (8k, 16k, 24k, 48k) without
-/// the cost of a general-purpose resampler.
+/// The whole-number factor between two rates, or `None` if `from` does
+/// not divide `to` evenly. Only whole-number ratios are supported — this
+/// covers every rate this pipeline actually pairs against 48 kHz (8k,
+/// 16k, 24k), without the cost of a general-purpose resampler, but it is
+/// not a general any-rate-to-any-rate converter: e.g. 16k↔24k (a 1.5×
+/// ratio) returns `None`. Fine as long as every call site's `to` is a
+/// multiple of `from` in practice — see [`RnnoiseFilter`](crate::audio::rnnoise::RnnoiseFilter),
+/// today's only caller, which always resamples against a fixed 48 kHz target.
 pub fn integer_ratio(from: u32, to: u32) -> Option<usize> {
     if from == 0 || to == 0 || to % from != 0 {
         return None;
