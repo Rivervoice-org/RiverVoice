@@ -61,14 +61,13 @@ impl UserAggregatorStage {
         .await
     }
 
-    /// Runs VAD (if configured) on one `RawAudio` frame and, if it
-    /// confirms a transition, folds the equivalent synthetic frame kind
-    /// into the turn controller, the same path a real
-    /// `UserStartedSpeaking`/`UserStoppedSpeaking` frame takes. `None`
-    /// when there's no VAD, or nothing to report yet, matching
-    /// `RawAudio`'s no-op behavior in [`TurnController::observe`] before
-    /// any VAD existed.
-    fn observe_audio(&mut self, audio: &RawAudioFrame) -> Option<TurnEvent> {
+    /// Runs VAD (if configured) on one `RawAudio` frame. `None` when
+    /// there's no VAD, or nothing to report yet; otherwise the frame
+    /// kind a confirmed transition corresponds to, for the caller to
+    /// both fold into the turn controller and push onto the belt as its
+    /// own frame, the same as a real `UserStartedSpeaking`/
+    /// `UserStoppedSpeaking` frame arriving from a vendor would be.
+    fn observe_audio(&mut self, audio: &RawAudioFrame) -> Option<FrameKind> {
         let vad = self.vad.as_mut()?;
 
         match self.vad_started_at {
@@ -92,11 +91,10 @@ impl UserAggregatorStage {
             .map(|b| i16::from_le_bytes([b[0], b[1]]))
             .collect();
 
-        let kind = match vad.push(&samples)? {
+        Some(match vad.push(&samples)? {
             VadTransition::Speaking => FrameKind::UserStartedSpeaking,
             VadTransition::Quiet => FrameKind::UserStoppedSpeaking,
-        };
-        self.controller.observe(&kind)
+        })
     }
 }
 
@@ -133,9 +131,13 @@ impl FrameProcessor for UserAggregatorStage {
                 break; // upstream closed: run ends, dropping `io`
             };
 
-            let event = match frame.kind() {
+            let vad_kind = match frame.kind() {
                 FrameKind::RawAudio(audio) => self.observe_audio(audio),
-                kind => self.controller.observe(kind),
+                _ => None,
+            };
+            let event = match &vad_kind {
+                Some(kind) => self.controller.observe(kind),
+                None => self.controller.observe(frame.kind()),
             };
 
             // A turn starting clears the buffer before this frame's
@@ -163,6 +165,18 @@ impl FrameProcessor for UserAggregatorStage {
             // out first.
             if !io.push(frame).await {
                 break; // downstream gone, the call is being torn down
+            }
+
+            // A VAD-detected boundary is represented on the belt the
+            // same way a vendor-provided one is: as its own
+            // UserStartedSpeaking/UserStoppedSpeaking frame, not only
+            // via the Interruption/aggregation that follows. Otherwise
+            // a downstream stage watching for that frame kind
+            // specifically would only ever see vendor-driven turns.
+            if let Some(kind) = vad_kind {
+                if !io.push(Frame::new(kind)).await {
+                    break;
+                }
             }
 
             match event {
