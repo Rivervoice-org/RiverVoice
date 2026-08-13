@@ -81,8 +81,23 @@ impl FrameKind {
     /// Whether this frame belongs on [`FrameIo`](crate::processor::processor::FrameIo)'s
     /// control queue: seen ahead of whatever's already backed up on the
     /// regular queue, rather than waiting in line behind it.
+    ///
+    /// `UserStartedSpeaking` belongs here for more than priority: a turn
+    /// starting is often immediately followed by an `Interruption` (see
+    /// [`UserAggregatorStage`](crate::stages::user_aggregator::UserAggregatorStage)),
+    /// and `Interruption` triggers [`FrameIo::take`]'s flush of the
+    /// *regular* queue. If `UserStartedSpeaking` sat on the regular queue,
+    /// a downstream stage that hadn't read it yet by the time the
+    /// `Interruption` arrived could have it discarded by that same flush.
+    /// Keeping both on the control queue preserves their send order
+    /// instead: `UserStartedSpeaking` is always delivered as its own item
+    /// before the `Interruption` behind it is ever seen, so it can never
+    /// be caught in that Interruption's own flush.
     pub fn is_control(&self) -> bool {
-        matches!(self, FrameKind::Interruption)
+        matches!(
+            self,
+            FrameKind::Interruption | FrameKind::UserStartedSpeaking
+        )
     }
 }
 
