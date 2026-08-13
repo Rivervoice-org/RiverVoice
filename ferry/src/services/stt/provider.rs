@@ -20,16 +20,48 @@ pub struct Transcript {
     pub is_final: bool,
 }
 
+/// Everything an [`SttProvider`] can push back while a session is open.
+/// Turn boundaries share this stream with transcripts rather than getting
+/// their own channel, because a provider that detects turns emits both
+/// from the same read loop off the same connection.
+pub enum SttEvent {
+    Transcript(Transcript),
+    /// The user started speaking, per the provider's own detection.
+    UserStartedSpeaking,
+    /// The user's turn ended, per the provider's own detection.
+    UserStoppedSpeaking,
+}
+
+/// Whether an [`SttProvider`] detects speaking turns itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TurnDetection {
+    /// The provider has no turn detection of its own; something else
+    /// (local VAD, a smart-turn model, ...) must supply
+    /// `UserStartedSpeaking`/`UserStoppedSpeaking`.
+    Local,
+    /// The provider emits `UserStartedSpeaking`/`UserStoppedSpeaking`
+    /// itself (e.g. Deepgram Flux's `StartOfTurn`/`EndOfTurn`), so nothing
+    /// else needs to.
+    External,
+}
+
 pub trait SttProvider: Send {
     fn name(&self) -> &'static str;
+
+    /// Whether this provider supplies its own turn detection. Defaults to
+    /// [`TurnDetection::Local`]: most providers only transcribe, so the
+    /// pipeline should assume it still needs its own turn detector unless
+    /// a provider opts in.
+    fn turn_detection(&self) -> TurnDetection {
+        TurnDetection::Local
+    }
 
     fn open(
         &self,
         config: SttConfig,
     ) -> Pin<
         Box<
-            dyn Future<Output = Result<(Box<dyn SttSession>, Receiver<Transcript>), SttError>>
-                + Send,
+            dyn Future<Output = Result<(Box<dyn SttSession>, Receiver<SttEvent>), SttError>> + Send,
         >,
     >;
 }
@@ -92,7 +124,10 @@ const SILENCE_KEEPALIVE_SAMPLES: usize = 480;
 
 /// An outbound WebSocket to an STT vendor's own API (axum can't dial
 /// out, so this is `tokio-tungstenite`), holding the write half so
-/// `send_audio` and the keepalive can both use it safely.
+/// `send_audio` and the keepalive can both use it safely. `Clone` is cheap
+/// (just the `Arc`) and lets a session and its background read/keepalive
+/// tasks each hold their own handle to the same underlying connection.
+#[derive(Clone)]
 pub struct WsOutboundClient {
     write: Arc<Mutex<SttWsWrite>>,
 }

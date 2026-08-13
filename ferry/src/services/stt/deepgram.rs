@@ -3,14 +3,24 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use serde::Deserialize;
+use futures_util::StreamExt;
 use tokio::sync::mpsc::{self, Receiver};
 use tokio::task::JoinHandle;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::http::HeaderName;
 
+use crate::serializer::deepgram::{DeepgramEvent, parse_message};
 use crate::services::stt::language::Language;
 use crate::services::stt::provider::{
-    SttConfig, SttConfigKind, SttError, SttProvider, SttSession, Transcript,
+    SttConfig, SttConfigKind, SttError, SttEvent, SttProvider, SttSession, SttWsRead, Transcript,
+    WsOutboundClient,
 };
+
+/// How many outstanding events a session can buffer before `open()`'s
+/// caller has to catch up. Generous relative to how fast Deepgram actually
+/// emits results, just enough to absorb a scheduling hiccup without
+/// unbounded growth.
+const EVENT_CHANNEL_CAPACITY: usize = 32;
 
 const ENDPOINT: &str = "wss://api.deepgram.com/v1/listen";
 
@@ -38,6 +48,148 @@ pub struct DeepgramSttProvider {
 impl DeepgramSttProvider {
     pub fn new(api_key: String) -> Self {
         Self { api_key }
+    }
+}
+
+impl SttProvider for DeepgramSttProvider {
+    fn name(&self) -> &'static str {
+        "deepgram"
+    }
+
+    fn open(
+        &self,
+        config: SttConfig,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<(Box<dyn SttSession>, Receiver<SttEvent>), SttError>> + Send,
+        >,
+    > {
+        let api_key = self.api_key.clone();
+        Box::pin(async move {
+            let SttConfigKind::DeepgramSttConfig(vendor) = &config.kind else {
+                return Err(SttError::Protocol(
+                    "deepgram: config is not a DeepgramSttConfig".to_string(),
+                ));
+            };
+            let url = build_url(&config, vendor);
+            let language = config.languages.first().copied();
+
+            let (client, mut read) = connect_with_retries(&url, &api_key).await?;
+
+            let (tx, rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
+            let read_task = tokio::spawn(async move {
+                while let Some(msg) = read.next().await {
+                    let msg = match msg {
+                        Ok(msg) => msg,
+                        Err(e) => {
+                            tracing::warn!("deepgram: connection read error, closing: {e}");
+                            break;
+                        }
+                    };
+                    let Message::Text(text) = msg else {
+                        continue;
+                    };
+                    let event = match parse_message(&text) {
+                        Ok(e) => e,
+                        Err(e) => {
+                            tracing::trace!("deepgram: dropping message: {e}");
+                            continue;
+                        }
+                    };
+                    let event = match event {
+                        DeepgramEvent::Transcript(t) => SttEvent::Transcript(Transcript {
+                            text: t.text,
+                            language,
+                            is_final: t.is_final,
+                        }),
+                        DeepgramEvent::UserStartedSpeaking => SttEvent::UserStartedSpeaking,
+                        DeepgramEvent::UserStoppedSpeaking => SttEvent::UserStoppedSpeaking,
+                    };
+                    if tx.send(event).await.is_err() {
+                        break; // caller dropped the receiver, nothing left to do
+                    }
+                }
+            });
+
+            let keepalive_client = client.clone();
+            let keepalive_task = tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(KEEPALIVE_INTERVAL).await;
+                    if !keepalive_client.keepalive(None).await {
+                        break; // connection is dead; the read task will notice too
+                    }
+                }
+            });
+
+            Ok((
+                Box::new(DeepgramSttSession {
+                    client,
+                    read_task,
+                    keepalive_task,
+                }) as Box<dyn SttSession>,
+                rx,
+            ))
+        })
+    }
+}
+
+/// Dials the Deepgram WebSocket, retrying a bad start (e.g. a transient
+/// network failure) up to `MAX_RECONNECT_ATTEMPTS` times before giving up.
+/// A rejected API key fails the same way as any other connect error here;
+/// Deepgram doesn't distinguish it until the handshake completes, so
+/// there's nothing cheaper to check first.
+async fn connect_with_retries(
+    url: &str,
+    api_key: &str,
+) -> Result<(WsOutboundClient, SttWsRead), SttError> {
+    let mut attempt = 0;
+    loop {
+        match WsOutboundClient::connect(
+            url,
+            HeaderName::from_static("authorization"),
+            format!("Token {api_key}"),
+        )
+        .await
+        {
+            Ok(connected) => return Ok(connected),
+            Err(e) => {
+                attempt += 1;
+                if attempt >= MAX_RECONNECT_ATTEMPTS {
+                    return Err(e);
+                }
+                tokio::time::sleep(RECONNECT_DELAY).await;
+            }
+        }
+    }
+}
+
+/// [`SttSession`] backed by a live Deepgram WebSocket connection.
+struct DeepgramSttSession {
+    client: WsOutboundClient,
+    read_task: JoinHandle<()>,
+    keepalive_task: JoinHandle<()>,
+}
+
+impl SttSession for DeepgramSttSession {
+    fn send_audio(
+        &mut self,
+        pcm: Vec<u8>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), SttError>> + Send + '_>> {
+        Box::pin(async move { self.client.send(Message::Binary(pcm)).await })
+    }
+
+    fn close(self: Box<Self>) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        Box::pin(async move {
+            // Tells Deepgram no more audio is coming, so it flushes any final
+            // transcript instead of waiting out its own silence timeout.
+            // https://developers.deepgram.com/docs/close-stream
+            let _ = self
+                .client
+                .send(Message::Text(r#"{"type":"CloseStream"}"#.into()))
+                .await;
+            self.read_task.abort();
+            self.keepalive_task.abort();
+        })
     }
 }
 
@@ -141,6 +293,11 @@ fn build_url(config: &SttConfig, vendor: &DeepgramSttConfig) -> String {
         .join("&");
 
     format!("{ENDPOINT}?{query}")
+}
+
+/// Percent-encodes one query-string key or value per RFC 3986.
+fn percent_encode(s: &str) -> String {
+    percent_encoding::utf8_percent_encode(s, percent_encoding::NON_ALPHANUMERIC).to_string()
 }
 
 /// Deepgram's own knobs for its live streaming STT WebSocket.
