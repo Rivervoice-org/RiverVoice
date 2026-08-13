@@ -1,5 +1,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use crate::turns::strategy::TurnStrategy;
+
 static NEXT_FRAME_ID: AtomicU32 = AtomicU32::new(0);
 
 /// `Frame` is the fundamental unit of data that flows through the RiverVoice
@@ -50,6 +52,9 @@ pub enum FrameKind {
     UserStartedSpeaking,
     /// The user's turn ended. See [`FrameKind::UserStartedSpeaking`].
     UserStoppedSpeaking,
+    /// What a service can tell the rest of the pipeline about itself,
+    /// pushed once when a call starts. See [`ServiceMetadataFrame`].
+    ServiceMetadata(ServiceMetadataFrame),
 }
 
 impl FrameKind {
@@ -59,8 +64,27 @@ impl FrameKind {
             FrameKind::Transcription(_) => "TranscriptionFrame".to_string(),
             FrameKind::UserStartedSpeaking => "UserStartedSpeakingFrame".to_string(),
             FrameKind::UserStoppedSpeaking => "UserStoppedSpeakingFrame".to_string(),
+            FrameKind::ServiceMetadata(_) => "ServiceMetadataFrame".to_string(),
         }
     }
+}
+
+/// What a service announces about itself when a call starts.
+///
+/// A service that changes how the pipeline should behave says so by
+/// putting one of these on the pipeline, rather than the pipeline asking
+/// each service what it can do. Two reasons: the knowledge stays in the
+/// vendor's own file, and swapping a service mid-call re-announces
+/// without anyone having to remember to re-ask.
+///
+/// Every field is a recommendation. Explicit configuration always wins —
+/// see [`TurnStrategySelection`](crate::turns::strategy::TurnStrategySelection).
+pub struct ServiceMetadataFrame {
+    /// Which service is announcing, for logs.
+    pub service_name: String,
+    /// The turn strategy this service recommends, if it has an opinion.
+    /// `None` — the common case — leaves whatever is in force alone.
+    pub turn_strategy: Option<TurnStrategy>,
 }
 
 /// Raw, unprocessed audio as received from an external source: telephony,

@@ -13,6 +13,7 @@ use tokio_tungstenite::tungstenite::http::HeaderName;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use crate::services::stt::language::Language;
+use crate::turns::strategy::TurnStrategy;
 
 pub struct Transcript {
     pub text: String,
@@ -32,28 +33,24 @@ pub enum SttEvent {
     UserStoppedSpeaking,
 }
 
-/// Whether an [`SttProvider`] detects speaking turns itself.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TurnDetection {
-    /// The provider has no turn detection of its own; something else
-    /// (local VAD, a smart-turn model, ...) must supply
-    /// `UserStartedSpeaking`/`UserStoppedSpeaking`.
-    Local,
-    /// The provider emits `UserStartedSpeaking`/`UserStoppedSpeaking`
-    /// itself (e.g. Deepgram Flux's `StartOfTurn`/`EndOfTurn`), so nothing
-    /// else needs to.
-    External,
-}
-
 pub trait SttProvider: Send {
     fn name(&self) -> &'static str;
 
-    /// Whether this provider supplies its own turn detection. Defaults to
-    /// [`TurnDetection::Local`]: most providers only transcribe, so the
-    /// pipeline should assume it still needs its own turn detector unless
-    /// a provider opts in.
-    fn turn_detection(&self) -> TurnDetection {
-        TurnDetection::Local
+    /// The turn strategy this provider recommends, announced to the rest
+    /// of the pipeline in a
+    /// [`ServiceMetadataFrame`](crate::frames::frames::ServiceMetadataFrame)
+    /// when a call starts.
+    ///
+    /// `None` — the default, and the common case — means no opinion:
+    /// most providers only transcribe, so whatever the pipeline is
+    /// already doing stands. A provider that detects turns itself returns
+    /// [`TurnStrategy::External`].
+    ///
+    /// It is a recommendation, not an instruction: explicit configuration
+    /// wins. See
+    /// [`TurnStrategySelection`](crate::turns::strategy::TurnStrategySelection).
+    fn recommended_turn_strategy(&self) -> Option<TurnStrategy> {
+        None
     }
 
     fn open(

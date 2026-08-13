@@ -7,12 +7,12 @@ use futures_util::StreamExt;
 use tokio::sync::mpsc::{self, Receiver};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::tungstenite::http::HeaderName;
 
+use super::{connect_with_retries, percent_encode};
 use crate::serializer::deepgram::{DeepgramEvent, parse_message};
 use crate::services::stt::language::Language;
 use crate::services::stt::provider::{
-    SttConfig, SttConfigKind, SttError, SttEvent, SttProvider, SttSession, SttWsRead, Transcript,
+    SttConfig, SttConfigKind, SttError, SttEvent, SttProvider, SttSession, Transcript,
     WsOutboundClient,
 };
 
@@ -34,11 +34,6 @@ const AUDIO_ENCODING: &str = "linear16";
 /// NET-0001 error). A normal pause in conversation is enough to hit
 /// that, so a keepalive runs for the life of every session.
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
-
-/// Reconnect attempts before giving up on a connection that keeps
-/// failing immediately (e.g. a bad API key rejected at the handshake).
-const MAX_RECONNECT_ATTEMPTS: u32 = 5;
-const RECONNECT_DELAY: Duration = Duration::from_millis(750);
 
 /// [`SttProvider`] backed by Deepgram's live streaming WebSocket.
 pub struct DeepgramSttProvider {
@@ -130,36 +125,6 @@ impl SttProvider for DeepgramSttProvider {
                 rx,
             ))
         })
-    }
-}
-
-/// Dials the Deepgram WebSocket, retrying a bad start (e.g. a transient
-/// network failure) up to `MAX_RECONNECT_ATTEMPTS` times before giving up.
-/// A rejected API key fails the same way as any other connect error here;
-/// Deepgram doesn't distinguish it until the handshake completes, so
-/// there's nothing cheaper to check first.
-async fn connect_with_retries(
-    url: &str,
-    api_key: &str,
-) -> Result<(WsOutboundClient, SttWsRead), SttError> {
-    let mut attempt = 0;
-    loop {
-        match WsOutboundClient::connect(
-            url,
-            HeaderName::from_static("authorization"),
-            format!("Token {api_key}"),
-        )
-        .await
-        {
-            Ok(connected) => return Ok(connected),
-            Err(e) => {
-                attempt += 1;
-                if attempt >= MAX_RECONNECT_ATTEMPTS {
-                    return Err(e);
-                }
-                tokio::time::sleep(RECONNECT_DELAY).await;
-            }
-        }
     }
 }
 
@@ -293,11 +258,6 @@ fn build_url(config: &SttConfig, vendor: &DeepgramSttConfig) -> String {
         .join("&");
 
     format!("{ENDPOINT}?{query}")
-}
-
-/// Percent-encodes one query-string key or value per RFC 3986.
-fn percent_encode(s: &str) -> String {
-    percent_encoding::utf8_percent_encode(s, percent_encoding::NON_ALPHANUMERIC).to_string()
 }
 
 /// Deepgram's own knobs for its live streaming STT WebSocket.

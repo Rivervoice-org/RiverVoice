@@ -29,7 +29,8 @@ impl FrameSerializer for BrowserSerializer {
             FrameKind::RawAudio(audio) => Ok(Message::Binary(audio.audio.into())),
             FrameKind::Transcription(_)
             | FrameKind::UserStartedSpeaking
-            | FrameKind::UserStoppedSpeaking => {
+            | FrameKind::UserStoppedSpeaking
+            | FrameKind::ServiceMetadata(_) => {
                 anyhow::bail!("browser serializer: no wire representation for this frame yet")
             }
         }

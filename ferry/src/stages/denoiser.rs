@@ -69,7 +69,8 @@ impl FrameProcessor for DenoiserStage {
                     // Nothing to denoise; pass through unchanged.
                     other @ (FrameKind::Transcription(_)
                     | FrameKind::UserStartedSpeaking
-                    | FrameKind::UserStoppedSpeaking) => io.push(Frame::new(other)).await,
+                    | FrameKind::UserStoppedSpeaking
+                    | FrameKind::ServiceMetadata(_)) => io.push(Frame::new(other)).await,
                 };
 
                 if !pushed {
