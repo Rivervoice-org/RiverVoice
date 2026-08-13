@@ -26,10 +26,7 @@ impl BaseTransport {
     /// deserialize is dropped (logged), not fatal to the call.
     pub async fn push_wire_message(&self, msg: Message) -> bool {
         match self.serializer.deserialize(msg) {
-            Ok(frame) => {
-                tracing::debug!("{}: pushing frame {}", self.io.name(), frame.get_name());
-                self.io.push(frame).await
-            }
+            Ok(frame) => self.io.push(frame).await,
             Err(e) => {
                 tracing::warn!("{}: dropping undeserializable message: {e}", self.io.name());
                 true
@@ -45,7 +42,12 @@ impl BaseTransport {
             match self.serializer.serialize(frame) {
                 Ok(msg) => return Some(msg),
                 Err(e) => {
-                    tracing::warn!("{}: dropping unserializable frame: {e}", self.io.name());
+                    // Routine, not a problem: a pipeline can (and here,
+                    // does) produce frames a given wire format has no
+                    // representation for at all — e.g. a transcript, on
+                    // a serializer that only knows raw audio. Every such
+                    // frame hits this once by design, not by mistake.
+                    tracing::debug!("{}: dropping unserializable frame: {e}", self.io.name());
                 }
             }
         }
