@@ -42,12 +42,23 @@ impl Frame {
 
 pub enum FrameKind {
     RawAudio(RawAudioFrame),
+    Transcription(TranscriptionFrame),
+    /// The user started speaking, per whichever turn-detection is active:
+    /// an STT provider that detects turns itself (e.g. Deepgram Flux), or
+    /// Deepgram nova's own `vad_events`. No local VAD/turn-detector stage
+    /// exists yet, so today this only ever comes from an STT provider.
+    UserStartedSpeaking,
+    /// The user's turn ended. See [`FrameKind::UserStartedSpeaking`].
+    UserStoppedSpeaking,
 }
 
 impl FrameKind {
     pub fn get_name(&self) -> String {
         match self {
             FrameKind::RawAudio(_) => "RawAudioFrame".to_string(),
+            FrameKind::Transcription(_) => "TranscriptionFrame".to_string(),
+            FrameKind::UserStartedSpeaking => "UserStartedSpeakingFrame".to_string(),
+            FrameKind::UserStoppedSpeaking => "UserStoppedSpeakingFrame".to_string(),
         }
     }
 }
@@ -63,4 +74,15 @@ pub struct RawAudioFrame {
     pub num_channels: u16,
     /// Samples per channel in `audio`.
     pub num_frames: u32,
+}
+
+/// A speech-to-text result. Emitted once per Deepgram (or any other STT
+/// provider's) transcript, interim or final; `is_final` distinguishes the
+/// two rather than splitting them into separate `FrameKind` variants,
+/// since every downstream consumer wants both.
+pub struct TranscriptionFrame {
+    pub text: String,
+    /// Whether the STT provider considers this transcript settled for its
+    /// utterance, as opposed to a partial result that may still change.
+    pub is_final: bool,
 }

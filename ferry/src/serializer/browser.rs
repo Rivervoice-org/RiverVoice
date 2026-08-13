@@ -5,7 +5,10 @@ use crate::serializer::serializer::FrameSerializer;
 
 /// The browser dialect is trivial: binary messages carry raw PCM (s16le)
 /// with no envelope, so deserializing is just wrapping the bytes in a
-/// `RawAudioFrame` and serializing is unwrapping them.
+/// `RawAudioFrame` and serializing is unwrapping them. `RawAudio` is the
+/// only frame kind with a defined wire form here; anything else (a
+/// transcript, a turn boundary) has no browser-facing representation yet
+/// and is rejected rather than inventing one.
 pub struct BrowserSerializer {
     sample_rate: u32,
     num_channels: u16,
@@ -24,6 +27,11 @@ impl FrameSerializer for BrowserSerializer {
     fn serialize(&self, frame: Frame) -> anyhow::Result<Message> {
         match frame.into_kind() {
             FrameKind::RawAudio(audio) => Ok(Message::Binary(audio.audio.into())),
+            FrameKind::Transcription(_)
+            | FrameKind::UserStartedSpeaking
+            | FrameKind::UserStoppedSpeaking => {
+                anyhow::bail!("browser serializer: no wire representation for this frame yet")
+            }
         }
     }
 

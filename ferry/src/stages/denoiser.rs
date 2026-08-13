@@ -66,6 +66,10 @@ impl FrameProcessor for DenoiserStage {
                         audio.audio = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
                         io.push(Frame::new(FrameKind::RawAudio(audio))).await
                     }
+                    // Nothing to denoise; pass through unchanged.
+                    other @ (FrameKind::Transcription(_)
+                    | FrameKind::UserStartedSpeaking
+                    | FrameKind::UserStoppedSpeaking) => io.push(Frame::new(other)).await,
                 };
 
                 if !pushed {
