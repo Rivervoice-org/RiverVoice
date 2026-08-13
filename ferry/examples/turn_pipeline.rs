@@ -226,7 +226,7 @@ struct FakeSttSession;
 impl SttSession for FakeSttSession {
     fn send_audio(
         &mut self,
-        _pcm: Vec<u8>,
+        _pcm: &[u8],
     ) -> Pin<Box<dyn Future<Output = Result<(), SttError>> + Send + '_>> {
         Box::pin(async { Ok(()) })
     }

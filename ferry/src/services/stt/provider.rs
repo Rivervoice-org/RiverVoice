@@ -1,12 +1,14 @@
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
+use std::time::Duration;
 
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::Receiver;
+use tokio::time::Instant;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderName;
@@ -85,9 +87,13 @@ pub enum SttConfigKind {
 }
 
 pub trait SttSession: Send {
+    /// Sends one chunk of audio. Takes a borrow rather than an owned
+    /// buffer: this only ever needs to read `pcm`, so a caller that also
+    /// needs to keep (e.g. forward downstream) the same bytes isn't forced
+    /// to clone them just to satisfy this signature.
     fn send_audio(
         &mut self,
-        pcm: Vec<u8>,
+        pcm: &[u8],
     ) -> Pin<Box<dyn Future<Output = Result<(), SttError>> + Send + '_>>;
 
     fn close(self: Box<Self>) -> Pin<Box<dyn Future<Output = ()> + Send>>;
@@ -115,19 +121,19 @@ impl std::error::Error for SttError {}
 pub type SttWsWrite = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 pub type SttWsRead = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
 
-/// Silence, as s16le PCM, sent as the keepalive payload when a provider
-/// gives no explicit message. 480 samples matches the pipeline's
-/// standard chunk size.
-const SILENCE_KEEPALIVE_SAMPLES: usize = 480;
-
 /// An outbound WebSocket to an STT vendor's own API (axum can't dial
 /// out, so this is `tokio-tungstenite`), holding the write half so
 /// `send_audio` and the keepalive can both use it safely. `Clone` is cheap
-/// (just the `Arc`) and lets a session and its background read/keepalive
+/// (just the `Arc`s) and lets a session and its background read/keepalive
 /// tasks each hold their own handle to the same underlying connection.
 #[derive(Clone)]
 pub struct WsOutboundClient {
     write: Arc<Mutex<SttWsWrite>>,
+    /// When anything was last sent on this connection — audio or a
+    /// keepalive itself. Lets the keepalive loop check whether one is
+    /// actually due instead of firing on a fixed clock regardless of
+    /// activity (see [`WsOutboundClient::idle_for`]).
+    last_sent: Arc<StdMutex<Instant>>,
 }
 
 impl WsOutboundClient {
@@ -156,6 +162,7 @@ impl WsOutboundClient {
         Ok((
             Self {
                 write: Arc::new(Mutex::new(write)),
+                last_sent: Arc::new(StdMutex::new(Instant::now())),
             },
             read,
         ))
@@ -164,19 +171,29 @@ impl WsOutboundClient {
     /// Sends one message on the connection (e.g. audio).
     pub async fn send(&self, message: Message) -> Result<(), SttError> {
         let mut write = self.write.lock().await;
-        write
+        let result = write
             .send(message)
             .await
-            .map_err(|e| SttError::Connection(e.to_string()))
+            .map_err(|e| SttError::Connection(e.to_string()));
+        if result.is_ok() {
+            *self.last_sent.lock().unwrap() = Instant::now();
+        }
+        result
     }
 
-    /// Sends `message` on the connection, or a chunk of silent audio if
-    /// none is given. Returns `false` if the send failed, meaning the
-    /// connection is dead.
-    pub async fn keepalive(&self, message: Option<Message>) -> bool {
-        let message = message
-            .unwrap_or_else(|| Message::Binary(vec![0u8; SILENCE_KEEPALIVE_SAMPLES * 2].into()));
-        let mut write = self.write.lock().await;
-        write.send(message).await.is_ok()
+    /// How long it's been since anything was last sent on this connection.
+    pub fn idle_for(&self) -> Duration {
+        self.last_sent.lock().unwrap().elapsed()
+    }
+
+    /// Sends Deepgram's documented keepalive control message — a text
+    /// frame, not audio, specifically so it holds the connection open
+    /// without being processed/billed as speech.
+    /// <https://developers.deepgram.com/docs/keep-alive>
+    /// Returns `false` if the send failed, meaning the connection is dead.
+    pub async fn keepalive(&self) -> bool {
+        self.send(Message::Text(r#"{"type":"KeepAlive"}"#.into()))
+            .await
+            .is_ok()
     }
 }

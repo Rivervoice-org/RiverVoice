@@ -66,6 +66,19 @@ impl SttProvider for DeepgramSttProvider {
                     "deepgram: config is not a DeepgramSttConfig".to_string(),
                 ));
             };
+            // Deepgram's own requirement: UtteranceEnd is derived from
+            // interim results, so it never fires without interim_results
+            // also being on — silently, since the connection still opens
+            // fine. Left unchecked, `UserStoppedSpeaking` would just never
+            // arrive and the pipeline would fall back to the blunt
+            // watchdog on every turn, with nothing pointing at why.
+            // <https://developers.deepgram.com/docs/utterance-end>
+            if vendor.utterance_end_ms.is_some() && vendor.interim_results != Some(true) {
+                return Err(SttError::Protocol(
+                    "deepgram: utterance_end_ms requires interim_results=true, or UtteranceEnd (and UserStoppedSpeaking) will never fire"
+                        .to_string(),
+                ));
+            }
             let url = build_url(&config, vendor);
             let language = config.languages.first().copied();
 
@@ -109,8 +122,16 @@ impl SttProvider for DeepgramSttProvider {
             let keepalive_client = client.clone();
             let keepalive_task = tokio::spawn(async move {
                 loop {
-                    tokio::time::sleep(KEEPALIVE_INTERVAL).await;
-                    if !keepalive_client.keepalive(None).await {
+                    let idle = keepalive_client.idle_for();
+                    if idle < KEEPALIVE_INTERVAL {
+                        // Audio (or a prior keepalive) already covered this
+                        // window; wait out the remainder and re-check,
+                        // rather than firing on a fixed clock regardless of
+                        // real traffic.
+                        tokio::time::sleep(KEEPALIVE_INTERVAL - idle).await;
+                        continue;
+                    }
+                    if !keepalive_client.keepalive().await {
                         break; // connection is dead; the read task will notice too
                     }
                 }
@@ -138,9 +159,14 @@ struct DeepgramSttSession {
 impl SttSession for DeepgramSttSession {
     fn send_audio(
         &mut self,
-        pcm: Vec<u8>,
+        pcm: &[u8],
     ) -> Pin<Box<dyn Future<Output = Result<(), SttError>> + Send + '_>> {
-        Box::pin(async move { self.client.send(Message::Binary(pcm)).await })
+        // One copy is unavoidable here: `Message::Binary` needs an owned
+        // buffer to hand to the socket. Taking `&[u8]` rather than `Vec<u8>`
+        // just means this is the only copy — the caller doesn't also need
+        // its own spare owned buffer just to satisfy this signature.
+        let payload = pcm.to_vec();
+        Box::pin(async move { self.client.send(Message::Binary(payload)).await })
     }
 
     fn close(self: Box<Self>) -> Pin<Box<dyn Future<Output = ()> + Send>> {
@@ -309,6 +335,13 @@ pub struct DeepgramSttConfig {
     /// Works alongside `endpointing` rather than replacing it: endpointing
     /// decides when a transcript is finalized, this decides when the
     /// speaker's turn is considered over.
+    ///
+    /// Requires `interim_results: Some(true)` — Deepgram derives
+    /// UtteranceEnd from interim results, so it silently never fires
+    /// without them. [`DeepgramSttProvider::open`] rejects a config that
+    /// sets this without also enabling `interim_results`, rather than
+    /// connecting and never producing `UserStoppedSpeaking`.
+    /// <https://developers.deepgram.com/docs/utterance-end>
     pub utterance_end_ms: Option<u32>,
 
     /// Emit a "Speech Started" message the moment Deepgram's own VAD

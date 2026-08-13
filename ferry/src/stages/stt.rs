@@ -52,7 +52,7 @@ impl FrameProcessor for SttStage {
                     let Some(frame) = frame else { break };
                     match frame.into_kind() {
                         FrameKind::RawAudio(audio) => {
-                            if session.send_audio(audio.audio.clone()).await.is_err() {
+                            if session.send_audio(&audio.audio).await.is_err() {
                                 break;
                             }
                             if !io.push(Frame::new(FrameKind::RawAudio(audio))).await {

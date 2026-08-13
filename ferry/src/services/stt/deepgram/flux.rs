@@ -102,8 +102,16 @@ impl SttProvider for DeepgramFluxSttProvider {
             let keepalive_client = client.clone();
             let keepalive_task = tokio::spawn(async move {
                 loop {
-                    tokio::time::sleep(KEEPALIVE_INTERVAL).await;
-                    if !keepalive_client.keepalive(None).await {
+                    let idle = keepalive_client.idle_for();
+                    if idle < KEEPALIVE_INTERVAL {
+                        // Audio (or a prior keepalive) already covered this
+                        // window; wait out the remainder and re-check,
+                        // rather than firing on a fixed clock regardless of
+                        // real traffic.
+                        tokio::time::sleep(KEEPALIVE_INTERVAL - idle).await;
+                        continue;
+                    }
+                    if !keepalive_client.keepalive().await {
                         break; // connection is dead; the read task will notice too
                     }
                 }
@@ -131,9 +139,10 @@ struct DeepgramFluxSttSession {
 impl SttSession for DeepgramFluxSttSession {
     fn send_audio(
         &mut self,
-        pcm: Vec<u8>,
+        pcm: &[u8],
     ) -> Pin<Box<dyn Future<Output = Result<(), SttError>> + Send + '_>> {
-        Box::pin(async move { self.client.send(Message::Binary(pcm.into())).await })
+        let payload = pcm.to_vec();
+        Box::pin(async move { self.client.send(Message::Binary(payload)).await })
     }
 
     fn close(self: Box<Self>) -> Pin<Box<dyn Future<Output = ()> + Send>> {
