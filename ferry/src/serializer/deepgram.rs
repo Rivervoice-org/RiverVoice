@@ -27,7 +27,9 @@ impl FrameSerializer for DeepgramSerializer {
             FrameKind::Transcription(_)
             | FrameKind::UserStartedSpeaking
             | FrameKind::UserStoppedSpeaking
-            | FrameKind::ServiceMetadata(_) => {
+            | FrameKind::ServiceMetadata(_)
+            | FrameKind::Interruption
+            | FrameKind::UserTurnAggregation(_) => {
                 anyhow::bail!("deepgram serializer: cannot send this frame to deepgram")
             }
         }

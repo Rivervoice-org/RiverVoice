@@ -30,7 +30,9 @@ impl FrameSerializer for BrowserSerializer {
             FrameKind::Transcription(_)
             | FrameKind::UserStartedSpeaking
             | FrameKind::UserStoppedSpeaking
-            | FrameKind::ServiceMetadata(_) => {
+            | FrameKind::ServiceMetadata(_)
+            | FrameKind::Interruption
+            | FrameKind::UserTurnAggregation(_) => {
                 anyhow::bail!("browser serializer: no wire representation for this frame yet")
             }
         }

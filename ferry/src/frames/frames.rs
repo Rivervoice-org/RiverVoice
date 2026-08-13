@@ -55,6 +55,14 @@ pub enum FrameKind {
     /// What a service can tell the rest of the pipeline about itself,
     /// pushed once when a call starts. See [`ServiceMetadataFrame`].
     ServiceMetadata(ServiceMetadataFrame),
+    /// The user started talking while the bot's own output was still
+    /// playing out, so whatever's downstream should stop that output
+    /// immediately rather than let it run to the end.
+    Interruption,
+    /// Every transcript segment collected while one user turn was open,
+    /// joined into a single block of text and emitted once the turn
+    /// ends. See [`UserTurnAggregationFrame`].
+    UserTurnAggregation(UserTurnAggregationFrame),
 }
 
 impl FrameKind {
@@ -65,7 +73,16 @@ impl FrameKind {
             FrameKind::UserStartedSpeaking => "UserStartedSpeakingFrame".to_string(),
             FrameKind::UserStoppedSpeaking => "UserStoppedSpeakingFrame".to_string(),
             FrameKind::ServiceMetadata(_) => "ServiceMetadataFrame".to_string(),
+            FrameKind::Interruption => "InterruptionFrame".to_string(),
+            FrameKind::UserTurnAggregation(_) => "UserTurnAggregationFrame".to_string(),
         }
+    }
+
+    /// Whether this frame belongs on [`FrameIo`](crate::processor::processor::FrameIo)'s
+    /// control queue: seen ahead of whatever's already backed up on the
+    /// regular queue, rather than waiting in line behind it.
+    pub fn is_control(&self) -> bool {
+        matches!(self, FrameKind::Interruption)
     }
 }
 
@@ -109,4 +126,12 @@ pub struct TranscriptionFrame {
     /// Whether the STT provider considers this transcript settled for its
     /// utterance, as opposed to a partial result that may still change.
     pub is_final: bool,
+}
+
+/// The user's fully aggregated turn: what an LLM stage would actually
+/// run on, as opposed to the individual `TranscriptionFrame` fragments
+/// that arrived while the turn was open. Built by
+/// [`UserAggregatorStage`](crate::stages::user_aggregator::UserAggregatorStage).
+pub struct UserTurnAggregationFrame {
+    pub text: String,
 }
