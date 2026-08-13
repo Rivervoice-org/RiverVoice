@@ -81,6 +81,7 @@ impl SttConfig {
 
 pub enum SttConfigKind {
     DeepgramSttConfig(crate::services::stt::deepgram::DeepgramSttConfig),
+    DeepgramFluxSttConfig(crate::services::stt::deepgram::DeepgramFluxSttConfig),
 }
 
 pub trait SttSession: Send {
