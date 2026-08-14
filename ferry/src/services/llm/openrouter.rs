@@ -196,9 +196,14 @@ impl LlmProvider for OpenRouterLlmProvider {
         let (tx, rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
         let task = tokio::spawn(async move {
             let mut stream = response.bytes_stream();
-            // SSE lines can land split across chunk boundaries; held here
-            // until a full line (up to `\n`) is available.
-            let mut buffer = String::new();
+            // SSE lines — and the UTF-8 codepoints within them — can land
+            // split across chunk boundaries; held here as raw bytes until a
+            // full line (up to `\n`) is available, only then decoded. `\n`
+            // (0x0A) never appears as a UTF-8 continuation byte (0x80-0xBF),
+            // so splitting on it at the byte level never cuts a codepoint
+            // in half — only decoding each chunk independently (or via
+            // `from_utf8_lossy` per chunk) could do that.
+            let mut buffer: Vec<u8> = Vec::new();
 
             while let Some(chunk) = stream.next().await {
                 let chunk = match chunk {
@@ -208,11 +213,12 @@ impl LlmProvider for OpenRouterLlmProvider {
                         break;
                     }
                 };
-                buffer.push_str(&String::from_utf8_lossy(&chunk));
+                buffer.extend_from_slice(&chunk);
 
-                while let Some(pos) = buffer.find('\n') {
-                    let line = buffer[..pos].trim_end_matches('\r').to_string();
-                    buffer.drain(..=pos);
+                while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+                    let line_bytes: Vec<u8> = buffer.drain(..=pos).collect();
+                    let line = String::from_utf8_lossy(&line_bytes[..line_bytes.len() - 1]);
+                    let line = line.trim_end_matches('\r');
 
                     // OpenRouter sends SSE comment lines as keepalives
                     // while a request is queued/processing, e.g.
