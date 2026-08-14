@@ -225,16 +225,24 @@ impl SentenceAggregator {
 /// The byte offset just past the first confirmed sentence-ending
 /// punctuation in `buffer` (i.e. where a whole sentence ends), or `None`
 /// if there isn't one yet. "Confirmed" means the punctuation is followed
-/// by whitespace that has already arrived — a `.`/`!`/`?` at the very end
+/// by whitespace that has already arrived — a terminator at the very end
 /// of `buffer` with nothing after it yet is ambiguous (more text, or
 /// more of the same "word", could still follow), so it's left buffered
 /// rather than guessed at.
+///
+/// Terminators: `.`/`!`/`?`, plus the Devanagari danda `।` (U+0964) and
+/// double danda `॥` (U+0965) — Hindi (and other Indic scripts sharing the
+/// mark) end sentences with these instead, so without them a Hindi reply
+/// would never chunk into sentence-sized pieces before `flush()`, one
+/// long buffer per turn instead of one call per sentence.
 fn find_sentence_end(buffer: &str) -> Option<usize> {
-    let bytes = buffer.as_bytes();
-    for (i, &b) in bytes.iter().enumerate() {
-        if matches!(b, b'.' | b'!' | b'?') {
-            match bytes.get(i + 1) {
-                Some(next) if next.is_ascii_whitespace() => return Some(i + 2),
+    let mut chars = buffer.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if matches!(c, '.' | '!' | '?' | '।' | '॥') {
+            match chars.peek() {
+                Some(&(_, next)) if next.is_whitespace() => {
+                    return Some(i + c.len_utf8() + next.len_utf8());
+                }
                 Some(_) => continue,
                 None => return None,
             }
@@ -268,5 +276,13 @@ mod tests {
         agg.push("unfinished");
         agg.clear();
         assert_eq!(agg.flush(), None);
+    }
+
+    #[test]
+    fn splits_on_the_devanagari_danda() {
+        let mut agg = SentenceAggregator::new();
+        assert_eq!(agg.push("नमस्ते। आप कैसे"), vec!["नमस्ते।"]);
+        assert_eq!(agg.push(" हैं॥ ठीक"), vec!["आप कैसे हैं॥"]);
+        assert_eq!(agg.flush(), Some("ठीक".to_string()));
     }
 }
