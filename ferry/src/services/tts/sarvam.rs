@@ -89,9 +89,10 @@ pub struct SarvamTtsConfig {
     /// Speaking rate multiplier.
     pub pace: Option<f32>,
     /// Voice pitch adjustment. `bulbul:v2` only — `bulbul:v3` uses
-    /// `temperature` instead; sending it to `v3` is a caller error this
-    /// type doesn't prevent, since that would mean `SarvamTtsConfig`
-    /// itself needing to know which model it'll be paired with.
+    /// `temperature` instead. This type is built without knowing which
+    /// model it'll be paired with, so it doesn't enforce that itself;
+    /// `SarvamTtsProvider::open` drops whichever of this/`loudness`/
+    /// `temperature` doesn't apply to `self.model` before sending.
     pub pitch: Option<f32>,
     /// Voice loudness adjustment. `bulbul:v2` only, see `pitch`.
     pub loudness: Option<f32>,
@@ -152,7 +153,20 @@ impl TtsProvider for SarvamTtsProvider {
         config: TtsConfig,
         serializer: Arc<dyn FrameSerializer<Message = Message>>,
     ) -> Result<(Box<dyn TtsSession>, Receiver<TtsEvent>), TtsError> {
-        let TtsConfigKind::SarvamTtsConfig(vendor) = config.kind;
+        let TtsConfigKind::SarvamTtsConfig(mut vendor) = config.kind;
+        // `pitch`/`loudness` (bulbul:v2) and `temperature` (bulbul:v3) are
+        // mutually exclusive on Sarvam's wire protocol, but `SarvamTtsConfig`
+        // itself is built without knowing which model it'll be paired with
+        // (see its doc comment) — only `self.model` here does, so this is
+        // where the fields that don't apply to it get dropped, rather than
+        // sending both sets and hoping Sarvam ignores the wrong one.
+        match self.model {
+            SarvamModel::BulbulV2 => vendor.temperature = None,
+            SarvamModel::BulbulV3 => {
+                vendor.pitch = None;
+                vendor.loudness = None;
+            }
+        }
 
         let config_data = ConfigData {
             target_language_code: config.language.code(),
