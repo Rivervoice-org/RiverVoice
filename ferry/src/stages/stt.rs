@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 
 use crate::frames::frames::{Frame, FrameKind, ServiceMetadataFrame, TranscriptionFrame};
 use crate::processor::processor::{FrameIo, FrameProcessor};
+use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::provider::{SttConfig, SttEvent, SttProvider};
 
 /// Turns an [`SttProvider`] into a pipeline stage: `RawAudio` frames
@@ -13,11 +16,20 @@ use crate::services::stt::provider::{SttConfig, SttEvent, SttProvider};
 pub struct SttStage {
     provider: Box<dyn SttProvider>,
     config: SttConfig,
+    serializer: Arc<dyn FrameSerializer<Message = tokio_tungstenite::tungstenite::Message>>,
 }
 
 impl SttStage {
-    pub fn new(provider: Box<dyn SttProvider>, config: SttConfig) -> Self {
-        Self { provider, config }
+    pub fn new(
+        provider: Box<dyn SttProvider>,
+        config: SttConfig,
+        serializer: Arc<dyn FrameSerializer<Message = tokio_tungstenite::tungstenite::Message>>,
+    ) -> Self {
+        Self {
+            provider,
+            config,
+            serializer,
+        }
     }
 }
 
@@ -28,7 +40,8 @@ impl FrameProcessor for SttStage {
     }
 
     async fn run(self: Box<Self>, mut io: FrameIo) {
-        let (mut session, mut events) = match self.provider.open(self.config).await {
+        let (mut session, mut events) = match self.provider.open(self.config, self.serializer).await
+        {
             Ok(opened) => opened,
             Err(e) => {
                 tracing::error!("{}: failed to open session: {e}", io.name());

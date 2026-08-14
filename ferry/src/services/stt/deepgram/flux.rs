@@ -1,14 +1,15 @@
-use std::future::Future;
-use std::pin::Pin;
-use std::time::Duration;
+use std::sync::Arc;
 
-use futures_util::StreamExt;
-use serde::Deserialize;
-use tokio::sync::mpsc::{self, Receiver};
+use async_trait::async_trait;
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::http::HeaderName;
 
-use super::{connect_with_retries, percent_encode};
+use super::{MAX_RECONNECT_ATTEMPTS, RECONNECT_DELAY, percent_encode};
+use crate::frames::frames::FrameKind;
+use crate::serializer::serializer::FrameSerializer;
+use crate::services::stt::deepgram::{EVENT_CHANNEL_CAPACITY, KEEPALIVE_INTERVAL};
 use crate::services::stt::language::Language;
 use crate::services::stt::provider::{
     SttConfig, SttConfigKind, SttError, SttEvent, SttProvider, SttSession, Transcript,
@@ -22,10 +23,6 @@ const ENDPOINT: &str = "wss://api.deepgram.com/v2/listen";
 /// fixed by the pipeline rather than a config choice. See
 /// `stt::AUDIO_ENCODING` for why this isn't a field.
 const AUDIO_ENCODING: &str = "linear16";
-
-const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
-
-const EVENT_CHANNEL_CAPACITY: usize = 32;
 
 /// Flux's own model naming for its multilingual model, the only one that
 /// honors `language_hints`.
@@ -48,6 +45,7 @@ impl DeepgramFluxSttProvider {
     }
 }
 
+#[async_trait]
 impl SttProvider for DeepgramFluxSttProvider {
     fn name(&self) -> &'static str {
         "deepgram-flux"
@@ -59,73 +57,70 @@ impl SttProvider for DeepgramFluxSttProvider {
         Some(TurnStrategy::External)
     }
 
-    fn open(
+    async fn open(
         &self,
         config: SttConfig,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(Box<dyn SttSession>, Receiver<SttEvent>), SttError>> + Send,
-        >,
-    > {
-        let api_key = self.api_key.clone();
-        Box::pin(async move {
-            let SttConfigKind::DeepgramFluxSttConfig(vendor) = &config.kind else {
-                return Err(SttError::Protocol(
-                    "deepgram-flux: config is not a DeepgramFluxSttConfig".to_string(),
-                ));
-            };
-            let url = build_url(&config, vendor);
+        serializer: Arc<dyn FrameSerializer<Message = Message>>,
+    ) -> Result<(Box<dyn SttSession>, mpsc::Receiver<SttEvent>), SttError> {
+        let SttConfigKind::DeepgramFluxSttConfig(vendor) = &config.kind else {
+            return Err(SttError::Protocol(
+                "deepgram-flux: config is not a DeepgramFluxSttConfig".to_string(),
+            ));
+        };
+        let url = build_url(&config, vendor);
 
-            let (client, mut read) = connect_with_retries(&url, &api_key).await?;
+        let (client, read) = crate::services::ws_client::connect_with_retries(
+            &url,
+            HeaderName::from_static("authorization"),
+            format!("Token {}", self.api_key),
+            MAX_RECONNECT_ATTEMPTS,
+            RECONNECT_DELAY,
+        )
+        .await?;
 
-            let (tx, rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
-            let read_task = tokio::spawn(async move {
-                while let Some(msg) = read.next().await {
-                    let msg = match msg {
-                        Ok(msg) => msg,
-                        Err(e) => {
-                            tracing::warn!("deepgram-flux: connection read error, closing: {e}");
-                            break;
-                        }
-                    };
-                    let Message::Text(text) = msg else {
-                        continue;
-                    };
-                    for event in parse_message(&text) {
-                        if tx.send(event).await.is_err() {
-                            return; // caller dropped the receiver, nothing left to do
-                        }
-                    }
+        let (tx, rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
+
+        let read_task =
+            Self::spawn_read_task("deepgram-flux", read, serializer, tx, move |frame| {
+                let kind = frame.into_kind();
+                // `EndOfTurn` finalizes the transcript and ends the
+                // turn at once, but `FrameSerializer::deserialize`
+                // only ever produces one `Frame` per message (see
+                // `DeepgramFluxSerializer`'s doc comment), so the
+                // stopped-speaking half is synthesized here instead.
+                let stopped_speaking_too =
+                    matches!(&kind, FrameKind::Transcription(t) if t.is_final);
+                let mut events = match kind {
+                    FrameKind::Transcription(t) => vec![SttEvent::Transcript(Transcript {
+                        text: t.text,
+                        language: None,
+                        is_final: t.is_final,
+                    })],
+                    FrameKind::UserStartedSpeaking => vec![SttEvent::UserStartedSpeaking],
+                    _ => vec![],
+                };
+                if stopped_speaking_too {
+                    events.push(SttEvent::UserStoppedSpeaking);
                 }
+                events
             });
 
-            let keepalive_client = client.clone();
-            let keepalive_task = tokio::spawn(async move {
-                loop {
-                    let idle = keepalive_client.idle_for();
-                    if idle < KEEPALIVE_INTERVAL {
-                        // Audio (or a prior keepalive) already covered this
-                        // window; wait out the remainder and re-check,
-                        // rather than firing on a fixed clock regardless of
-                        // real traffic.
-                        tokio::time::sleep(KEEPALIVE_INTERVAL - idle).await;
-                        continue;
-                    }
-                    if !keepalive_client.keepalive().await {
-                        break; // connection is dead; the read task will notice too
-                    }
-                }
-            });
+        // Same keepalive control message as classic Deepgram.
+        // <https://developers.deepgram.com/docs/keep-alive>
+        let keepalive_task = Self::spawn_keepalive_task(
+            client.clone(),
+            Message::Text(r#"{"type":"KeepAlive"}"#.into()),
+            KEEPALIVE_INTERVAL,
+        );
 
-            Ok((
-                Box::new(DeepgramFluxSttSession {
-                    client,
-                    read_task,
-                    keepalive_task,
-                }) as Box<dyn SttSession>,
-                rx,
-            ))
-        })
+        Ok((
+            Box::new(DeepgramFluxSttSession {
+                client,
+                read_task,
+                keepalive_task,
+            }) as Box<dyn SttSession>,
+            rx,
+        ))
     }
 }
 
@@ -136,26 +131,25 @@ struct DeepgramFluxSttSession {
     keepalive_task: JoinHandle<()>,
 }
 
+#[async_trait]
 impl SttSession for DeepgramFluxSttSession {
-    fn send_audio(
-        &mut self,
-        pcm: &[u8],
-    ) -> Pin<Box<dyn Future<Output = Result<(), SttError>> + Send + '_>> {
+    async fn send_audio(&mut self, pcm: &[u8]) -> Result<(), SttError> {
         let payload = pcm.to_vec();
-        Box::pin(async move { self.client.send(Message::Binary(payload)).await })
+        self.client
+            .send(Message::Binary(payload))
+            .await
+            .map_err(Into::into)
     }
 
-    fn close(self: Box<Self>) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        Box::pin(async move {
-            // Same control message as classic Deepgram: no more audio is
-            // coming, flush whatever turn is in flight.
-            let _ = self
-                .client
-                .send(Message::Text(r#"{"type":"CloseStream"}"#.into()))
-                .await;
-            self.read_task.abort();
-            self.keepalive_task.abort();
-        })
+    async fn close(self: Box<Self>) {
+        // Same control message as classic Deepgram: no more audio is
+        // coming, flush whatever turn is in flight.
+        let _ = self
+            .client
+            .send(Message::Text(r#"{"type":"CloseStream"}"#.into()))
+            .await;
+        self.read_task.abort();
+        self.keepalive_task.abort();
     }
 }
 
@@ -282,140 +276,7 @@ pub struct DeepgramFluxSttConfig {
     pub tag: Vec<String>,
 }
 
-/// Parses one text message off Deepgram Flux's WebSocket into zero or more
-/// events. Zero for message types this provider doesn't act on
-/// (`Connected`, `ConfigureSuccess`/`ConfigureFailure`, malformed JSON,
-/// ...); two for `EndOfTurn`, which both finalizes the transcript and
-/// signals the turn stopped.
-fn parse_message(text: &str) -> Vec<SttEvent> {
-    let message: FluxMessage = match serde_json::from_str(text) {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::trace!("deepgram-flux: dropping unparsable message: {e}");
-            return Vec::new();
-        }
-    };
-
-    match message {
-        FluxMessage::TurnInfo(info) => match info.event {
-            FluxEventType::StartOfTurn => vec![SttEvent::UserStartedSpeaking],
-            FluxEventType::EndOfTurn => vec![
-                SttEvent::Transcript(Transcript {
-                    text: info.transcript,
-                    language: None,
-                    is_final: true,
-                }),
-                SttEvent::UserStoppedSpeaking,
-            ],
-            FluxEventType::EagerEndOfTurn if !info.transcript.is_empty() => {
-                vec![SttEvent::Transcript(Transcript {
-                    text: info.transcript,
-                    language: None,
-                    is_final: false,
-                })]
-            }
-            // TurnResumed and Update carry nothing this slice acts on yet.
-            FluxEventType::EagerEndOfTurn | FluxEventType::TurnResumed | FluxEventType::Update => {
-                Vec::new()
-            }
-        },
-        FluxMessage::Error(err) => {
-            tracing::warn!("deepgram-flux: fatal error from server: {}", err.error);
-            Vec::new()
-        }
-        FluxMessage::Other => Vec::new(),
-    }
-}
-
-/// The message shapes Deepgram Flux (`/v2/listen`) sends on its live
-/// streaming WebSocket that this parser cares about. A completely
-/// different envelope from classic Deepgram's (see
-/// `super::super::deepgram`'s `DeepgramMessage`): no `Results`/
-/// `SpeechStarted`/`UtteranceEnd`, everything turn-related is wrapped in
-/// `TurnInfo` instead.
-///
-/// Also sent but not modeled here, since nothing currently acts on them:
-/// `Connected` (handshake acknowledgement) and `ConfigureSuccess`/
-/// `ConfigureFailure` (acks for a `Configure` control message this
-/// provider never sends); both fall into `Other`.
-/// <https://developers.deepgram.com/docs/flux/quickstart>
-/// <https://developers.deepgram.com/docs/flux/state>
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
-enum FluxMessage {
-    /// One frame of Flux's turn state machine. Every `event` value shares
-    /// this same envelope:
-    ///
-    /// ```json
-    /// {
-    ///   "type": "TurnInfo",
-    ///   "event": "EndOfTurn",
-    ///   "turn_index": 3,
-    ///   "audio_window_start": 4.0,
-    ///   "audio_window_end": 6.4,
-    ///   "transcript": "hello there",
-    ///   "words": [
-    ///     { "word": "hello", "confidence": 0.99, "start": 4.1, "end": 4.4 }
-    ///   ],
-    ///   "end_of_turn_confidence": 0.92
-    /// }
-    /// ```
-    ///
-    /// `flux-general-multi` additionally carries `languages`/
-    /// `languages_hinted`, which this parser doesn't read (see
-    /// `flux_language_hint` for the outbound side of language handling).
-    /// Only `event` and `transcript` are modeled on [`TurnInfo`] below;
-    /// `turn_index`/the audio window/`words`/confidence have no consumer
-    /// yet and are dropped the same way classic Deepgram's word timings
-    /// are.
-    TurnInfo(TurnInfo),
-    /// A fatal error terminating the connection.
-    ///
-    /// ```json
-    /// { "type": "Error", "error": "some description" }
-    /// ```
-    Error(FluxError),
-    #[serde(other)]
-    Other,
-}
-
-/// See [`FluxMessage::TurnInfo`] for the full payload; only the two fields
-/// this parser reads.
-#[derive(Debug, Deserialize)]
-struct TurnInfo {
-    event: FluxEventType,
-    /// Guaranteed non-empty on `StartOfTurn`/`EagerEndOfTurn`/`EndOfTurn`
-    /// per Deepgram's docs; can be empty on `Update`/`TurnResumed`, which
-    /// this parser ignores regardless (see `parse_message`).
-    #[serde(default)]
-    transcript: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct FluxError {
-    #[serde(default)]
-    error: String,
-}
-
-/// `TurnInfo.event`. Deepgram's own turn state machine:
-/// <https://developers.deepgram.com/docs/flux/state>
-///
-/// - `StartOfTurn`: speech began; transcript is always non-empty.
-/// - `Update`: fired roughly every 0.25s while the turn is in progress,
-///   independent of whether the transcript actually changed.
-/// - `EagerEndOfTurn`: end-of-turn confidence crossed
-///   `eager_eot_threshold` but not `eot_threshold` yet; transcript is
-///   always non-empty. May still be followed by `TurnResumed` if the user
-///   keeps talking.
-/// - `TurnResumed`: speech continued after an `EagerEndOfTurn`.
-/// - `EndOfTurn`: the turn is finalized; transcript matches whatever the
-///   immediately preceding `EagerEndOfTurn` reported, per Deepgram's docs.
-///   `turn_index` increments right after this.
-#[derive(Debug, Deserialize)]
-enum FluxEventType {
-    StartOfTurn,
-    TurnResumed,
-    EndOfTurn,
-    EagerEndOfTurn,
-    Update,
-}
+// Wire-format parsing for Flux's `TurnInfo`-based `/v2/listen` messages
+// now lives in `DeepgramFluxSerializer`
+// (crate::serializer::stt::deepgram_flux), shared with the `axum`-facing
+// `Frame` pipeline rather than duplicated here.

@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 /// multiple of `from` in practice — see [`RnnoiseFilter`](crate::audio::rnnoise::RnnoiseFilter),
 /// today's only caller, which always resamples against a fixed 48 kHz target.
 pub fn integer_ratio(from: u32, to: u32) -> Option<usize> {
-    if from == 0 || to == 0 || to % from != 0 {
+    if from == 0 || to == 0 || !to.is_multiple_of(from) {
         return None;
     }
     Some((to / from) as usize)

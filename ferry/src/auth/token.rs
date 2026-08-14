@@ -9,6 +9,12 @@ struct Claims {
     sub: String,
     org: String,
     role: String,
+    // Never read directly: `Validation::set_required_spec_claims(&["exp"])`
+    // below makes `jsonwebtoken` check for and validate this claim itself
+    // during `decode`, off the raw token payload, before this struct is
+    // even built — the field exists only so a token missing it fails to
+    // deserialize at all rather than silently deserializing without it.
+    #[allow(dead_code)]
     exp: usize,
 }
 

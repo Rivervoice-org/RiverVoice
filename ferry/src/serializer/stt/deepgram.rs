@@ -1,5 +1,5 @@
-use axum::extract::ws::Message;
 use serde::Deserialize;
+use tokio_tungstenite::tungstenite::Message;
 
 use crate::frames::frames::{Frame, FrameKind, TranscriptionFrame};
 use crate::serializer::serializer::FrameSerializer;
@@ -20,16 +20,30 @@ impl DeepgramSerializer {
     }
 }
 
+impl Default for DeepgramSerializer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FrameSerializer for DeepgramSerializer {
+    type Message = Message;
+
     fn serialize(&self, frame: Frame) -> anyhow::Result<Message> {
         match frame.into_kind() {
-            FrameKind::RawAudio(audio) => Ok(Message::Binary(audio.audio.into())),
+            FrameKind::RawAudio(audio) => Ok(Message::Binary(audio.audio)),
             FrameKind::Transcription(_)
             | FrameKind::UserStartedSpeaking
             | FrameKind::UserStoppedSpeaking
             | FrameKind::ServiceMetadata(_)
             | FrameKind::Interruption
-            | FrameKind::UserTurnAggregation(_) => {
+            | FrameKind::UserTurnAggregation(_)
+            | FrameKind::LlmResponseStart
+            | FrameKind::LlmText(_)
+            | FrameKind::LlmResponseEnd
+            | FrameKind::TtsAudioStart
+            | FrameKind::TtsAudio(_)
+            | FrameKind::TtsAudioStop => {
                 anyhow::bail!("deepgram serializer: cannot send this frame to deepgram")
             }
         }

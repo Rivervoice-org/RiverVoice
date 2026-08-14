@@ -1,7 +1,7 @@
 use crate::audio::rnnoise::RnnoiseFilter;
 use crate::http::response::ApiResponse;
 use crate::pipeline::pipeline::Pipeline;
-use crate::serializer::browser::BrowserSerializer;
+use crate::serializer::transport::browser::BrowserSerializer;
 use crate::stages::denoiser::DenoiserStage;
 use crate::transport::base::BaseTransport;
 use crate::transport::websockets::transport::WebSocketClient;
@@ -42,7 +42,7 @@ pub async fn browser_stream(ws: WebSocketUpgrade, header: HeaderMap) -> Response
     );
 
     let serializer = BrowserSerializer::new(BROWSER_SAMPLE_RATE, BROWSER_NUM_CHANNELS);
-    let base = BaseTransport::new(io, Box::new(serializer));
+    let base = BaseTransport::new(io, serializer);
 
     WebSocketClient::new(base).connect(ws)
 }

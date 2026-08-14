@@ -182,6 +182,16 @@ impl TurnController {
             // Already the output of a turn ending; nothing left to
             // observe about it.
             FrameKind::UserTurnAggregation(_) => None,
+
+            // The bot's own output (LLM reply, synthesized speech), not
+            // a sign of user activity — nothing here bears on whether a
+            // *user* turn is open.
+            FrameKind::LlmResponseStart
+            | FrameKind::LlmText(_)
+            | FrameKind::LlmResponseEnd
+            | FrameKind::TtsAudioStart
+            | FrameKind::TtsAudio(_)
+            | FrameKind::TtsAudioStop => None,
         }
     }
 

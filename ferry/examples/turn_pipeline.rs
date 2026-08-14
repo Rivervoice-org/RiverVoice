@@ -1,11 +1,13 @@
-use std::future::Future;
-use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use ferry::audio::rnnoise::RnnoiseFilter;
 use ferry::frames::frames::{Frame, FrameKind, RawAudioFrame};
 use ferry::pipeline::pipeline::Pipeline;
 use ferry::processor::processor::{FrameIo, FrameProcessor};
+use ferry::serializer::serializer::FrameSerializer;
+use ferry::serializer::stt::deepgram::DeepgramSerializer;
 use ferry::services::stt::deepgram::DeepgramSttConfig;
 use ferry::services::stt::language::Language;
 use ferry::services::stt::provider::{
@@ -17,7 +19,8 @@ use ferry::stages::user_aggregator::UserAggregatorStage;
 use ferry::turns::controller::TurnController;
 use ferry::turns::strategy::TurnStrategy;
 use ferry::turns::user_start::MinWordsUserTurnStartStrategy;
-use tokio::sync::mpsc::{self, Receiver};
+use tokio::sync::mpsc;
+use tokio_tungstenite::tungstenite::Message;
 
 const SAMPLE_RATE: u32 = 16_000;
 const CHUNK_BYTES: usize = 320; // 160 samples, 10ms at 16 kHz
@@ -109,9 +112,12 @@ async fn run_case(name: &str, controller: TurnController, provider: FakeSttProvi
         SttConfigKind::DeepgramSttConfig(DeepgramSttConfig::default()),
     );
 
+    let serializer: Arc<dyn FrameSerializer<Message = Message>> =
+        Arc::new(DeepgramSerializer::new());
+
     let stages: Vec<Box<dyn FrameProcessor>> = vec![
         Box::new(DenoiserStage::new(vec![Box::new(RnnoiseFilter::new())])),
-        Box::new(SttStage::new(Box::new(provider), config)),
+        Box::new(SttStage::new(Box::new(provider), config, serializer)),
         Box::new(UserAggregatorStage::new(controller)),
     ];
 
@@ -172,6 +178,7 @@ impl FakeSttProvider {
     }
 }
 
+#[async_trait]
 impl SttProvider for FakeSttProvider {
     fn name(&self) -> &'static str {
         self.name
@@ -181,57 +188,48 @@ impl SttProvider for FakeSttProvider {
         self.recommended_turn_strategy
     }
 
-    fn open(
+    async fn open(
         &self,
         _config: SttConfig,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(Box<dyn SttSession>, Receiver<SttEvent>), SttError>> + Send,
-        >,
-    > {
+        _serializer: Arc<dyn FrameSerializer<Message = Message>>,
+    ) -> Result<(Box<dyn SttSession>, mpsc::Receiver<SttEvent>), SttError> {
         let script = self.script.clone();
-        Box::pin(async move {
-            let (tx, rx) = mpsc::channel(8);
-            tokio::spawn(async move {
-                for event in script {
-                    tokio::time::sleep(Duration::from_millis(20)).await;
-                    let sent = match event {
-                        ScriptEvent::UserStartedSpeaking => {
-                            tx.send(SttEvent::UserStartedSpeaking).await
-                        }
-                        ScriptEvent::UserStoppedSpeaking => {
-                            tx.send(SttEvent::UserStoppedSpeaking).await
-                        }
-                        ScriptEvent::Transcript { text, is_final } => {
-                            tx.send(SttEvent::Transcript(Transcript {
-                                text,
-                                language: None,
-                                is_final,
-                            }))
-                            .await
-                        }
-                    };
-                    if sent.is_err() {
-                        break;
+        let (tx, rx) = mpsc::channel(8);
+        tokio::spawn(async move {
+            for event in script {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                let sent = match event {
+                    ScriptEvent::UserStartedSpeaking => {
+                        tx.send(SttEvent::UserStartedSpeaking).await
                     }
+                    ScriptEvent::UserStoppedSpeaking => {
+                        tx.send(SttEvent::UserStoppedSpeaking).await
+                    }
+                    ScriptEvent::Transcript { text, is_final } => {
+                        tx.send(SttEvent::Transcript(Transcript {
+                            text,
+                            language: None,
+                            is_final,
+                        }))
+                        .await
+                    }
+                };
+                if sent.is_err() {
+                    break;
                 }
-            });
-            Ok((Box::new(FakeSttSession) as Box<dyn SttSession>, rx))
-        })
+            }
+        });
+        Ok((Box::new(FakeSttSession) as Box<dyn SttSession>, rx))
     }
 }
 
 struct FakeSttSession;
 
+#[async_trait]
 impl SttSession for FakeSttSession {
-    fn send_audio(
-        &mut self,
-        _pcm: &[u8],
-    ) -> Pin<Box<dyn Future<Output = Result<(), SttError>> + Send + '_>> {
-        Box::pin(async { Ok(()) })
+    async fn send_audio(&mut self, _pcm: &[u8]) -> Result<(), SttError> {
+        Ok(())
     }
 
-    fn close(self: Box<Self>) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        Box::pin(async {})
-    }
+    async fn close(self: Box<Self>) {}
 }

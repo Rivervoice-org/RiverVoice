@@ -1,25 +1,22 @@
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
-use std::time::Duration;
+use std::sync::Arc;
 
-use futures_util::StreamExt;
-use tokio::sync::mpsc::{self, Receiver};
+use async_trait::async_trait;
+use axum::http::HeaderName;
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 
-use super::{connect_with_retries, percent_encode};
-use crate::serializer::deepgram::{DeepgramEvent, parse_message};
+use super::percent_encode;
+use crate::frames::frames::FrameKind;
+use crate::serializer::serializer::FrameSerializer;
+use crate::services::stt::deepgram::{
+    EVENT_CHANNEL_CAPACITY, KEEPALIVE_INTERVAL, MAX_RECONNECT_ATTEMPTS, RECONNECT_DELAY,
+};
 use crate::services::stt::provider::{
     SttConfig, SttConfigKind, SttError, SttEvent, SttProvider, SttSession, Transcript,
     WsOutboundClient,
 };
-
-/// How many outstanding events a session can buffer before `open()`'s
-/// caller has to catch up. Generous relative to how fast Deepgram actually
-/// emits results, just enough to absorb a scheduling hiccup without
-/// unbounded growth.
-const EVENT_CHANNEL_CAPACITY: usize = 32;
 
 const ENDPOINT: &str = "wss://api.deepgram.com/v1/listen";
 
@@ -28,11 +25,6 @@ const ENDPOINT: &str = "wss://api.deepgram.com/v1/listen";
 /// else, so exposing it as settable would let a caller ask Deepgram to
 /// decode audio that was never actually sent in that format.
 const AUDIO_ENCODING: &str = "linear16";
-
-/// Deepgram closes an idle connection after ~10s of silence (its
-/// NET-0001 error). A normal pause in conversation is enough to hit
-/// that, so a keepalive runs for the life of every session.
-const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
 
 /// [`SttProvider`] backed by Deepgram's live streaming WebSocket.
 pub struct DeepgramSttProvider {
@@ -45,106 +37,79 @@ impl DeepgramSttProvider {
     }
 }
 
+#[async_trait]
 impl SttProvider for DeepgramSttProvider {
     fn name(&self) -> &'static str {
         "deepgram"
     }
 
-    fn open(
+    async fn open(
         &self,
         config: SttConfig,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(Box<dyn SttSession>, Receiver<SttEvent>), SttError>> + Send,
-        >,
-    > {
-        let api_key = self.api_key.clone();
-        Box::pin(async move {
-            let SttConfigKind::DeepgramSttConfig(vendor) = &config.kind else {
-                return Err(SttError::Protocol(
-                    "deepgram: config is not a DeepgramSttConfig".to_string(),
-                ));
-            };
-            // Deepgram's own requirement: UtteranceEnd is derived from
-            // interim results, so it never fires without interim_results
-            // also being on — silently, since the connection still opens
-            // fine. Left unchecked, `UserStoppedSpeaking` would just never
-            // arrive and the pipeline would fall back to the blunt
-            // watchdog on every turn, with nothing pointing at why.
-            // <https://developers.deepgram.com/docs/utterance-end>
-            if vendor.utterance_end_ms.is_some() && vendor.interim_results != Some(true) {
-                return Err(SttError::Protocol(
-                    "deepgram: utterance_end_ms requires interim_results=true, or UtteranceEnd (and UserStoppedSpeaking) will never fire"
-                        .to_string(),
-                ));
+        serializer: Arc<dyn FrameSerializer<Message = Message>>,
+    ) -> Result<(Box<dyn SttSession>, mpsc::Receiver<SttEvent>), SttError> {
+        let SttConfigKind::DeepgramSttConfig(vendor) = &config.kind else {
+            return Err(SttError::Protocol(
+                "deepgram: config is not a DeepgramSttConfig".to_string(),
+            ));
+        };
+        // Deepgram's own requirement: UtteranceEnd is derived from
+        // interim results, so it never fires without interim_results
+        // also being on — silently, since the connection still opens
+        // fine. Left unchecked, `UserStoppedSpeaking` would just never
+        // arrive and the pipeline would fall back to the blunt
+        // watchdog on every turn, with nothing pointing at why.
+        // <https://developers.deepgram.com/docs/utterance-end>
+        if vendor.utterance_end_ms.is_some() && vendor.interim_results != Some(true) {
+            return Err(SttError::Protocol(
+                "deepgram: utterance_end_ms requires interim_results=true, or UtteranceEnd (and UserStoppedSpeaking) will never fire"
+                    .to_string(),
+            ));
+        }
+        let url = build_url(&config, vendor);
+        let language = config.languages.first().copied();
+
+        let (client, read) = crate::services::ws_client::connect_with_retries(
+            &url,
+            HeaderName::from_static("authorization"),
+            format!("Token {}", self.api_key),
+            MAX_RECONNECT_ATTEMPTS,
+            RECONNECT_DELAY,
+        )
+        .await?;
+
+        let (tx, rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
+        let read_task = Self::spawn_read_task("deepgram", read, serializer, tx, move |frame| {
+            match frame.into_kind() {
+                FrameKind::Transcription(t) => vec![SttEvent::Transcript(Transcript {
+                    text: t.text,
+                    language,
+                    is_final: t.is_final,
+                })],
+                FrameKind::UserStartedSpeaking => vec![SttEvent::UserStartedSpeaking],
+                FrameKind::UserStoppedSpeaking => vec![SttEvent::UserStoppedSpeaking],
+                _ => vec![],
             }
-            let url = build_url(&config, vendor);
-            let language = config.languages.first().copied();
+        });
 
-            let (client, mut read) = connect_with_retries(&url, &api_key).await?;
+        // Deepgram's documented keepalive control message — a text
+        // frame, not audio, specifically so it holds the connection
+        // open without being processed/billed as speech.
+        // <https://developers.deepgram.com/docs/keep-alive>
+        let keepalive_task = Self::spawn_keepalive_task(
+            client.clone(),
+            Message::Text(r#"{"type":"KeepAlive"}"#.into()),
+            KEEPALIVE_INTERVAL,
+        );
 
-            let (tx, rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
-            let read_task = tokio::spawn(async move {
-                while let Some(msg) = read.next().await {
-                    let msg = match msg {
-                        Ok(msg) => msg,
-                        Err(e) => {
-                            tracing::warn!("deepgram: connection read error, closing: {e}");
-                            break;
-                        }
-                    };
-                    let Message::Text(text) = msg else {
-                        continue;
-                    };
-                    let event = match parse_message(&text) {
-                        Ok(e) => e,
-                        Err(e) => {
-                            tracing::trace!("deepgram: dropping message: {e}");
-                            continue;
-                        }
-                    };
-                    let event = match event {
-                        DeepgramEvent::Transcript(t) => SttEvent::Transcript(Transcript {
-                            text: t.text,
-                            language,
-                            is_final: t.is_final,
-                        }),
-                        DeepgramEvent::UserStartedSpeaking => SttEvent::UserStartedSpeaking,
-                        DeepgramEvent::UserStoppedSpeaking => SttEvent::UserStoppedSpeaking,
-                    };
-                    if tx.send(event).await.is_err() {
-                        break; // caller dropped the receiver, nothing left to do
-                    }
-                }
-            });
-
-            let keepalive_client = client.clone();
-            let keepalive_task = tokio::spawn(async move {
-                loop {
-                    let idle = keepalive_client.idle_for();
-                    if idle < KEEPALIVE_INTERVAL {
-                        // Audio (or a prior keepalive) already covered this
-                        // window; wait out the remainder and re-check,
-                        // rather than firing on a fixed clock regardless of
-                        // real traffic.
-                        tokio::time::sleep(KEEPALIVE_INTERVAL - idle).await;
-                        continue;
-                    }
-                    if !keepalive_client.keepalive().await {
-                        break; // connection is dead; the read task will notice too
-                    }
-                }
-            });
-
-            Ok((
-                Box::new(DeepgramSttSession {
-                    client,
-                    read_task,
-                    keepalive_task,
-                }) as Box<dyn SttSession>,
-                rx,
-            ))
-        })
+        Ok((
+            Box::new(DeepgramSttSession {
+                client,
+                read_task,
+                keepalive_task,
+            }) as Box<dyn SttSession>,
+            rx,
+        ))
     }
 }
 
@@ -155,31 +120,30 @@ struct DeepgramSttSession {
     keepalive_task: JoinHandle<()>,
 }
 
+#[async_trait]
 impl SttSession for DeepgramSttSession {
-    fn send_audio(
-        &mut self,
-        pcm: &[u8],
-    ) -> Pin<Box<dyn Future<Output = Result<(), SttError>> + Send + '_>> {
+    async fn send_audio(&mut self, pcm: &[u8]) -> Result<(), SttError> {
         // One copy is unavoidable here: `Message::Binary` needs an owned
         // buffer to hand to the socket. Taking `&[u8]` rather than `Vec<u8>`
         // just means this is the only copy — the caller doesn't also need
         // its own spare owned buffer just to satisfy this signature.
         let payload = pcm.to_vec();
-        Box::pin(async move { self.client.send(Message::Binary(payload)).await })
+        self.client
+            .send(Message::Binary(payload))
+            .await
+            .map_err(Into::into)
     }
 
-    fn close(self: Box<Self>) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        Box::pin(async move {
-            // Tells Deepgram no more audio is coming, so it flushes any final
-            // transcript instead of waiting out its own silence timeout.
-            // https://developers.deepgram.com/docs/close-stream
-            let _ = self
-                .client
-                .send(Message::Text(r#"{"type":"CloseStream"}"#.into()))
-                .await;
-            self.read_task.abort();
-            self.keepalive_task.abort();
-        })
+    async fn close(self: Box<Self>) {
+        // Tells Deepgram no more audio is coming, so it flushes any final
+        // transcript instead of waiting out its own silence timeout.
+        // https://developers.deepgram.com/docs/close-stream
+        let _ = self
+            .client
+            .send(Message::Text(r#"{"type":"CloseStream"}"#.into()))
+            .await;
+        self.read_task.abort();
+        self.keepalive_task.abort();
     }
 }
 

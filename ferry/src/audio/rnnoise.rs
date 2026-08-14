@@ -78,7 +78,7 @@ impl AudioFilter for RnnoiseFilter {
         // The 480-sample chunk must also divide by the ratio, so
         // squashing it back gives a whole number of samples.
         let ratio = integer_ratio(sample_rate, RNNOISE_RATE)
-            .filter(|ratio| DenoiseState::FRAME_SIZE % ratio == 0);
+            .filter(|ratio| DenoiseState::FRAME_SIZE.is_multiple_of(*ratio));
 
         self.resampler = ratio.map(|ratio| (Upsampler::new(ratio), Downsampler::new(ratio)));
         if self.resampler.is_none() {

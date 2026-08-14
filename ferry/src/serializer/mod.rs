@@ -1,3 +1,4 @@
-pub mod browser;
-pub mod deepgram;
 pub mod serializer;
+pub mod stt;
+pub mod transport;
+pub mod tts;
