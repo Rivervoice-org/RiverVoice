@@ -1,20 +1,15 @@
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::Arc;
 use std::time::Duration;
 
-use futures_util::stream::{SplitSink, SplitStream};
-use futures_util::{SinkExt, StreamExt};
-use tokio::net::TcpStream;
-use tokio::sync::Mutex;
-use tokio::sync::mpsc::Receiver;
-use tokio::time::Instant;
+use async_trait::async_trait;
+use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::tungstenite::http::HeaderName;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
+use crate::frames::frames::Frame;
+use crate::serializer::transport::serializer::FrameSerializer;
 use crate::services::stt::language::Language;
+use crate::services::ws_client;
 use crate::turns::strategy::TurnStrategy;
 
 pub struct Transcript {
@@ -35,6 +30,7 @@ pub enum SttEvent {
     UserStoppedSpeaking,
 }
 
+#[async_trait]
 pub trait SttProvider: Send {
     fn name(&self) -> &'static str;
 
@@ -55,14 +51,60 @@ pub trait SttProvider: Send {
         None
     }
 
-    fn open(
+    async fn open(
         &self,
         config: SttConfig,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(Box<dyn SttSession>, Receiver<SttEvent>), SttError>> + Send,
-        >,
-    >;
+        serializer: Arc<dyn FrameSerializer<Message = Message>>,
+    ) -> Result<(Box<dyn SttSession>, Receiver<SttEvent>), SttError>;
+
+    /// Keeps a WebSocket-based connection alive by sending `message`
+    /// whenever it's gone `interval` without any other traffic. Shared
+    /// default rather than a per-provider trait method: this gets spawned
+    /// onto its own `tokio` task, which requires everything it captures to
+    /// be `'static` — `&self` never is, so this takes exactly the state
+    /// such a task can actually carry across (an owned client, a message,
+    /// an interval), no vendor-specific logic. Every provider gets it for
+    /// free; one that doesn't need a keepalive (or needs a vendor-specific
+    /// one) can override it. The actual loop lives in
+    /// [`ws_client::spawn_keepalive_task`], shared with
+    /// [`TtsProvider`](crate::services::tts::provider::TtsProvider)'s
+    /// identical default.
+    fn spawn_keepalive_task(
+        client: WsOutboundClient,
+        message: Message,
+        interval: Duration,
+    ) -> JoinHandle<()>
+    where
+        Self: Sized,
+    {
+        ws_client::spawn_keepalive_task(client, message, interval)
+    }
+
+    /// Reads `read` until it closes, decoding each message through
+    /// `serializer` and handing the resulting `Frame` to `map` to turn
+    /// into zero or more [`SttEvent`]s (zero for a message this provider
+    /// has nothing to say about; more than one for something like Flux's
+    /// `EndOfTurn`, which is both a final transcript and a stopped-speaking
+    /// signal — see `DeepgramFluxSttProvider`). Same reasoning as
+    /// [`SttProvider::spawn_keepalive_task`] for why this isn't a `&self`
+    /// method: the plumbing (read, decode, dispatch to `tx`) is identical
+    /// across providers, only `map` differs. The loop itself lives in
+    /// [`ws_client::spawn_read_task`], shared with
+    /// [`TtsProvider`](crate::services::tts::provider::TtsProvider)'s
+    /// identical default.
+    fn spawn_read_task<F>(
+        name: &'static str,
+        read: SttWsRead,
+        serializer: Arc<dyn FrameSerializer<Message = Message>>,
+        tx: Sender<SttEvent>,
+        map: F,
+    ) -> JoinHandle<()>
+    where
+        Self: Sized,
+        F: FnMut(Frame) -> Vec<SttEvent> + Send + 'static,
+    {
+        ws_client::spawn_read_task(name, read, serializer, tx, map)
+    }
 }
 
 pub struct SttConfig {
@@ -86,17 +128,15 @@ pub enum SttConfigKind {
     DeepgramFluxSttConfig(crate::services::stt::deepgram::DeepgramFluxSttConfig),
 }
 
+#[async_trait]
 pub trait SttSession: Send {
     /// Sends one chunk of audio. Takes a borrow rather than an owned
     /// buffer: this only ever needs to read `pcm`, so a caller that also
     /// needs to keep (e.g. forward downstream) the same bytes isn't forced
     /// to clone them just to satisfy this signature.
-    fn send_audio(
-        &mut self,
-        pcm: &[u8],
-    ) -> Pin<Box<dyn Future<Output = Result<(), SttError>> + Send + '_>>;
+    async fn send_audio(&mut self, pcm: &[u8]) -> Result<(), SttError>;
 
-    fn close(self: Box<Self>) -> Pin<Box<dyn Future<Output = ()> + Send>>;
+    async fn close(self: Box<Self>);
 }
 
 #[derive(Debug)]
@@ -118,82 +158,16 @@ impl std::fmt::Display for SttError {
 
 impl std::error::Error for SttError {}
 
-pub type SttWsWrite = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
-pub type SttWsRead = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
+pub use crate::services::ws_client::WsOutboundClient;
+/// STT's own name for the shared client's read half — kept so existing
+/// STT code doesn't have to rename what it imports. The connect/send/
+/// idle-tracking client itself lives in
+/// [`ws_client`](crate::services::ws_client), shared with TTS's Sarvam
+/// session rather than duplicated per vendor family.
+pub use crate::services::ws_client::WsRead as SttWsRead;
 
-/// An outbound WebSocket to an STT vendor's own API (axum can't dial
-/// out, so this is `tokio-tungstenite`), holding the write half so
-/// `send_audio` and the keepalive can both use it safely. `Clone` is cheap
-/// (just the `Arc`s) and lets a session and its background read/keepalive
-/// tasks each hold their own handle to the same underlying connection.
-#[derive(Clone)]
-pub struct WsOutboundClient {
-    write: Arc<Mutex<SttWsWrite>>,
-    /// When anything was last sent on this connection — audio or a
-    /// keepalive itself. Lets the keepalive loop check whether one is
-    /// actually due instead of firing on a fixed clock regardless of
-    /// activity (see [`WsOutboundClient::idle_for`]).
-    last_sent: Arc<StdMutex<Instant>>,
-}
-
-impl WsOutboundClient {
-    /// Opens the connection and wraps it. Returns the client plus the
-    /// read half, which belongs to whoever reads incoming messages, not
-    /// to the client itself.
-    pub async fn connect(
-        url: &str,
-        auth_header: HeaderName,
-        auth_value: String,
-    ) -> Result<(Self, SttWsRead), SttError> {
-        let mut request = url
-            .into_client_request()
-            .map_err(|e| SttError::Connection(e.to_string()))?;
-        let value = auth_value.parse().map_err(
-            |e: tokio_tungstenite::tungstenite::http::header::InvalidHeaderValue| {
-                SttError::Connection(e.to_string())
-            },
-        )?;
-        request.headers_mut().insert(auth_header, value);
-
-        let (ws, _) = tokio_tungstenite::connect_async(request)
-            .await
-            .map_err(|e| SttError::Connection(e.to_string()))?;
-        let (write, read) = ws.split();
-        Ok((
-            Self {
-                write: Arc::new(Mutex::new(write)),
-                last_sent: Arc::new(StdMutex::new(Instant::now())),
-            },
-            read,
-        ))
-    }
-
-    /// Sends one message on the connection (e.g. audio).
-    pub async fn send(&self, message: Message) -> Result<(), SttError> {
-        let mut write = self.write.lock().await;
-        let result = write
-            .send(message)
-            .await
-            .map_err(|e| SttError::Connection(e.to_string()));
-        if result.is_ok() {
-            *self.last_sent.lock().unwrap() = Instant::now();
-        }
-        result
-    }
-
-    /// How long it's been since anything was last sent on this connection.
-    pub fn idle_for(&self) -> Duration {
-        self.last_sent.lock().unwrap().elapsed()
-    }
-
-    /// Sends Deepgram's documented keepalive control message — a text
-    /// frame, not audio, specifically so it holds the connection open
-    /// without being processed/billed as speech.
-    /// <https://developers.deepgram.com/docs/keep-alive>
-    /// Returns `false` if the send failed, meaning the connection is dead.
-    pub async fn keepalive(&self) -> bool {
-        self.send(Message::Text(r#"{"type":"KeepAlive"}"#.into()))
-            .await
-            .is_ok()
+impl From<crate::services::ws_client::WsError> for SttError {
+    fn from(e: crate::services::ws_client::WsError) -> Self {
+        SttError::Connection(e.0)
     }
 }

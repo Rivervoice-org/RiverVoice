@@ -18,51 +18,30 @@ pub use stt::{DeepgramSttConfig, DeepgramSttProvider, Endpointing};
 
 use std::time::Duration;
 
-use tokio_tungstenite::tungstenite::http::HeaderName;
-
-use crate::services::stt::provider::{SttError, SttWsRead, WsOutboundClient};
-
 /// Reconnect attempts before giving up on a connection that keeps failing
-/// immediately (e.g. a bad API key rejected at the handshake).
-const MAX_RECONNECT_ATTEMPTS: u32 = 5;
-const RECONNECT_DELAY: Duration = Duration::from_millis(750);
+/// immediately (e.g. a bad API key rejected at the handshake). Both
+/// protocols authenticate the same way — a `Token` header — and differ
+/// only in the URL they're given, so `stt`/`flux` each call
+/// [`ws_client::connect_with_retries`](crate::services::ws_client::connect_with_retries)
+/// directly with these, rather than through a wrapper here.
+pub(super) const MAX_RECONNECT_ATTEMPTS: u32 = 5;
+pub(super) const RECONNECT_DELAY: Duration = Duration::from_millis(750);
+
+/// Deepgram closes an idle connection after ~10s of silence (its
+/// NET-0001 error). A normal pause in conversation is enough to hit
+/// that, so a keepalive runs for the life of every session. Same value
+/// for both protocols — neither documents a different requirement.
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
+
+/// How many outstanding events a session can buffer before `open()`'s
+/// caller has to catch up. Generous relative to how fast Deepgram
+/// actually emits results, just enough to absorb a scheduling hiccup
+/// without unbounded growth.
+const EVENT_CHANNEL_CAPACITY: usize = 32;
 
 /// Percent-encodes one query-string key or value per RFC 3986. Both
 /// protocols configure themselves through the URL, so this lives here
 /// rather than in either of them.
 pub(super) fn percent_encode(s: &str) -> String {
     percent_encoding::utf8_percent_encode(s, percent_encoding::NON_ALPHANUMERIC).to_string()
-}
-
-/// Dials a Deepgram WebSocket endpoint, retrying a bad start (e.g. a
-/// transient network failure) up to [`MAX_RECONNECT_ATTEMPTS`] times before
-/// giving up. Both protocols authenticate the same way — a `Token` header —
-/// and differ only in the URL they are given.
-///
-/// A rejected API key fails the same way as any other connect error:
-/// Deepgram doesn't distinguish it until the handshake completes, so there
-/// is nothing cheaper to check first.
-pub(super) async fn connect_with_retries(
-    url: &str,
-    api_key: &str,
-) -> Result<(WsOutboundClient, SttWsRead), SttError> {
-    let mut attempt = 0;
-    loop {
-        match WsOutboundClient::connect(
-            url,
-            HeaderName::from_static("authorization"),
-            format!("Token {api_key}"),
-        )
-        .await
-        {
-            Ok(connected) => return Ok(connected),
-            Err(e) => {
-                attempt += 1;
-                if attempt >= MAX_RECONNECT_ATTEMPTS {
-                    return Err(e);
-                }
-                tokio::time::sleep(RECONNECT_DELAY).await;
-            }
-        }
-    }
 }
