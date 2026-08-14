@@ -448,6 +448,7 @@ dependencies = [
  "futures-util",
  "jsonwebtoken",
  "nnnoiseless",
+ "nu-ansi-term",
  "ort",
  "percent-encoding",
  "reqwest",

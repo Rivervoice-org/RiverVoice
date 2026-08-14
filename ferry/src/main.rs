@@ -1,4 +1,5 @@
 use ferry::http;
+use ferry::logging::ColorEventFormatter;
 
 #[tokio::main]
 async fn main() {
@@ -16,7 +17,10 @@ async fn main() {
 
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-    tracing_subscriber::fmt().with_env_filter(filter).init();
+    tracing_subscriber::fmt()
+        .event_format(ColorEventFormatter)
+        .with_env_filter(filter)
+        .init();
 
     if let Err(e) = http::http::start_server().await {
         tracing::error!("server error: {e:?}");
