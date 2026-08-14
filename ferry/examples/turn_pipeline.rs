@@ -121,7 +121,7 @@ async fn run_case(name: &str, controller: TurnController, provider: FakeSttProvi
         Box::new(UserAggregatorStage::new(controller)),
     ];
 
-    let mut io = Pipeline::spawn("example", stages);
+    let mut io = Pipeline::spawn("example", stages, vec![]);
 
     println!("-> push {AUDIO_CHUNKS} chunks of silent \"browser\" audio");
     for _ in 0..AUDIO_CHUNKS {

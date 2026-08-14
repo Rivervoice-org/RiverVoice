@@ -180,11 +180,17 @@ impl FrameProcessor for UserAggregatorStage {
 
             match event {
                 Some(TurnEvent::Started) => {
+                    tracing::info!("user-aggregator: turn started");
                     if !io.push(Frame::new(FrameKind::Interruption)).await {
                         break;
                     }
                 }
-                Some(TurnEvent::Stopped { .. }) => {
+                Some(TurnEvent::Stopped { by_timeout }) => {
+                    tracing::info!(
+                        by_timeout,
+                        text = %self.buffer,
+                        "user-aggregator: turn stopped"
+                    );
                     if !self.flush(&io).await {
                         break;
                     }

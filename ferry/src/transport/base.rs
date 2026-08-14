@@ -45,7 +45,7 @@ impl<S: FrameSerializer> BaseTransport<S> {
                     // representation for at all — e.g. a transcript, on
                     // a serializer that only knows raw audio. Every such
                     // frame hits this once by design, not by mistake.
-                    tracing::debug!("{}: dropping unserializable frame: {e}", self.io.name());
+                    tracing::trace!("{}: dropping unserializable frame: {e}", self.io.name());
                 }
             }
         }

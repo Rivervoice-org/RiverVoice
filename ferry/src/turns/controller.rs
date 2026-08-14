@@ -191,7 +191,8 @@ impl TurnController {
             | FrameKind::LlmResponseEnd
             | FrameKind::TtsAudioStart
             | FrameKind::TtsAudio(_)
-            | FrameKind::TtsAudioStop => None,
+            | FrameKind::TtsAudioStop
+            | FrameKind::Metrics(_) => None,
         }
     }
 

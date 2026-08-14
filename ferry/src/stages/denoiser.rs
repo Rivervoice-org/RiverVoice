@@ -80,7 +80,8 @@ impl FrameProcessor for DenoiserStage {
                 | FrameKind::LlmResponseEnd
                 | FrameKind::TtsAudioStart
                 | FrameKind::TtsAudio(_)
-                | FrameKind::TtsAudioStop) => io.push(Frame::new(other)).await,
+                | FrameKind::TtsAudioStop
+                | FrameKind::Metrics(_)) => io.push(Frame::new(other)).await,
             };
 
             if !pushed {

@@ -81,6 +81,38 @@ impl FrameProcessor for SttStage {
                 }
                 event = events.recv() => {
                     let Some(event) = event else { break };
+
+                    // Starts on `UserStartedSpeaking`, stops on the
+                    // *final* transcript for that utterance (not an
+                    // interim one). `UserStoppedSpeaking` is deliberately
+                    // not the start trigger: for a turn-based provider
+                    // like Deepgram Flux, `EndOfTurn` synthesizes the
+                    // final transcript and `UserStoppedSpeaking` from one
+                    // message and emits them transcript-first (see
+                    // `DeepgramFluxSttProvider`'s read task) — so a clock
+                    // that starts on `UserStoppedSpeaking` would always
+                    // start *after* the very transcript it's meant to
+                    // time. `UserStartedSpeaking` always precedes both,
+                    // for every provider, so it's the only trigger this
+                    // can safely start from. Restarted (cancel then
+                    // start, not just start-if-idle) on every
+                    // `UserStartedSpeaking` so a stale clock from an
+                    // utterance whose final transcript never arrived
+                    // doesn't bleed into this one.
+                    let downstream_alive = match &event {
+                        SttEvent::UserStartedSpeaking => {
+                            io.cancel_ttfb_metrics();
+                            io.start_ttfb_metrics();
+                            true
+                        }
+                        SttEvent::UserStoppedSpeaking => true,
+                        SttEvent::Transcript(t) if t.is_final => io.stop_ttfb_metrics().await,
+                        SttEvent::Transcript(_) => true,
+                    };
+                    if !downstream_alive {
+                        break;
+                    }
+
                     let kind = match event {
                         SttEvent::Transcript(t) => FrameKind::Transcription(TranscriptionFrame {
                             text: t.text,

@@ -1,4 +1,5 @@
 use ferry::http;
+use ferry::logging::ColorEventFormatter;
 
 #[tokio::main]
 async fn main() {
@@ -16,7 +17,21 @@ async fn main() {
 
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-    tracing_subscriber::fmt().with_env_filter(filter).init();
+
+    // Colored, human-shaped lines for a local terminal; structured JSON
+    // once deployed, so log platforms (CloudWatch, Loki, ...) get real
+    // queryable fields instead of ANSI escapes baked into a string.
+    if std::env::var("LOG_FORMAT").as_deref() == Ok("json") {
+        tracing_subscriber::fmt()
+            .json()
+            .with_env_filter(filter)
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .event_format(ColorEventFormatter)
+            .with_env_filter(filter)
+            .init();
+    }
 
     if let Err(e) = http::http::start_server().await {
         tracing::error!("server error: {e:?}");

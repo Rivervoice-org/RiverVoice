@@ -4,11 +4,16 @@ use crate::frames::frames::{Frame, FrameKind, RawAudioFrame};
 use crate::serializer::serializer::FrameSerializer;
 
 /// The browser dialect is trivial: binary messages carry raw PCM (s16le)
-/// with no envelope, so deserializing is just wrapping the bytes in a
-/// `RawAudioFrame` and serializing is unwrapping them. `RawAudio` is the
-/// only frame kind with a defined wire form here; anything else (a
-/// transcript, a turn boundary) has no browser-facing representation yet
-/// and is rejected rather than inventing one.
+/// with no envelope. Deserializing is just wrapping incoming mic bytes in
+/// a `RawAudioFrame`; serializing only ever turns `TtsAudio` (the bot's
+/// spoken reply) into a binary message. `RawAudio` is deliberately not
+/// serialized here even though it reaches the end of the pipeline
+/// unchanged (every stage between the transport and TTS forwards a frame
+/// kind it doesn't own) — echoing the caller's own mic audio back was
+/// only ever right for the earlier denoiser-only demo; a real call would
+/// have the caller hear themselves layered under the bot's reply.
+/// Everything else (a transcript, a turn boundary) has no browser-facing
+/// representation yet and is rejected rather than inventing one.
 pub struct BrowserSerializer {
     sample_rate: u32,
     num_channels: u16,
@@ -28,8 +33,9 @@ impl FrameSerializer for BrowserSerializer {
 
     fn serialize(&self, frame: Frame) -> anyhow::Result<Message> {
         match frame.into_kind() {
-            FrameKind::RawAudio(audio) => Ok(Message::Binary(audio.audio.into())),
-            FrameKind::Transcription(_)
+            FrameKind::TtsAudio(audio) => Ok(Message::Binary(audio.audio.into())),
+            FrameKind::RawAudio(_)
+            | FrameKind::Transcription(_)
             | FrameKind::UserStartedSpeaking
             | FrameKind::UserStoppedSpeaking
             | FrameKind::ServiceMetadata(_)
@@ -39,8 +45,8 @@ impl FrameSerializer for BrowserSerializer {
             | FrameKind::LlmText(_)
             | FrameKind::LlmResponseEnd
             | FrameKind::TtsAudioStart
-            | FrameKind::TtsAudio(_)
-            | FrameKind::TtsAudioStop => {
+            | FrameKind::TtsAudioStop
+            | FrameKind::Metrics(_) => {
                 anyhow::bail!("browser serializer: no wire representation for this frame yet")
             }
         }

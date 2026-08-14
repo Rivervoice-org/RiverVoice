@@ -71,6 +71,7 @@ impl FrameProcessor for TtsStage {
                     match frame.into_kind() {
                         FrameKind::LlmText(t) => {
                             for sentence in aggregator.push(&t.text) {
+                                io.start_ttfb_metrics();
                                 if session.send_text(&sentence).await.is_err() {
                                     break;
                                 }
@@ -78,6 +79,17 @@ impl FrameProcessor for TtsStage {
                         }
                         FrameKind::LlmResponseEnd => {
                             if let Some(sentence) = aggregator.flush() {
+                                // Only the per-sentence loop in the
+                                // `LlmText` arm above used to start this
+                                // clock — a reply that never crosses a
+                                // confirmed sentence boundary before the
+                                // response ends (no mid-stream `.`/`!`/`?`)
+                                // skipped it entirely, so the first audio
+                                // chunk's `stop_ttfb_metrics()` was a
+                                // silent no-op. This is the other place
+                                // text first goes to the vendor for an
+                                // utterance, so it needs the same start.
+                                io.start_ttfb_metrics();
                                 let _ = session.send_text(&sentence).await;
                             }
                             // Told once per completed turn, after its
@@ -107,6 +119,7 @@ impl FrameProcessor for TtsStage {
                             // can land right after too — see below) and
                             // must not be played.
                             while events.try_recv().is_ok() {}
+                            io.cancel_ttfb_metrics();
                             if speaking {
                                 if !io.push(Frame::new(FrameKind::TtsAudioStop)).await {
                                     break;
@@ -129,6 +142,9 @@ impl FrameProcessor for TtsStage {
                     match event {
                         TtsEvent::AudioChunk(audio) => {
                             if !speaking {
+                                if !io.stop_ttfb_metrics().await {
+                                    break;
+                                }
                                 if !io.push(Frame::new(FrameKind::TtsAudioStart)).await {
                                     break;
                                 }
@@ -145,6 +161,13 @@ impl FrameProcessor for TtsStage {
                             }
                         }
                         TtsEvent::Done => {
+                            // A no-op if the first audio chunk already
+                            // stopped it. Guards the case that never
+                            // fires at all — text was sent but the
+                            // vendor produced zero audio before signaling
+                            // done — so a still-running clock doesn't
+                            // leak into the next utterance.
+                            io.cancel_ttfb_metrics();
                             if speaking {
                                 if !io.push(Frame::new(FrameKind::TtsAudioStop)).await {
                                     break;

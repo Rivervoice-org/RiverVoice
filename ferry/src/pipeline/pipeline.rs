@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use tokio::sync::mpsc;
 
 use crate::frames::frames::Frame;
+use crate::observer::observer::FrameObserver;
 use crate::processor::processor::{FrameIo, FrameProcessor};
 
 /// How many frames can wait in each stage's inbox before the pusher is
@@ -22,7 +25,16 @@ impl Pipeline {
     ///
     /// When the transport drops this `FrameIo`, the first stage's inbox
     /// closes and shutdown ripples through every stage in order.
-    pub fn spawn(name: &str, stages: Vec<Box<dyn FrameProcessor>>) -> FrameIo {
+    ///
+    /// `observers` watches every frame crossing every stage boundary; see
+    /// [`FrameObserver`]. The same set is shared (via `Arc`, not copied)
+    /// across every stage's `FrameIo`.
+    pub fn spawn(
+        name: &str,
+        stages: Vec<Box<dyn FrameProcessor>>,
+        observers: Vec<Arc<dyn FrameObserver>>,
+    ) -> FrameIo {
+        let observers: Arc<[Arc<dyn FrameObserver>]> = observers.into();
         let (into_first, mut prev_exit) = mpsc::channel::<Frame>(STAGE_QUEUE_SIZE);
         let (into_first_control, mut prev_exit_control) = mpsc::channel::<Frame>(STAGE_QUEUE_SIZE);
 
@@ -35,6 +47,7 @@ impl Pipeline {
                 prev_exit_control,
                 entrance,
                 entrance_control,
+                Arc::clone(&observers),
             );
             tokio::spawn(stage.run(io));
             prev_exit = exit;
@@ -47,6 +60,7 @@ impl Pipeline {
             prev_exit_control,
             into_first,
             into_first_control,
+            observers,
         )
     }
 }
