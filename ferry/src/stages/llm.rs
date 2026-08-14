@@ -70,6 +70,7 @@ impl FrameProcessor for LlmStage {
                         }
                         events = None;
                         response.clear();
+                        io.cancel_ttfb_metrics();
                         if !io.push(Frame::new(FrameKind::Interruption)).await {
                             break;
                         }
@@ -86,6 +87,17 @@ impl FrameProcessor for LlmStage {
                         }
                         events = None;
                         self.history.push(LlmMessage::user(agg.text));
+                        // Started before the request, not after — the
+                        // network round-trip lives inside
+                        // `provider.stream()`'s own `await` (its POST,
+                        // e.g. `openrouter.rs`'s `.send().await`), so
+                        // starting the clock only once that returns would
+                        // measure just the leftover channel handoff, not
+                        // the real TTFB. Mirrors pipecat's own LLM
+                        // services (e.g. `anthropic/llm.py`:
+                        // `start_ttfb_metrics()` precedes
+                        // `_create_message_stream(...)`, not the reverse).
+                        io.start_ttfb_metrics();
                         // Awaited inline, same as `SttStage` awaiting
                         // `provider.open()` before its loop starts: an
                         // interruption arriving during this specific
@@ -102,6 +114,7 @@ impl FrameProcessor for LlmStage {
                                 }
                             }
                             Err(e) => {
+                                io.cancel_ttfb_metrics();
                                 tracing::error!("llm: failed to start generation: {e}");
                             }
                         }
@@ -120,6 +133,12 @@ impl FrameProcessor for LlmStage {
                     // any text arrived, has nothing worth remembering.
                     generation = None;
                     events = None;
+                    // A no-op if `TextDelta` already stopped it. Guards
+                    // the case that never fires it at all — a generation
+                    // that closes with zero text — so a still-running
+                    // clock doesn't leak into whichever turn's first
+                    // token arrives next.
+                    io.cancel_ttfb_metrics();
                     if !response.is_empty() {
                         self.history
                             .push(LlmMessage::assistant(std::mem::take(&mut response)));
@@ -129,6 +148,9 @@ impl FrameProcessor for LlmStage {
                     }
                 }
                 Next::Event(Some(LlmEvent::TextDelta(delta))) => {
+                    if !io.stop_ttfb_metrics().await {
+                        break;
+                    }
                     response.push_str(&delta);
                     if !io
                         .push(Frame::new(FrameKind::LlmText(LlmTextFrame { text: delta })))

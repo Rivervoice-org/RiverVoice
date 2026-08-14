@@ -1,9 +1,10 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use async_trait::async_trait;
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::frames::frames::{Frame, FrameKind};
+use crate::frames::frames::{Frame, FrameKind, MetricsFrame};
 use crate::observer::observer::FrameObserver;
 
 /// A processor's (or transport's) access to the pipeline: where its
@@ -25,6 +26,8 @@ pub struct FrameIo {
     /// clone per stage, not a copy of the list itself. See
     /// [`FrameObserver`].
     observers: Arc<[Arc<dyn FrameObserver>]>,
+    /// This stage's own time-to-first-byte (TTFB) stopwatch — see [`FrameIo::start_ttfb_metrics`].
+    ttfb_start: Option<Instant>,
 }
 
 impl FrameIo {
@@ -43,6 +46,7 @@ impl FrameIo {
             downstream,
             downstream_control,
             observers,
+            ttfb_start: None,
         }
     }
 
@@ -91,6 +95,46 @@ impl FrameIo {
             }
         }
         frame
+    }
+
+    /// Starts this stage's TTFB stopwatch — call right where the stage
+    /// itself begins a real request (sending audio worth transcribing,
+    /// starting an LLM generation, sending text to synthesize). A no-op
+    /// if a stopwatch is already running: only the request that opened
+    /// the current window starts the clock, not every one of its
+    /// follow-ups (e.g. every audio chunk while STT is still waiting on
+    /// its first transcript back).
+    pub fn start_ttfb_metrics(&mut self) {
+        if self.ttfb_start.is_none() {
+            self.ttfb_start = Some(Instant::now());
+        }
+    }
+
+    /// Stops the stopwatch (if one is running) and pushes the elapsed
+    /// time downstream as a [`FrameKind::Metrics`] frame tagged with this
+    /// stage's own name — call right where the stage sees the first sign
+    /// of a response to the request that started it (first transcript,
+    /// first LLM token, first TTS audio chunk). `true` and no frame
+    /// pushed if no stopwatch was running (e.g. called again for a later
+    /// chunk of the same response).
+    pub async fn stop_ttfb_metrics(&mut self) -> bool {
+        let start = match self.ttfb_start.take() {
+            Some(start) => start,
+            None => return true,
+        };
+        self.push(Frame::new(FrameKind::Metrics(MetricsFrame {
+            stage: self.name.clone(),
+            ttfb_ms: start.elapsed().as_millis() as u64,
+        })))
+        .await
+    }
+
+    /// Discards a running stopwatch without reporting it — call when the
+    /// request it was timing was cut short (an interruption) rather than
+    /// actually answered, so its partial, meaningless elapsed time isn't
+    /// mistaken for a real measurement.
+    pub fn cancel_ttfb_metrics(&mut self) {
+        self.ttfb_start = None;
     }
 
     /// Drops every frame currently buffered in the work queue. Called

@@ -85,6 +85,11 @@ pub enum FrameKind {
     /// waits for this rather than inferring "done speaking" from a gap
     /// between audio chunks.
     TtsAudioStop,
+    /// A stage's own measurement of its request/response latency —
+    /// pushed by the stage itself (it alone knows when its own request
+    /// truly started and ended), not inferred from outside. See
+    /// [`MetricsFrame`].
+    Metrics(MetricsFrame),
 }
 
 impl FrameKind {
@@ -103,6 +108,7 @@ impl FrameKind {
             FrameKind::TtsAudioStart => "TtsAudioStartFrame".to_string(),
             FrameKind::TtsAudio(_) => "TtsAudioFrame".to_string(),
             FrameKind::TtsAudioStop => "TtsAudioStopFrame".to_string(),
+            FrameKind::Metrics(_) => "MetricsFrame".to_string(),
         }
     }
 
@@ -192,4 +198,18 @@ pub struct LlmTextFrame {
 pub struct TtsAudioFrame {
     pub audio: Vec<u8>,
     pub sample_rate: u32,
+}
+
+/// One stage's time-to-first-byte for one request: how long it took from
+/// starting its own work (sending audio, starting a generation, sending
+/// text to synthesize) to the first sign of a response coming back.
+/// Computed by the stage itself — see [`FrameKind::Metrics`] — since only
+/// the stage knows which of its internal events actually bracket one
+/// request; nothing generic sitting outside it (an observer watching
+/// `FrameIo`) can infer that boundary for a continuously-streaming stage
+/// like STT.
+pub struct MetricsFrame {
+    /// Which stage measured itself, e.g. `"stt"`, `"llm"`, `"tts"`.
+    pub stage: String,
+    pub ttfb_ms: u64,
 }

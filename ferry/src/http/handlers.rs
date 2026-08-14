@@ -4,6 +4,7 @@ use crate::audio::rnnoise::RnnoiseFilter;
 use crate::http::response::ApiResponse;
 use crate::observer::latency_observer::LatencyObserver;
 use crate::observer::log_observer::LogObserver;
+use crate::observer::metrics_log_observer::MetricsLogObserver;
 use crate::observer::stage_latency_observer::StageLatencyObserver;
 use crate::pipeline::pipeline::Pipeline;
 use crate::serializer::stt::deepgram_flux::DeepgramFluxSerializer;
@@ -172,6 +173,7 @@ pub async fn browser_stream(ws: WebSocketUpgrade, header: HeaderMap) -> Response
             Arc::new(LogObserver),
             Arc::new(LatencyObserver::new()),
             Arc::new(StageLatencyObserver::new()),
+            Arc::new(MetricsLogObserver),
         ],
     );
 

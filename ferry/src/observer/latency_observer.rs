@@ -58,7 +58,16 @@ impl FrameObserver for LatencyObserver {
             // clock running and get folded into whichever later turn
             // finally triggers `TtsAudioStart`, wildly overstating that
             // turn's latency.
-            FrameKind::Interruption => {
+            //
+            // Both `Interruption` and `UserStartedSpeaking` reset it
+            // independently rather than relying on one implying the
+            // other — pipecat's `UserBotLatencyObserver` does the same
+            // (`VADUserStartedSpeakingFrame` and `InterruptionFrame` are
+            // handled as two separate cases, `user_bot_latency_observer.py`)
+            // even though its `UserAggregatorStage`-equivalent also always
+            // fires an interruption on turn start. Cheap insurance against
+            // that cross-file invariant ever drifting.
+            FrameKind::Interruption | FrameKind::UserStartedSpeaking => {
                 *self.waiting_since.lock().unwrap() = None;
             }
             _ => {}

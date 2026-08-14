@@ -43,7 +43,8 @@ impl FrameSerializer for DeepgramSerializer {
             | FrameKind::LlmResponseEnd
             | FrameKind::TtsAudioStart
             | FrameKind::TtsAudio(_)
-            | FrameKind::TtsAudioStop => {
+            | FrameKind::TtsAudioStop
+            | FrameKind::Metrics(_) => {
                 anyhow::bail!("deepgram serializer: cannot send this frame to deepgram")
             }
         }

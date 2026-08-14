@@ -45,7 +45,8 @@ impl FrameSerializer for BrowserSerializer {
             | FrameKind::LlmText(_)
             | FrameKind::LlmResponseEnd
             | FrameKind::TtsAudioStart
-            | FrameKind::TtsAudioStop => {
+            | FrameKind::TtsAudioStop
+            | FrameKind::Metrics(_) => {
                 anyhow::bail!("browser serializer: no wire representation for this frame yet")
             }
         }
