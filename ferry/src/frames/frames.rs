@@ -63,6 +63,28 @@ pub enum FrameKind {
     /// joined into a single block of text and emitted once the turn
     /// ends. See [`UserTurnAggregationFrame`].
     UserTurnAggregation(UserTurnAggregationFrame),
+    /// An LLM generation has started streaming a reply. Pushed once, right
+    /// before the first [`FrameKind::LlmText`] of that reply.
+    LlmResponseStart,
+    /// One chunk of the assistant's streamed reply. See [`LlmTextFrame`].
+    LlmText(LlmTextFrame),
+    /// The LLM generation that [`FrameKind::LlmResponseStart`] opened has
+    /// finished, successfully or otherwise. A downstream stage (TTS) that
+    /// wants to know a reply is complete, as opposed to just paused
+    /// between chunks, waits for this rather than inferring it from a gap
+    /// in `LlmText` frames.
+    LlmResponseEnd,
+    /// The bot has started speaking: the first [`FrameKind::TtsAudio`]
+    /// chunk of one utterance is about to follow. Pushed once per
+    /// utterance, not once per call — see [`FrameKind::TtsAudioStop`].
+    TtsAudioStart,
+    /// One chunk of synthesized PCM audio. See [`TtsAudioFrame`].
+    TtsAudio(TtsAudioFrame),
+    /// Every chunk of the utterance [`FrameKind::TtsAudioStart`] opened
+    /// has been delivered. A downstream stage (the output transport)
+    /// waits for this rather than inferring "done speaking" from a gap
+    /// between audio chunks.
+    TtsAudioStop,
 }
 
 impl FrameKind {
@@ -75,6 +97,12 @@ impl FrameKind {
             FrameKind::ServiceMetadata(_) => "ServiceMetadataFrame".to_string(),
             FrameKind::Interruption => "InterruptionFrame".to_string(),
             FrameKind::UserTurnAggregation(_) => "UserTurnAggregationFrame".to_string(),
+            FrameKind::LlmResponseStart => "LlmResponseStartFrame".to_string(),
+            FrameKind::LlmText(_) => "LlmTextFrame".to_string(),
+            FrameKind::LlmResponseEnd => "LlmResponseEndFrame".to_string(),
+            FrameKind::TtsAudioStart => "TtsAudioStartFrame".to_string(),
+            FrameKind::TtsAudio(_) => "TtsAudioFrame".to_string(),
+            FrameKind::TtsAudioStop => "TtsAudioStopFrame".to_string(),
         }
     }
 
@@ -149,4 +177,19 @@ pub struct TranscriptionFrame {
 /// [`UserAggregatorStage`](crate::stages::user_aggregator::UserAggregatorStage).
 pub struct UserTurnAggregationFrame {
     pub text: String,
+}
+
+/// One chunk of an LLM's streamed reply, in whatever pieces the provider
+/// sends them (a token, a few tokens, a line). See
+/// [`FrameKind::LlmText`].
+pub struct LlmTextFrame {
+    pub text: String,
+}
+
+/// One chunk of synthesized PCM audio for one utterance, tagged with the
+/// rate it was generated at (a TTS provider's own voice/model decides
+/// this, not the pipeline). See [`FrameKind::TtsAudio`].
+pub struct TtsAudioFrame {
+    pub audio: Vec<u8>,
+    pub sample_rate: u32,
 }

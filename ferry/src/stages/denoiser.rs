@@ -74,7 +74,13 @@ impl FrameProcessor for DenoiserStage {
                 | FrameKind::UserStoppedSpeaking
                 | FrameKind::ServiceMetadata(_)
                 | FrameKind::Interruption
-                | FrameKind::UserTurnAggregation(_)) => io.push(Frame::new(other)).await,
+                | FrameKind::UserTurnAggregation(_)
+                | FrameKind::LlmResponseStart
+                | FrameKind::LlmText(_)
+                | FrameKind::LlmResponseEnd
+                | FrameKind::TtsAudioStart
+                | FrameKind::TtsAudio(_)
+                | FrameKind::TtsAudioStop) => io.push(Frame::new(other)).await,
             };
 
             if !pushed {
