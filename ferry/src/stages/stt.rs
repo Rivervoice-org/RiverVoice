@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use crate::frames::frames::{Frame, FrameKind, ServiceMetadataFrame, TranscriptionFrame};
 use crate::processor::processor::{FrameIo, FrameProcessor};
-use crate::serializer::transport::serializer::FrameSerializer;
+use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::provider::{SttConfig, SttEvent, SttProvider};
 
 /// Turns an [`SttProvider`] into a pipeline stage: `RawAudio` frames

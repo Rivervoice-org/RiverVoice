@@ -2,7 +2,7 @@ use serde::Deserialize;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::frames::frames::{Frame, FrameKind, TranscriptionFrame};
-use crate::serializer::transport::serializer::FrameSerializer;
+use crate::serializer::serializer::FrameSerializer;
 
 /// The Deepgram Flux dialect (`/v2/listen`, not `/v1/listen`): outgoing
 /// `RawAudio` frames go out as raw PCM (s16le) binary messages, same as

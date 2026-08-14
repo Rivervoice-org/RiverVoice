@@ -8,7 +8,7 @@ use tokio_tungstenite::tungstenite::http::HeaderName;
 
 use super::{MAX_RECONNECT_ATTEMPTS, RECONNECT_DELAY, percent_encode};
 use crate::frames::frames::FrameKind;
-use crate::serializer::transport::serializer::FrameSerializer;
+use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::deepgram::{EVENT_CHANNEL_CAPACITY, KEEPALIVE_INTERVAL};
 use crate::services::stt::language::Language;
 use crate::services::stt::provider::{

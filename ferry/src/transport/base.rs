@@ -1,6 +1,6 @@
 use crate::frames::frames::Frame;
 use crate::processor::processor::FrameIo;
-use crate::serializer::transport::serializer::FrameSerializer;
+use crate::serializer::serializer::FrameSerializer;
 
 /// What every transport owns, regardless of its wire: access to the
 /// pipeline and the serializer that speaks the wire's dialect. Concrete

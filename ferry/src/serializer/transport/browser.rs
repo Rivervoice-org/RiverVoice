@@ -1,7 +1,7 @@
 use axum::extract::ws::Message;
 
 use crate::frames::frames::{Frame, FrameKind, RawAudioFrame};
-use crate::serializer::transport::serializer::FrameSerializer;
+use crate::serializer::serializer::FrameSerializer;
 
 /// The browser dialect is trivial: binary messages carry raw PCM (s16le)
 /// with no envelope, so deserializing is just wrapping the bytes in a

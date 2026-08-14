@@ -9,7 +9,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 use super::percent_encode;
 use crate::frames::frames::FrameKind;
-use crate::serializer::transport::serializer::FrameSerializer;
+use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::deepgram::{
     EVENT_CHANNEL_CAPACITY, KEEPALIVE_INTERVAL, MAX_RECONNECT_ATTEMPTS, RECONNECT_DELAY,
 };

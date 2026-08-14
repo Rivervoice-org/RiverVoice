@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use crate::frames::frames::{Frame, FrameKind, TtsAudioFrame};
 use crate::processor::processor::{FrameIo, FrameProcessor};
-use crate::serializer::transport::serializer::FrameSerializer;
+use crate::serializer::serializer::FrameSerializer;
 use crate::services::tts::provider::{TtsConfig, TtsEvent, TtsProvider};
 
 /// Turns a [`TtsProvider`] into a pipeline stage: [`FrameKind::LlmText`]

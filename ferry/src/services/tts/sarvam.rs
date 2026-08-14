@@ -9,7 +9,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::http::HeaderName;
 
 use crate::frames::frames::FrameKind;
-use crate::serializer::transport::serializer::FrameSerializer;
+use crate::serializer::serializer::FrameSerializer;
 use crate::services::tts::provider::{
     TtsConfig, TtsConfigKind, TtsError, TtsEvent, TtsProvider, TtsSession,
 };

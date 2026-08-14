@@ -7,7 +7,7 @@ use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::frames::frames::Frame;
-use crate::serializer::transport::serializer::FrameSerializer;
+use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::language::Language;
 use crate::services::ws_client;
 use crate::turns::strategy::TurnStrategy;

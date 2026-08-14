@@ -3,7 +3,7 @@ use serde::Deserialize;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::frames::frames::{Frame, FrameKind, TtsAudioFrame};
-use crate::serializer::transport::serializer::FrameSerializer;
+use crate::serializer::serializer::FrameSerializer;
 
 /// The Sarvam TTS dialect, for an inbound client connection that speaks
 /// Sarvam's own streaming format directly — same role

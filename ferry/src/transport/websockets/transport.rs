@@ -4,7 +4,7 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 
-use crate::serializer::transport::serializer::FrameSerializer;
+use crate::serializer::serializer::FrameSerializer;
 use crate::transport::base::BaseTransport;
 
 /// The WebSocket doorway: connection upgrade and the socket read/write
