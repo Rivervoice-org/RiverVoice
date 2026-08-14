@@ -2,6 +2,9 @@ use std::sync::Arc;
 
 use crate::audio::rnnoise::RnnoiseFilter;
 use crate::http::response::ApiResponse;
+use crate::observer::latency_observer::LatencyObserver;
+use crate::observer::log_observer::LogObserver;
+use crate::observer::stage_latency_observer::StageLatencyObserver;
 use crate::pipeline::pipeline::Pipeline;
 use crate::serializer::stt::deepgram_flux::DeepgramFluxSerializer;
 use crate::serializer::transport::browser::BrowserSerializer;
@@ -164,6 +167,11 @@ pub async fn browser_stream(ws: WebSocketUpgrade, header: HeaderMap) -> Response
                 ),
                 Arc::new(SarvamSerializer::new(TTS_SAMPLE_RATE)),
             )),
+        ],
+        vec![
+            Arc::new(LogObserver),
+            Arc::new(LatencyObserver::new()),
+            Arc::new(StageLatencyObserver::new()),
         ],
     );
 

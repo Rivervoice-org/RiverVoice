@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::frames::frames::{Frame, FrameKind};
+use crate::observer::observer::FrameObserver;
 
 /// A processor's (or transport's) access to the pipeline: where its
 /// frames come from and where it pushes them. Wiring is the pipeline's
@@ -18,6 +21,10 @@ pub struct FrameIo {
     control: Receiver<Frame>,
     downstream: Sender<Frame>,
     downstream_control: Sender<Frame>,
+    /// Shared across every stage's `FrameIo` in the pipeline — an `Arc`
+    /// clone per stage, not a copy of the list itself. See
+    /// [`FrameObserver`].
+    observers: Arc<[Arc<dyn FrameObserver>]>,
 }
 
 impl FrameIo {
@@ -27,6 +34,7 @@ impl FrameIo {
         control: Receiver<Frame>,
         downstream: Sender<Frame>,
         downstream_control: Sender<Frame>,
+        observers: Arc<[Arc<dyn FrameObserver>]>,
     ) -> Self {
         Self {
             name: name.into(),
@@ -34,6 +42,7 @@ impl FrameIo {
             control,
             downstream,
             downstream_control,
+            observers,
         }
     }
 
@@ -45,6 +54,9 @@ impl FrameIo {
     /// Pushes a frame onward, onto whichever of the two queues it belongs
     /// on. `false` means downstream is gone, wind down.
     pub async fn push(&self, frame: Frame) -> bool {
+        for observer in self.observers.iter() {
+            observer.on_push(&self.name, &frame);
+        }
         let queue = if frame.kind().is_control() {
             &self.downstream_control
         } else {
@@ -57,7 +69,7 @@ impl FrameIo {
     /// queues are closed and drained, so the call is over; finish
     /// in-flight work and return.
     pub async fn take(&mut self) -> Option<Frame> {
-        tokio::select! {
+        let frame = tokio::select! {
             biased;
             control = self.control.recv() => match control {
                 Some(frame) => {
@@ -72,7 +84,13 @@ impl FrameIo {
                 None => self.upstream.recv().await,
             },
             work = self.upstream.recv() => work,
+        };
+        if let Some(frame) = &frame {
+            for observer in self.observers.iter() {
+                observer.on_take(&self.name, frame);
+            }
         }
+        frame
     }
 
     /// Drops every frame currently buffered in the work queue. Called

@@ -9,6 +9,7 @@ pub mod audio;
 pub mod auth;
 pub mod frames;
 pub mod http;
+pub mod observer;
 pub mod pipeline;
 pub mod processor;
 pub mod serializer;
