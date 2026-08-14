@@ -75,6 +75,16 @@ impl FrameProcessor for LlmStage {
                         }
                     }
                     FrameKind::UserTurnAggregation(agg) => {
+                        // Normally redundant with the `Interruption` arm
+                        // above, which always precedes a new turn — kept
+                        // here so a still-streaming generation is never
+                        // silently overwritten (and left running,
+                        // ungoverned) if that ordering invariant doesn't
+                        // hold for some reason.
+                        if let Some(generation) = generation.take() {
+                            generation.cancel();
+                        }
+                        events = None;
                         self.history.push(LlmMessage::user(agg.text));
                         // Awaited inline, same as `SttStage` awaiting
                         // `provider.open()` before its loop starts: an
