@@ -89,13 +89,33 @@ pub fn parse_message(text: &str) -> anyhow::Result<SarvamEvent> {
 /// PCM, the same inconsistency Pipecat's `SarvamHttpTTSService` strips
 /// out (`tts.py`, HTTP variant) — done here too since nothing guarantees
 /// the streaming endpoint is exempt from it.
+///
+/// This runs per message, not just on a stream's first chunk (there's no
+/// per-stream state to know which chunk this is — see
+/// [`SarvamEvent::AudioChunk`]'s doc comment), so [`has_wav_header`]
+/// checks all four of a canonical header's fixed-offset magic tags
+/// (`RIFF`/`WAVE`/`fmt `/`data`) rather than just the leading `RIFF`: a
+/// mid-stream raw-PCM chunk coincidentally opening with `RIFF` is
+/// low-probability enough on its own to have been worth flagging;
+/// coincidentally matching all four is not a real risk.
 fn decode_audio(b64: &str) -> anyhow::Result<Vec<u8>> {
     let bytes = base64::engine::general_purpose::STANDARD.decode(b64)?;
-    if bytes.len() > 44 && &bytes[0..4] == b"RIFF" {
+    if has_wav_header(&bytes) {
         Ok(bytes[44..].to_vec())
     } else {
         Ok(bytes)
     }
+}
+
+/// Whether `bytes` opens with a 44-byte canonical WAV header: the `RIFF`/
+/// `WAVE`/`fmt `/`data` tags each present at the fixed byte offset a real
+/// header always puts them.
+fn has_wav_header(bytes: &[u8]) -> bool {
+    bytes.len() > 44
+        && &bytes[0..4] == b"RIFF"
+        && &bytes[8..12] == b"WAVE"
+        && &bytes[12..16] == b"fmt "
+        && &bytes[36..40] == b"data"
 }
 
 /// Every message Sarvam can send back on the streaming TTS WebSocket.
