@@ -32,7 +32,7 @@ impl FrameSerializer for SarvamSerializer {
 
     fn serialize(&self, frame: Frame) -> anyhow::Result<Message> {
         match frame.into_kind() {
-            FrameKind::TtsAudio(audio) => Ok(Message::Binary(audio.audio.into())),
+            FrameKind::TtsAudio(audio) => Ok(Message::Binary(audio.audio)),
             _ => anyhow::bail!("sarvam serializer: no wire representation for this frame yet"),
         }
     }

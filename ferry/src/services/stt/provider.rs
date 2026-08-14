@@ -123,6 +123,11 @@ impl SttConfig {
     }
 }
 
+// One `SttConfig` is built per call and lives for the life of that call's
+// STT session — never in a hot loop or a large collection — so the ~200
+// byte gap between variants isn't worth the indirection (and the three
+// call sites' worth of `Box::new`/deref churn) boxing would add.
+#[allow(clippy::large_enum_variant)]
 pub enum SttConfigKind {
     DeepgramSttConfig(crate::services::stt::deepgram::DeepgramSttConfig),
     DeepgramFluxSttConfig(crate::services::stt::deepgram::DeepgramFluxSttConfig),

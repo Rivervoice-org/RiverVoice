@@ -242,9 +242,7 @@ impl TtsProvider for SarvamTtsProvider {
 /// a stale cached value if `ClientMessage::Ping`'s shape ever changes.
 fn ping_message() -> Message {
     Message::Text(
-        serde_json::to_string(&ClientMessage::Ping)
-            .expect("ClientMessage::Ping always serializes")
-            .into(),
+        serde_json::to_string(&ClientMessage::Ping).expect("ClientMessage::Ping always serializes"),
     )
 }
 
@@ -252,7 +250,7 @@ async fn send_json(client: &WsOutboundClient, message: &ClientMessage) -> Result
     let text = serde_json::to_string(message)
         .map_err(|e| TtsError::Protocol(format!("failed to encode message: {e}")))?;
     client
-        .send(Message::Text(text.into()))
+        .send(Message::Text(text))
         .await
         .map_err(|e| TtsError::Connection(e.to_string()))
 }

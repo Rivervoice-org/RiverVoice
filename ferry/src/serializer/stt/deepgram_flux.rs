@@ -25,12 +25,18 @@ impl DeepgramFluxSerializer {
     }
 }
 
+impl Default for DeepgramFluxSerializer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FrameSerializer for DeepgramFluxSerializer {
     type Message = Message;
 
     fn serialize(&self, frame: Frame) -> anyhow::Result<Message> {
         match frame.into_kind() {
-            FrameKind::RawAudio(audio) => Ok(Message::Binary(audio.audio.into())),
+            FrameKind::RawAudio(audio) => Ok(Message::Binary(audio.audio)),
             FrameKind::Transcription(_)
             | FrameKind::UserStartedSpeaking
             | FrameKind::UserStoppedSpeaking

@@ -85,6 +85,10 @@ impl SileroVad {
         Ok(Self {
             session,
             sample_rate: 0,
+            // The `1` is the batch size in the `[2, 1, 128]` shape above,
+            // not a no-op — kept literal so this matches that shape at a
+            // glance rather than needing the reader to recompute it.
+            #[allow(clippy::identity_op)]
             state: vec![0.0; 2 * 1 * 128],
             context: Vec::new(),
             last_reset: Instant::now(),
@@ -92,7 +96,11 @@ impl SileroVad {
     }
 
     fn reset_state(&mut self) {
-        self.state = vec![0.0; 2 * 1 * 128];
+        // See the field's doc comment on `state` for the `[2, 1, 128]`
+        // shape this literal matches.
+        #[allow(clippy::identity_op)]
+        let state = vec![0.0; 2 * 1 * 128];
+        self.state = state;
         self.context.clear();
         self.last_reset = Instant::now();
     }

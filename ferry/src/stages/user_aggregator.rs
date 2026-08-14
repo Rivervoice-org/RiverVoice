@@ -115,10 +115,9 @@ impl FrameProcessor for UserAggregatorStage {
                     tokio::select! {
                         frame = io.take() => frame,
                         _ = tokio::time::sleep_until(deadline) => {
-                            if let Some(TurnEvent::Stopped { .. }) = self.controller.timed_out() {
-                                if !self.flush(&io).await {
-                                    break;
-                                }
+                            if let Some(TurnEvent::Stopped { .. }) = self.controller.timed_out()
+                                && !self.flush(&io).await {
+                                break;
                             }
                             continue;
                         }
@@ -147,17 +146,17 @@ impl FrameProcessor for UserAggregatorStage {
                 self.buffer.clear();
             }
 
-            if self.controller.turn_open() {
-                if let FrameKind::Transcription(t) = frame.kind() {
-                    // Interim/eager transcripts are cumulative re-guesses of
-                    // the same utterance, not new text — only a final
-                    // transcript is actually new content to append.
-                    if t.is_final {
-                        if !self.buffer.is_empty() {
-                            self.buffer.push(' ');
-                        }
-                        self.buffer.push_str(&t.text);
+            if self.controller.turn_open()
+                && let FrameKind::Transcription(t) = frame.kind()
+            {
+                // Interim/eager transcripts are cumulative re-guesses of
+                // the same utterance, not new text — only a final
+                // transcript is actually new content to append.
+                if t.is_final {
+                    if !self.buffer.is_empty() {
+                        self.buffer.push(' ');
                     }
+                    self.buffer.push_str(&t.text);
                 }
             }
 
@@ -173,10 +172,10 @@ impl FrameProcessor for UserAggregatorStage {
             // via the Interruption/aggregation that follows. Otherwise
             // a downstream stage watching for that frame kind
             // specifically would only ever see vendor-driven turns.
-            if let Some(kind) = vad_kind {
-                if !io.push(Frame::new(kind)).await {
-                    break;
-                }
+            if let Some(kind) = vad_kind
+                && !io.push(Frame::new(kind)).await
+            {
+                break;
             }
 
             match event {
