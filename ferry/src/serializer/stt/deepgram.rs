@@ -1,8 +1,8 @@
-use axum::extract::ws::Message;
 use serde::Deserialize;
+use tokio_tungstenite::tungstenite::Message;
 
 use crate::frames::frames::{Frame, FrameKind, TranscriptionFrame};
-use crate::serializer::serializer::FrameSerializer;
+use crate::serializer::transport::serializer::FrameSerializer;
 
 /// The Deepgram dialect: outgoing `RawAudio` frames go out as raw PCM
 /// (s16le) binary messages, exactly what Deepgram's streaming endpoint
@@ -21,6 +21,8 @@ impl DeepgramSerializer {
 }
 
 impl FrameSerializer for DeepgramSerializer {
+    type Message = Message;
+
     fn serialize(&self, frame: Frame) -> anyhow::Result<Message> {
         match frame.into_kind() {
             FrameKind::RawAudio(audio) => Ok(Message::Binary(audio.audio.into())),
@@ -29,7 +31,13 @@ impl FrameSerializer for DeepgramSerializer {
             | FrameKind::UserStoppedSpeaking
             | FrameKind::ServiceMetadata(_)
             | FrameKind::Interruption
-            | FrameKind::UserTurnAggregation(_) => {
+            | FrameKind::UserTurnAggregation(_)
+            | FrameKind::LlmResponseStart
+            | FrameKind::LlmText(_)
+            | FrameKind::LlmResponseEnd
+            | FrameKind::TtsAudioStart
+            | FrameKind::TtsAudio(_)
+            | FrameKind::TtsAudioStop => {
                 anyhow::bail!("deepgram serializer: cannot send this frame to deepgram")
             }
         }

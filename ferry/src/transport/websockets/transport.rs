@@ -4,12 +4,13 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 
+use crate::serializer::transport::serializer::FrameSerializer;
 use crate::transport::base::BaseTransport;
 
 /// The WebSocket doorway: connection upgrade and the socket read/write
 /// loop. Everything pipeline-facing lives in `BaseTransport`.
-pub struct WebSocketClient {
-    base: BaseTransport,
+pub struct WebSocketClient<S: FrameSerializer<Message = Message>> {
+    base: BaseTransport<S>,
 }
 
 enum Event {
@@ -17,8 +18,8 @@ enum Event {
     Outgoing(Option<Message>),
 }
 
-impl WebSocketClient {
-    pub fn new(base: BaseTransport) -> Self {
+impl<S: FrameSerializer<Message = Message> + 'static> WebSocketClient<S> {
+    pub fn new(base: BaseTransport<S>) -> Self {
         Self { base }
     }
 

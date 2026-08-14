@@ -1,7 +1,7 @@
 use axum::extract::ws::Message;
 
 use crate::frames::frames::{Frame, FrameKind, RawAudioFrame};
-use crate::serializer::serializer::FrameSerializer;
+use crate::serializer::transport::serializer::FrameSerializer;
 
 /// The browser dialect is trivial: binary messages carry raw PCM (s16le)
 /// with no envelope, so deserializing is just wrapping the bytes in a
@@ -24,6 +24,8 @@ impl BrowserSerializer {
 }
 
 impl FrameSerializer for BrowserSerializer {
+    type Message = Message;
+
     fn serialize(&self, frame: Frame) -> anyhow::Result<Message> {
         match frame.into_kind() {
             FrameKind::RawAudio(audio) => Ok(Message::Binary(audio.audio.into())),
@@ -32,7 +34,13 @@ impl FrameSerializer for BrowserSerializer {
             | FrameKind::UserStoppedSpeaking
             | FrameKind::ServiceMetadata(_)
             | FrameKind::Interruption
-            | FrameKind::UserTurnAggregation(_) => {
+            | FrameKind::UserTurnAggregation(_)
+            | FrameKind::LlmResponseStart
+            | FrameKind::LlmText(_)
+            | FrameKind::LlmResponseEnd
+            | FrameKind::TtsAudioStart
+            | FrameKind::TtsAudio(_)
+            | FrameKind::TtsAudioStop => {
                 anyhow::bail!("browser serializer: no wire representation for this frame yet")
             }
         }

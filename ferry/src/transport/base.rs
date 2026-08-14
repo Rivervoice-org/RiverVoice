@@ -1,8 +1,6 @@
-use axum::extract::ws::Message;
-
 use crate::frames::frames::Frame;
 use crate::processor::processor::FrameIo;
-use crate::serializer::serializer::FrameSerializer;
+use crate::serializer::transport::serializer::FrameSerializer;
 
 /// What every transport owns, regardless of its wire: access to the
 /// pipeline and the serializer that speaks the wire's dialect. Concrete
@@ -11,20 +9,20 @@ use crate::serializer::serializer::FrameSerializer;
 ///
 /// The boundary: `BaseTransport` knows everything pipeline-facing and
 /// nothing wire-facing. no sockets, no connection handling.
-pub struct BaseTransport {
+pub struct BaseTransport<S: FrameSerializer> {
     io: FrameIo,
-    serializer: Box<dyn FrameSerializer>,
+    serializer: S,
 }
 
-impl BaseTransport {
-    pub fn new(io: FrameIo, serializer: Box<dyn FrameSerializer>) -> Self {
+impl<S: FrameSerializer> BaseTransport<S> {
+    pub fn new(io: FrameIo, serializer: S) -> Self {
         Self { io, serializer }
     }
 
     /// Returns `false` when the pipeline is gone (torn down); the
     /// transport should stop reading its wire. A message that fails to
     /// deserialize is dropped (logged), not fatal to the call.
-    pub async fn push_wire_message(&self, msg: Message) -> bool {
+    pub async fn push_wire_message(&self, msg: S::Message) -> bool {
         match self.serializer.deserialize(msg) {
             Ok(frame) => self.io.push(frame).await,
             Err(e) => {
@@ -37,7 +35,7 @@ impl BaseTransport {
     /// Returns `None` when the pipeline shut down; the call is over and
     /// the transport should close its wire. A frame that fails to serialize
     /// is skipped (logged), and the next frame is tried.
-    pub async fn next_wire_message(&mut self) -> Option<Message> {
+    pub async fn next_wire_message(&mut self) -> Option<S::Message> {
         while let Some(frame) = self.io.take().await {
             match self.serializer.serialize(frame) {
                 Ok(msg) => return Some(msg),
