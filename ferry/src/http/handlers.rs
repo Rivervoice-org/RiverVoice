@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::audio::rnnoise::RnnoiseFilter;
 use crate::http::response::ApiResponse;
 use crate::observer::latency_observer::LatencyObserver;
 use crate::observer::log_observer::LogObserver;
@@ -18,7 +17,6 @@ use crate::services::tts::provider::{TtsConfig, TtsConfigKind};
 use crate::services::tts::sarvam::{
     SarvamModel as TtsSarvamModel, SarvamTtsConfig, SarvamTtsProvider,
 };
-use crate::stages::denoiser::DenoiserStage;
 use crate::stages::llm::LlmStage;
 use crate::stages::stt::SttStage;
 use crate::stages::tts::TtsStage;
@@ -102,18 +100,21 @@ pub async fn browser_stream(ws: WebSocketUpgrade, header: HeaderMap) -> Response
     // Stages in order; the pipeline creates the channels between them,
     // spawns them, and returns the transport's two ends.
     //
-    // denoiser -> stt -> user-aggregator -> llm -> tts: the caller's
-    // audio is cleaned up, transcribed, aggregated into whole user
-    // turns, answered by an LLM, and spoken back. Deepgram Flux
-    // recommends `TurnStrategy::External` (see
-    // `DeepgramFluxSttProvider::recommended_turn_strategy`) and nothing
-    // here configures a strategy explicitly, so the user-aggregator
-    // stands down its own local detection and trusts Flux's
-    // StartOfTurn/EndOfTurn instead.
+    // stt -> user-aggregator -> llm -> tts: the caller's audio is
+    // transcribed, aggregated into whole user turns, answered by an LLM,
+    // and spoken back. Deepgram Flux recommends `TurnStrategy::External`
+    // (see `DeepgramFluxSttProvider::recommended_turn_strategy`) and
+    // nothing here configures a strategy explicitly, so the
+    // user-aggregator stands down its own local detection and trusts
+    // Flux's StartOfTurn/EndOfTurn instead.
+    //
+    // No denoiser: `RnnoiseFilter`'s 16kHz<->48kHz resampling (linear
+    // interpolation up, box-averaging down, both crude) was suspected of
+    // degrading transcription accuracy on proper nouns — raw mic audio
+    // goes straight to STT until that's confirmed/ruled out.
     let io = Pipeline::spawn(
         "browser",
         vec![
-            Box::new(DenoiserStage::new(vec![Box::new(RnnoiseFilter::new())])),
             Box::new(SttStage::new(
                 Box::new(DeepgramFluxSttProvider::new(deepgram_key)),
                 SttConfig::new(
