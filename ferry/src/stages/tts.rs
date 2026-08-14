@@ -85,12 +85,28 @@ impl FrameProcessor for TtsStage {
                             // sentence — so a vendor buffering for
                             // prosody knows to stop waiting for more.
                             let _ = session.flush().await;
+                            // LlmResponseStart isn't consumed here (it
+                            // falls into `other` below), so its End must
+                            // make it downstream too — otherwise anything
+                            // after this stage sees a response that opened
+                            // but never closed.
+                            if !io.push(Frame::new(FrameKind::LlmResponseEnd)).await {
+                                break;
+                            }
                         }
                         FrameKind::Interruption => {
                             aggregator.clear();
                             if let Err(e) = session.interrupt().await {
                                 tracing::error!("tts: interrupt failed: {e}");
                             }
+                            // `interrupt()` reconnects onto the same
+                            // channel; anything already sitting in it is
+                            // from the pre-interruption connection (the
+                            // old read task is only aborted, not synced
+                            // with this drain, so a few more stale events
+                            // can land right after too — see below) and
+                            // must not be played.
+                            while events.try_recv().is_ok() {}
                             if speaking {
                                 if !io.push(Frame::new(FrameKind::TtsAudioStop)).await {
                                     break;
