@@ -38,6 +38,14 @@ bytes = "1.12.1"
 validator = { version = "0.19", features = ["derive"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 regex = "1"
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls-ring-webpki",
+    "postgres",
+    "macros",
+    "uuid",
+    "json",
+] }
 
 [profile.dev]
 debug = 1
