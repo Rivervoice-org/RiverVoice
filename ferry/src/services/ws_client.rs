@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{Arc, Mutex as StdMutex, Once};
 use std::time::Duration;
 
 use futures_util::stream::{SplitSink, SplitStream};
@@ -54,6 +54,8 @@ pub struct WsOutboundClient {
     last_sent: Arc<StdMutex<Instant>>,
 }
 
+static INSTALL_CRYPTO_PROVIDER: Once = Once::new();
+
 impl WsOutboundClient {
     /// Opens the connection and wraps it. Returns the client plus the
     /// read half, which belongs to whoever reads incoming messages, not
@@ -63,6 +65,23 @@ impl WsOutboundClient {
         auth_header: HeaderName,
         auth_value: String,
     ) -> Result<(Self, WsRead), WsError> {
+        // rustls 0.23 no longer auto-selects a crypto backend; without
+        // this, the first outbound wss:// connection panics. Installed
+        // lazily, once, right here rather than unconditionally at
+        // process start — this is the actual place that needs a TLS
+        // backend, since every vendor connection (STT, TTS) dials out
+        // through this one `connect`. Doesn't panic if a provider is
+        // already installed (e.g. by another dependency doing the same
+        // thing): that just means one is already there to use.
+        INSTALL_CRYPTO_PROVIDER.call_once(|| {
+            if rustls::crypto::ring::default_provider()
+                .install_default()
+                .is_err()
+            {
+                tracing::warn!("rustls: a crypto provider was already installed; using it instead");
+            }
+        });
+
         let mut request = url
             .into_client_request()
             .map_err(|e| WsError(e.to_string()))?;
