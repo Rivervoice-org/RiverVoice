@@ -1,15 +1,18 @@
 use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response};
 
 use crate::auth::token;
+use crate::config;
 use crate::http::response::ApiResponse;
 
 pub async fn require_session(req: Request, next: Next) -> Result<Response, ApiResponse<()>> {
-    let secret = std::env::var("JWT_SECRET").map_err(|_| {
-        ApiResponse::fail(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Could not verify your session",
-        )
-    })?;
+    let secret = &config::get()
+        .map_err(|_| {
+            ApiResponse::fail(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Could not verify your session",
+            )
+        })?
+        .jwt_secret;
 
     let cookie_header = req
         .headers()
@@ -23,7 +26,7 @@ pub async fn require_session(req: Request, next: Next) -> Result<Response, ApiRe
         .find_map(|kv| kv.strip_prefix("rv_session="))
         .ok_or_else(|| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
 
-    token::verify_token(token, secret.as_bytes())
+    token::verify_token(token, secret)
         .map_err(|_| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
 
     Ok(next.run(req).await)
