@@ -33,12 +33,15 @@ use crate::transport::webrtc::transport::WebRtcClient;
 use crate::transport::websockets::transport::WebSocketClient;
 use crate::turns::controller::{DEFAULT_STOP_TIMEOUT, TurnController};
 use axum::{
-    Extension, Json,
+    Extension,
+    body::Bytes,
     extract::ws::WebSocketUpgrade,
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+use validator::Validate;
 
 pub async fn health() -> StatusCode {
     StatusCode::OK
@@ -64,14 +67,6 @@ const TTS_VOICE: &str = "shubh";
 /// The call's primary spoken language — also what TTS replies in, so the
 /// two never drift apart (see `browser_stream`'s STT/TTS setup below).
 const PRIMARY_LANGUAGE: Language = Language::Te;
-
-fn origin_allowed(header: &HeaderMap) -> bool {
-    let origin = header
-        .get(header::ORIGIN)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
-    ALLOWED_ORIGINS.contains(&origin)
-}
 
 fn build_browser_pipeline() -> Result<FrameIo, Response> {
     let config = config::get().map_err(|_| {
@@ -146,9 +141,16 @@ fn build_browser_pipeline() -> Result<FrameIo, Response> {
     ))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 pub struct WebRtcOfferRequest {
     sdp: String,
+    agent_id: Uuid,
+    // Matches agent_versions.version (harbor/db/migrations/0003_agents.sql)
+    // — a positive, sequential per-agent counter, not a free-form number.
+    // No upper bound here: harbor owns that invariant, this just rejects
+    // the values that could never be a real version (0, negative).
+    #[validate(range(min = 1))]
+    version: i32,
 }
 
 #[derive(Serialize)]
@@ -159,8 +161,19 @@ pub struct WebRtcAnswerBody {
 pub async fn browser_stream_webrtc(
     header: HeaderMap,
     Extension(state): Extension<AppState>,
-    Json(offer): Json<WebRtcOfferRequest>,
+    body: Bytes,
 ) -> Response {
+    let offer: WebRtcOfferRequest = match serde_json::from_slice(&body) {
+        Ok(offer) => offer,
+        Err(e) => {
+            return ApiResponse::<()>::fail(StatusCode::BAD_REQUEST, e.to_string()).into_response();
+        }
+    };
+
+    if let Err(e) = offer.validate() {
+        return ApiResponse::<()>::fail(StatusCode::BAD_REQUEST, e.to_string()).into_response();
+    }
+
     let io = match build_browser_pipeline() {
         Ok(io) => io,
         Err(resp) => return resp,
