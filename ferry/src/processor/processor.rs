@@ -75,7 +75,12 @@ impl FrameIo {
         }
 
         if let Some(new_frame) = new_frame {
-            let _ = queue.send(new_frame).await.is_ok();
+            let new_frame_queue = if new_frame.kind().is_control() {
+                &self.downstream_control
+            } else {
+                &self.downstream
+            };
+            let _ = new_frame_queue.send(new_frame).await.is_ok();
         }
 
         queue.send(frame).await.is_ok()
