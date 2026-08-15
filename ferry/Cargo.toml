@@ -20,10 +20,22 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1.53.1", features = ["full"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
-tower-http = { version = "0.6", features = ["trace"] }
+tower-http = { version = "0.6", features = ["trace", "cors"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "fmt",
+    "ansi",
+    "std",
+    "smallvec",
+    "env-filter",
+    "json",
+] }
 nu-ansi-term = "0.50"
+rubato = { version = "5.0.0", features = ["fft_resampler"] }
+audioadapter-buffers = "5.1.0"
+webrtc = "0.20.2"
+bytes = "1.12.1"
+validator = { version = "0.19", features = ["derive"] }
 
 [profile.dev]
 debug = 1
