@@ -49,7 +49,10 @@ impl FrameSerializer for DeepgramFluxSerializer {
             | FrameKind::TtsAudioStart
             | FrameKind::TtsAudio(_)
             | FrameKind::TtsAudioStop
-            | FrameKind::Metrics(_) => {
+            | FrameKind::Metrics(_)
+            | FrameKind::SttUsage(_)
+            | FrameKind::LlmUsage(_)
+            | FrameKind::TtsUsage(_) => {
                 anyhow::bail!("deepgram-flux serializer: cannot send this frame to deepgram-flux")
             }
         }

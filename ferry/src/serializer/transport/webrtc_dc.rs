@@ -42,7 +42,10 @@ impl FrameSerializer for WebRtcSerializer {
             | FrameKind::LlmResponseEnd
             | FrameKind::TtsAudioStart
             | FrameKind::TtsAudioStop
-            | FrameKind::Metrics(_) => {
+            | FrameKind::Metrics(_)
+            | FrameKind::SttUsage(_)
+            | FrameKind::LlmUsage(_)
+            | FrameKind::TtsUsage(_) => {
                 anyhow::bail!("webrtc serializer: no wire representation for this frame yet")
             }
         }
