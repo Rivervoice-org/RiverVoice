@@ -2,6 +2,7 @@ pub mod agent;
 pub mod audio;
 pub mod auth;
 pub mod config;
+pub mod db;
 pub mod frames;
 pub mod http;
 pub mod logging;
