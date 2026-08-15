@@ -19,7 +19,7 @@ use crate::observer::observer::FrameObserver;
 pub struct FrameIo {
     name: String,
     upstream: Receiver<Frame>,
-    control: Receiver<Frame>,
+    upstream_control: Receiver<Frame>,
     downstream: Sender<Frame>,
     downstream_control: Sender<Frame>,
     /// Shared across every stage's `FrameIo` in the pipeline — an `Arc`
@@ -34,7 +34,7 @@ impl FrameIo {
     pub fn new(
         name: impl Into<String>,
         upstream: Receiver<Frame>,
-        control: Receiver<Frame>,
+        upstream_control: Receiver<Frame>,
         downstream: Sender<Frame>,
         downstream_control: Sender<Frame>,
         observers: Arc<[Arc<dyn FrameObserver>]>,
@@ -42,7 +42,7 @@ impl FrameIo {
         Self {
             name: name.into(),
             upstream,
-            control,
+            upstream_control,
             downstream,
             downstream_control,
             observers,
@@ -61,11 +61,28 @@ impl FrameIo {
         for observer in self.observers.iter() {
             observer.on_push(&self.name, &frame);
         }
+
+        let mut new_frame: Option<Frame> = None;
+
         let queue = if frame.kind().is_control() {
             &self.downstream_control
         } else {
             &self.downstream
         };
+
+        if matches!(frame.kind(), FrameKind::UserStartedSpeaking) {
+            new_frame = Some(Frame::new(FrameKind::Interruption));
+        }
+
+        if let Some(new_frame) = new_frame {
+            let new_frame_queue = if new_frame.kind().is_control() {
+                &self.downstream_control
+            } else {
+                &self.downstream
+            };
+            let _ = new_frame_queue.send(new_frame).await.is_ok();
+        }
+
         queue.send(frame).await.is_ok()
     }
 
@@ -75,7 +92,7 @@ impl FrameIo {
     pub async fn take(&mut self) -> Option<Frame> {
         let frame = tokio::select! {
             biased;
-            control = self.control.recv() => match control {
+            control = self.upstream_control.recv() => match control {
                 Some(frame) => {
                     if matches!(frame.kind(), FrameKind::Interruption) {
                         self.flush();

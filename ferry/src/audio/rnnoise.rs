@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use nnnoiseless::DenoiseState;
 
 use crate::audio::filters::AudioFilter;
-use crate::audio::resampler::{Downsampler, Upsampler, integer_ratio};
+use crate::audio::resampler::{Downsampler, Upsampler};
 
 /// RNNoise is trained on 48 kHz audio and understands no other rate.
 const RNNOISE_RATE: u32 = 48_000;
@@ -28,9 +28,9 @@ const RNNOISE_RATE: u32 = 48_000;
 pub struct RnnoiseFilter {
     state: Box<DenoiseState<'static>>,
 
-    /// `None` before `start`, and for any rate that does not divide
-    /// 48 kHz evenly. Then audio passes through untouched, because
-    /// half-filtering it would sound worse than not filtering it.
+    /// `None` before `start`, and for an invalid (zero) rate. Then audio
+    /// passes through untouched, because half-filtering it would sound
+    /// worse than not filtering it.
     resampler: Option<(Upsampler, Downsampler)>,
 
     /// Stretched 48 kHz samples that do not yet add up to a whole
@@ -75,16 +75,18 @@ impl AudioFilter for RnnoiseFilter {
     /// Told once, before any audio, what rate it will arrive at. Works
     /// out the stretch factor and starts from a clean slate.
     fn start(&mut self, sample_rate: u32) {
-        // The 480-sample chunk must also divide by the ratio, so
-        // squashing it back gives a whole number of samples.
-        let ratio = integer_ratio(sample_rate, RNNOISE_RATE)
-            .filter(|ratio| DenoiseState::FRAME_SIZE.is_multiple_of(*ratio));
-
-        self.resampler = ratio.map(|ratio| (Upsampler::new(ratio), Downsampler::new(ratio)));
+        self.resampler = if sample_rate == 0 {
+            None
+        } else {
+            Some((
+                Upsampler::new(sample_rate, RNNOISE_RATE),
+                Downsampler::new(RNNOISE_RATE, sample_rate),
+            ))
+        };
         if self.resampler.is_none() {
             tracing::warn!(
                 sample_rate,
-                "rnnoise: cannot stretch this rate to 48 kHz, passing audio through unfiltered"
+                "rnnoise: invalid sample rate, passing audio through unfiltered"
             );
         }
 

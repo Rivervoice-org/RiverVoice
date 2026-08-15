@@ -2,17 +2,21 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::audio::resampler::SampleRateAdapter;
 use crate::frames::frames::{Frame, FrameKind, ServiceMetadataFrame, TranscriptionFrame};
 use crate::processor::processor::{FrameIo, FrameProcessor};
 use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::provider::{SttConfig, SttEvent, SttProvider};
 
 /// Turns an [`SttProvider`] into a pipeline stage: `RawAudio` frames
-/// arriving from upstream go to the provider as audio, then continue on
-/// downstream unchanged (someone after this stage may still want the
-/// audio — a recording stage, an echo path), and whatever the provider
-/// says back (transcripts, turn boundaries) comes out downstream as
-/// frames of its own. Every other frame passes through untouched.
+/// arriving from upstream are resampled (if needed — see
+/// [`SampleRateAdapter`]) to the rate `SttConfig::sample_rate` declared
+/// to the provider, sent to it as audio, then the original, untouched
+/// frame continues on downstream (someone after this stage may still
+/// want the audio at its original rate — a recording stage, an echo
+/// path), and whatever the provider says back (transcripts, turn
+/// boundaries) comes out downstream as frames of its own. Every other
+/// frame passes through untouched.
 pub struct SttStage {
     provider: Box<dyn SttProvider>,
     config: SttConfig,
@@ -40,6 +44,7 @@ impl FrameProcessor for SttStage {
     }
 
     async fn run(self: Box<Self>, mut io: FrameIo) {
+        let target_sample_rate = self.config.sample_rate;
         let (mut session, mut events) = match self.provider.open(self.config, self.serializer).await
         {
             Ok(opened) => opened,
@@ -59,13 +64,47 @@ impl FrameProcessor for SttStage {
             .await;
         }
 
+        // Built lazily from the first `RawAudio` frame seen, since the
+        // caller's actual rate is only known once real audio arrives.
+        // Kept for the life of the call rather than rebuilt per frame —
+        // an unexpected mid-call rate change just keeps resampling from
+        // the original rate (see the `denoiser` stage for the same
+        // tradeoff on the same situation).
+        let mut rate_adapter: Option<(u32, SampleRateAdapter)> = None;
+
         loop {
             tokio::select! {
                 frame = io.take() => {
                     let Some(frame) = frame else { break };
                     match frame.into_kind() {
                         FrameKind::RawAudio(audio) => {
-                            if session.send_audio(&audio.audio).await.is_err() {
+                            let (adapter_rate, adapter) = rate_adapter.get_or_insert_with(|| {
+                                (
+                                    audio.sample_rate,
+                                    SampleRateAdapter::new(audio.sample_rate, target_sample_rate),
+                                )
+                            });
+                            if *adapter_rate != audio.sample_rate {
+                                tracing::warn!(
+                                    expected = *adapter_rate,
+                                    got = audio.sample_rate,
+                                    "stt: sample rate changed mid-call, resampling from the original rate"
+                                );
+                            }
+
+                            // Audio travels as s16le bytes; the adapter
+                            // eats i16 samples.
+                            let samples: Vec<i16> = audio
+                                .audio
+                                .chunks_exact(2)
+                                .map(|b| i16::from_le_bytes([b[0], b[1]]))
+                                .collect();
+                            let mut resampled = Vec::new();
+                            adapter.push(&samples, &mut resampled);
+                            let pcm: Vec<u8> =
+                                resampled.iter().flat_map(|s| s.to_le_bytes()).collect();
+
+                            if session.send_audio(&pcm).await.is_err() {
                                 break;
                             }
                             if !io.push(Frame::new(FrameKind::RawAudio(audio))).await {

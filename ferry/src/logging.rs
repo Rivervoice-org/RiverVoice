@@ -8,6 +8,44 @@ use tracing_subscriber::fmt::time::{FormatTime, SystemTime};
 use tracing_subscriber::fmt::{FmtContext, FormatEvent, FormatFields};
 use tracing_subscriber::registry::LookupSpan;
 
+use crate::config::{self, LogFormat};
+
+/// Installs the global `tracing` subscriber: colored, human-shaped lines
+/// for a local terminal; structured JSON once deployed (`LOG_FORMAT=json`,
+/// see [`config::Config`]) so log platforms (CloudWatch, Loki, ...) get
+/// real queryable fields instead of ANSI escapes baked into a string.
+/// Level defaults to `info` but honors `RUST_LOG` if set.
+///
+/// `tracing-subscriber`'s `tracing-log` feature is deliberately left off
+/// (see Cargo.toml) so `log`-crate output from `webrtc` and its
+/// sub-crates (ice/dtls/sctp/srtp/...) never reaches this subscriber at
+/// all — no per-packet noise (`bypass ice read`, `recv dtls RAW`, ...)
+/// regardless of `RUST_LOG`, and nothing to filter here.
+///
+/// Call before [`config::init`] — this needs to be up first so a
+/// `Config` validation failure has somewhere to log to, which is why
+/// this reads `LOG_FORMAT` via [`config::log_format`] directly rather
+/// than through the fallible, not-yet-installed `Config`.
+pub fn init() {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+
+    match config::log_format() {
+        LogFormat::Json => {
+            tracing_subscriber::fmt()
+                .json()
+                .with_env_filter(filter)
+                .init();
+        }
+        LogFormat::Pretty => {
+            tracing_subscriber::fmt()
+                .event_format(ColorEventFormatter)
+                .with_env_filter(filter)
+                .init();
+        }
+    }
+}
+
 /// Color-codes ferry's own structured logs by *meaning* — which pipeline
 /// stage, a transcription, an interruption, the end-to-end latency —
 /// instead of only by level, so a scrolling terminal reads at a glance.

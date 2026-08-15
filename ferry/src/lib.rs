@@ -7,6 +7,7 @@
 
 pub mod audio;
 pub mod auth;
+pub mod config;
 pub mod frames;
 pub mod http;
 pub mod logging;

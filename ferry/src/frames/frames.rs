@@ -128,10 +128,7 @@ impl FrameKind {
     /// before the `Interruption` behind it is ever seen, so it can never
     /// be caught in that Interruption's own flush.
     pub fn is_control(&self) -> bool {
-        matches!(
-            self,
-            FrameKind::Interruption | FrameKind::UserStartedSpeaking
-        )
+        matches!(self, FrameKind::Interruption)
     }
 }
 

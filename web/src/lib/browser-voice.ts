@@ -107,14 +107,72 @@ async function requestMic(): Promise<MediaStream> {
   }
 }
 
-/** Resolves once the socket is open, so a caller that gets a call knows it is live. */
-function openSocket(url: string): Promise<WebSocket> {
-  return new Promise((resolve, reject) => {
-    const socket = new WebSocket(url);
-    socket.binaryType = "arraybuffer";
+/** `ws://`/`wss://` -> `http://`/`https://`, for the signaling endpoint. */
+function toHttpUrl(wsUrl: string): string {
+  return wsUrl.replace(/^ws/, "http");
+}
 
-    const timer = setTimeout(() => {
-      socket.close();
+/**
+ * Resolves once every ICE candidate has been gathered. Signaling here is a
+ * single request/response with no side channel to trickle candidates back
+ * on afterward, so the SDP sent to the server needs every candidate baked
+ * in already rather than arriving incrementally (trickle ICE) — fine for
+ * same-machine/LAN dev, where gathering finishes near-instantly.
+ */
+function waitForIceGatheringComplete(pc: RTCPeerConnection): Promise<void> {
+  if (pc.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise((resolve) => {
+    pc.addEventListener("icegatheringstatechange", function check() {
+      if (pc.iceGatheringState === "complete") {
+        pc.removeEventListener("icegatheringstatechange", check);
+        resolve();
+      }
+    });
+  });
+}
+
+interface WebRtcConnection {
+  pc: RTCPeerConnection;
+  channel: RTCDataChannel;
+}
+
+/**
+ * Resolves once the data channel is open, so a caller that gets a call
+ * knows it is live. The transport here is WebRTC purely for its UDP
+ * properties: `channel` is unordered/unreliable (`maxRetransmits: 0`),
+ * so it behaves like raw UDP rather than the WebSocket's TCP — but it
+ * still carries the exact same raw PCM messages, matching ferry's
+ * `WebRtcSerializer` (the same dialect as `BrowserSerializer`).
+ */
+async function openDataChannel(signalingUrl: string): Promise<WebRtcConnection> {
+  // No STUN server: fine for same-machine/LAN dev, where host candidates
+  // alone are enough to connect. TODO: add one (and trickle ICE) once this
+  // needs to work across networks.
+  const pc = new RTCPeerConnection({ iceServers: [] });
+  const channel = pc.createDataChannel("audio", { ordered: false, maxRetransmits: 0 });
+  channel.binaryType = "arraybuffer";
+
+  const opened = new Promise<void>((resolve, reject) => {
+    channel.onopen = () => resolve();
+    // The handshake gives the page no reason for the failure — a refused
+    // connection, a rejected session cookie and a blocked origin all look
+    // the same here, so the message stays general (same as the WebSocket
+    // path's onerror).
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+        reject(
+          new BrowserVoiceError(
+            BrowserVoiceErrorCode.ConnectFailed,
+            "Could not reach the call server.",
+          ),
+        );
+      }
+    };
+  });
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
       reject(
         new BrowserVoiceError(
           BrowserVoiceErrorCode.ConnectTimeout,
@@ -122,27 +180,45 @@ function openSocket(url: string): Promise<WebSocket> {
         ),
       );
     }, CONNECT_TIMEOUT_MS);
-
-    socket.onopen = () => {
-      clearTimeout(timer);
-      socket.onopen = null;
-      socket.onerror = null;
-      resolve(socket);
-    };
-
-    // The handshake gives the page no reason for the failure — a refused
-    // connection, a rejected session cookie and a blocked origin all look the
-    // same here, so the message stays general.
-    socket.onerror = () => {
-      clearTimeout(timer);
-      reject(
-        new BrowserVoiceError(
-          BrowserVoiceErrorCode.ConnectFailed,
-          "Could not reach the call server.",
-        ),
-      );
-    };
   });
+
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await waitForIceGatheringComplete(pc);
+
+    // Cookie-authenticated the same way the WebSocket upgrade is —
+    // `credentials: "include"` is `fetch`'s equivalent of the browser
+    // sending cookies automatically on the WS handshake.
+    const response = await fetch(signalingUrl, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sdp: pc.localDescription?.sdp ?? "" }),
+    });
+    const body = (await response.json().catch(() => null)) as { data?: { sdp?: string } } | null;
+    if (!response.ok || !body?.data?.sdp) {
+      throw new BrowserVoiceError(
+        BrowserVoiceErrorCode.ConnectFailed,
+        "Could not reach the call server.",
+      );
+    }
+
+    await pc.setRemoteDescription({ type: "answer", sdp: body.data.sdp });
+    await Promise.race([opened, timeout]);
+
+    return { pc, channel };
+  } catch (cause) {
+    pc.close();
+    if (cause instanceof BrowserVoiceError) throw cause;
+    throw new BrowserVoiceError(
+      BrowserVoiceErrorCode.ConnectFailed,
+      "Could not reach the call server.",
+      { cause },
+    );
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
 }
 
 async function start({
@@ -166,32 +242,37 @@ async function start({
     source.connect(capture);
     player.connect(context.destination);
 
-    const socket = await openSocket(`${FERRY_URL}/browser-call`);
+    const { pc, channel } = await openDataChannel(`${toHttpUrl(FERRY_URL)}/browser-call/webrtc`);
 
     let stopped = false;
     const teardown = (status: BrowserVoiceStatus) => {
       if (stopped) return;
       stopped = true;
-      socket.close();
+      channel.close();
+      pc.close();
       for (const track of stream.getTracks()) track.stop();
       void context?.close();
       onStatus(status);
     };
 
-    socket.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+    channel.onmessage = (event: MessageEvent<ArrayBuffer>) => {
       player.port.postMessage(event.data, [event.data]);
     };
-    socket.onerror = () => {
-      onError?.(
-        new BrowserVoiceError(BrowserVoiceErrorCode.Dropped, "The call dropped unexpectedly."),
-      );
-      teardown(BrowserVoiceStatus.Error);
+    // No onerror on RTCDataChannel — connection failure surfaces through
+    // connectionState instead.
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+        onError?.(
+          new BrowserVoiceError(BrowserVoiceErrorCode.Dropped, "The call dropped unexpectedly."),
+        );
+        teardown(BrowserVoiceStatus.Error);
+      }
     };
-    socket.onclose = () => teardown(BrowserVoiceStatus.Ended);
+    channel.onclose = () => teardown(BrowserVoiceStatus.Ended);
 
     capture.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
       onLevel?.(chunkLevel(event.data));
-      if (socket.readyState === WebSocket.OPEN) socket.send(event.data);
+      if (channel.readyState === "open") channel.send(event.data);
     };
 
     onStatus(BrowserVoiceStatus.Live);
