@@ -36,6 +36,8 @@ audioadapter-buffers = "5.1.0"
 webrtc = "0.20.2"
 bytes = "1.12.1"
 validator = { version = "0.19", features = ["derive"] }
+uuid = { version = "1", features = ["serde", "v4"] }
+regex = "1"
 
 [profile.dev]
 debug = 1

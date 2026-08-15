@@ -37,6 +37,14 @@
      they came from different palettes. */
   --green: oklch(0.55 0.13 150);
 
+  /* Cost breakdown categories, in fixed order (telephony, STT, LLM, TTS).
+     Light values equal the signal colors' chroma/lightness; violet is the one
+     new hue, matched to the same formula. */
+  --cost-telephony: oklch(0.62 0.13 70);
+  --cost-stt: oklch(0.52 0.13 258);
+  --cost-llm: oklch(0.55 0.13 150);
+  --cost-tts: oklch(0.52 0.13 305);
+
   --shadow-float:
     0 0 0 1px oklch(0.29 0.008 75 / 0.05), 0 1px 2px oklch(0.29 0.008 75 / 0.04),
     0 6px 16px -6px oklch(0.29 0.008 75 / 0.08);
@@ -74,6 +82,13 @@
   --amber: oklch(0.78 0.12 75);
   --amber-tint: oklch(0.78 0.12 75 / 14%);
   --green: oklch(0.76 0.13 150);
+
+  /* Dimmer than the signal colors above — a chart fill needs to sit quietly
+     next to text on a dark surface, not read as a status dot. */
+  --cost-telephony: oklch(0.66 0.13 75);
+  --cost-stt: oklch(0.63 0.12 258);
+  --cost-llm: oklch(0.65 0.13 150);
+  --cost-tts: oklch(0.63 0.12 305);
 
   --shadow-float: 0 0 0 1px oklch(1 0 0 / 0.06), 0 4px 12px -4px oklch(0 0 0 / 0.55);
   --shadow-lift: 0 0 0 1px oklch(1 0 0 / 0.08), 0 20px 40px -16px oklch(0 0 0 / 0.7);
@@ -118,6 +133,10 @@
   --color-amber: var(--amber);
   --color-amber-tint: var(--amber-tint);
   --color-green: var(--green);
+  --color-cost-telephony: var(--cost-telephony);
+  --color-cost-stt: var(--cost-stt);
+  --color-cost-llm: var(--cost-llm);
+  --color-cost-tts: var(--cost-tts);
 
   --animate-bar: bar 1.1s ease-in-out infinite alternate;
   --animate-halo: halo 2.4s ease-out infinite;

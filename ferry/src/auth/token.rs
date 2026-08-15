@@ -9,11 +9,10 @@ struct Claims {
     sub: String,
     org: String,
     role: String,
-    // Never read directly: `Validation::set_required_spec_claims(&["exp"])`
-    // below makes `jsonwebtoken` check for and validate this claim itself
-    // during `decode`, off the raw token payload, before this struct is
-    // even built — the field exists only so a token missing it fails to
-    // deserialize at all rather than silently deserializing without it.
+    // Never read directly: `validation.validate_exp` below makes
+    // `jsonwebtoken` check this claim against the current time itself
+    // during `decode` — an expired token fails there before this struct
+    // is even built, so nothing downstream needs to re-check it.
     #[allow(dead_code)]
     exp: usize,
 }
@@ -35,7 +34,8 @@ pub enum AuthError {
 /// Pins the algorithm to HS256, same protection as harbor's
 /// `jwt.WithValidMethods`, so a token claiming `alg=none` is rejected before
 /// its signature is ever checked. Also requires `exp` to be present, same as
-/// harbor's `jwt.WithExpirationRequired()`.
+/// harbor's `jwt.WithExpirationRequired()`, and rejects the token once `exp`
+/// is in the past.
 pub fn verify_token(token: &str, secret: &[u8]) -> Result<Session, AuthError> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.set_required_spec_claims(&["exp"]);

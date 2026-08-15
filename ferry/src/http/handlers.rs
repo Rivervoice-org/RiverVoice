@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::audio::rnnoise::RnnoiseFilter;
 use crate::config;
 use crate::http::response::ApiResponse;
+use crate::http::state::AppState;
 use crate::observer::latency_observer::LatencyObserver;
 use crate::observer::log_observer::LogObserver;
 use crate::observer::metrics_log_observer::MetricsLogObserver;
@@ -32,7 +33,7 @@ use crate::transport::webrtc::transport::WebRtcClient;
 use crate::transport::websockets::transport::WebSocketClient;
 use crate::turns::controller::{DEFAULT_STOP_TIMEOUT, TurnController};
 use axum::{
-    Json,
+    Extension, Json,
     extract::ws::WebSocketUpgrade,
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
@@ -145,23 +146,6 @@ fn build_browser_pipeline() -> Result<FrameIo, Response> {
     ))
 }
 
-pub async fn browser_stream(ws: WebSocketUpgrade, header: HeaderMap) -> Response {
-    if !origin_allowed(&header) {
-        return ApiResponse::<()>::fail(StatusCode::FORBIDDEN, "Origin not allowed")
-            .into_response();
-    }
-
-    let io = match build_browser_pipeline() {
-        Ok(io) => io,
-        Err(resp) => return resp,
-    };
-
-    let serializer = BrowserSerializer::new(BROWSER_SAMPLE_RATE, BROWSER_NUM_CHANNELS);
-    let base = BaseTransport::new(io, serializer);
-
-    WebSocketClient::new(base).connect(ws)
-}
-
 #[derive(Deserialize)]
 pub struct WebRtcOfferRequest {
     sdp: String,
@@ -172,27 +156,11 @@ pub struct WebRtcAnswerBody {
     sdp: String,
 }
 
-/// WebRTC counterpart to `browser_stream`: same pipeline, same wire
-/// dialect (raw PCM, see `WebRtcSerializer`), carried over an
-/// `RTCDataChannel` instead of a WebSocket — see
-/// `crate::transport::webrtc::transport::WebRtcClient` for why signaling
-/// (this handler) and the actual data flow (`WebRtcClient::run`) are two
-/// separate phases.
-///
-/// Takes the browser's SDP offer as a JSON body and returns the SDP
-/// answer the same way, once ICE gathering finishes. The connection
-/// itself isn't usable until afterward, when the browser's data channel
-/// actually opens — `run` is spawned onto its own task for that, not
-/// awaited here.
 pub async fn browser_stream_webrtc(
     header: HeaderMap,
+    Extension(state): Extension<AppState>,
     Json(offer): Json<WebRtcOfferRequest>,
 ) -> Response {
-    if !origin_allowed(&header) {
-        return ApiResponse::<()>::fail(StatusCode::FORBIDDEN, "Origin not allowed")
-            .into_response();
-    }
-
     let io = match build_browser_pipeline() {
         Ok(io) => io,
         Err(resp) => return resp,

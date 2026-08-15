@@ -3,8 +3,9 @@ use axum::{extract::Request, http::StatusCode, middleware::Next, response::Respo
 use crate::auth::token;
 use crate::config;
 use crate::http::response::ApiResponse;
+use crate::http::state::AppState;
 
-pub async fn require_session(req: Request, next: Next) -> Result<Response, ApiResponse<()>> {
+pub async fn require_session(mut req: Request, next: Next) -> Result<Response, ApiResponse<()>> {
     let secret = &config::get()
         .map_err(|_| {
             ApiResponse::fail(
@@ -26,8 +27,10 @@ pub async fn require_session(req: Request, next: Next) -> Result<Response, ApiRe
         .find_map(|kv| kv.strip_prefix("rv_session="))
         .ok_or_else(|| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
 
-    token::verify_token(token, secret)
+    let session = token::verify_token(token, secret)
         .map_err(|_| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
+
+    req.extensions_mut().insert(AppState { session });
 
     Ok(next.run(req).await)
 }

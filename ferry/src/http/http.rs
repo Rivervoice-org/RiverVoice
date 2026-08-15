@@ -10,15 +10,6 @@ use tower_http::trace::TraceLayer;
 use super::handlers;
 use crate::auth::middleware::require_session;
 
-/// The browser talks to ferry cross-origin (web app on one port, ferry on
-/// another) and sends the session cookie along (`credentials: "include"`
-/// on `fetch`, automatic on the WebSocket handshake) — so this must name
-/// the exact allowed origin and turn credentials on. A wildcard (`*`)
-/// origin is rejected outright by the CORS spec once credentials are
-/// allowed, and would defeat the point anyway. `POST` (WebRTC's SDP
-/// offer/answer exchange) with a JSON body triggers a CORS preflight
-/// (`OPTIONS`) that this must also answer, unlike the WS upgrade which
-/// isn't preflighted at all.
 fn cors_layer() -> CorsLayer {
     let origins: Vec<HeaderValue> = handlers::ALLOWED_ORIGINS
         .iter()
@@ -40,14 +31,8 @@ fn http_routes() -> Router {
     Router::new().route("/health", get(handlers::health))
 }
 
-/// Both ways a browser call can reach ferry: the WebSocket upgrade
-/// (`GET /browser-call`) and WebRTC signaling (`POST /browser-call/webrtc`,
-/// which only exchanges the SDP offer/answer — see
-/// `handlers::browser_stream_webrtc`'s doc comment for why the actual
-/// call runs on a separately spawned task, not this request).
 fn call_routes() -> Router {
     Router::new()
-        .route("/browser-call", get(handlers::browser_stream))
         .route(
             "/browser-call/webrtc",
             post(handlers::browser_stream_webrtc),
