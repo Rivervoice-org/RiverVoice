@@ -8,13 +8,14 @@ use tracing_subscriber::fmt::time::{FormatTime, SystemTime};
 use tracing_subscriber::fmt::{FmtContext, FormatEvent, FormatFields};
 use tracing_subscriber::registry::LookupSpan;
 
-use crate::config::{self, LogFormat};
+use crate::config::{self, Environment};
 
 /// Installs the global `tracing` subscriber: colored, human-shaped lines
-/// for a local terminal; structured JSON once deployed (`LOG_FORMAT=json`,
-/// see [`config::Config`]) so log platforms (CloudWatch, Loki, ...) get
-/// real queryable fields instead of ANSI escapes baked into a string.
-/// Level defaults to `info` but honors `RUST_LOG` if set.
+/// for a local terminal (`ENVIRONMENT=dev`); structured JSON once deployed
+/// (anything else, including unset — see [`config::environment`]) so log
+/// platforms (CloudWatch, Loki, ...) get real queryable fields instead of
+/// ANSI escapes baked into a string. Level defaults to `debug` in dev,
+/// `info` in prod, but honors `RUST_LOG` if set.
 ///
 /// `tracing-subscriber`'s `tracing-log` feature is deliberately left off
 /// (see Cargo.toml) so `log`-crate output from `webrtc` and its
@@ -24,20 +25,26 @@ use crate::config::{self, LogFormat};
 ///
 /// Call before [`config::init`] — this needs to be up first so a
 /// `Config` validation failure has somewhere to log to, which is why
-/// this reads `LOG_FORMAT` via [`config::log_format`] directly rather
+/// this reads `ENVIRONMENT` via [`config::environment`] directly rather
 /// than through the fallible, not-yet-installed `Config`.
 pub fn init() {
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    let environment = config::environment();
 
-    match config::log_format() {
-        LogFormat::Json => {
+    let default_level = match environment {
+        Environment::Dev => "debug",
+        Environment::Prod => "info",
+    };
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default_level));
+
+    match environment {
+        Environment::Prod => {
             tracing_subscriber::fmt()
                 .json()
                 .with_env_filter(filter)
                 .init();
         }
-        LogFormat::Pretty => {
+        Environment::Dev => {
             tracing_subscriber::fmt()
                 .event_format(ColorEventFormatter)
                 .with_env_filter(filter)

@@ -185,14 +185,18 @@ impl TurnController {
 
             // The bot's own output (LLM reply, synthesized speech), not
             // a sign of user activity — nothing here bears on whether a
-            // *user* turn is open.
+            // *user* turn is open. Usage/metrics frames land here too:
+            // purely informational, no bearing on turn state either.
             FrameKind::LlmResponseStart
             | FrameKind::LlmText(_)
             | FrameKind::LlmResponseEnd
             | FrameKind::TtsAudioStart
             | FrameKind::TtsAudio(_)
             | FrameKind::TtsAudioStop
-            | FrameKind::Metrics(_) => None,
+            | FrameKind::Metrics(_)
+            | FrameKind::SttUsage(_)
+            | FrameKind::LlmUsage(_)
+            | FrameKind::TtsUsage(_) => None,
         }
     }
 

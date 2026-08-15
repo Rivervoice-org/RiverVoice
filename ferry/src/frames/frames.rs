@@ -90,6 +90,13 @@ pub enum FrameKind {
     /// truly started and ended), not inferred from outside. See
     /// [`MetricsFrame`].
     Metrics(MetricsFrame),
+    /// How much audio STT billed for one utterance. See [`SttUsageFrame`].
+    SttUsage(SttUsageFrame),
+    /// Token usage for one LLM generation. See [`LlmUsageFrame`].
+    LlmUsage(LlmUsageFrame),
+    /// How many characters TTS billed for one chunk of text sent to
+    /// synthesize. See [`TtsUsageFrame`].
+    TtsUsage(TtsUsageFrame),
 }
 
 impl FrameKind {
@@ -109,6 +116,9 @@ impl FrameKind {
             FrameKind::TtsAudio(_) => "TtsAudioFrame".to_string(),
             FrameKind::TtsAudioStop => "TtsAudioStopFrame".to_string(),
             FrameKind::Metrics(_) => "MetricsFrame".to_string(),
+            FrameKind::SttUsage(_) => "SttUsageFrame".to_string(),
+            FrameKind::LlmUsage(_) => "LlmUsageFrame".to_string(),
+            FrameKind::TtsUsage(_) => "TtsUsageFrame".to_string(),
         }
     }
 
@@ -209,4 +219,52 @@ pub struct MetricsFrame {
     /// Which stage measured itself, e.g. `"stt"`, `"llm"`, `"tts"`.
     pub stage: String,
     pub ttfb_ms: u64,
+}
+
+/// How many seconds of audio STT billed for, since the last usage report —
+/// a delta, not a running total, so a consumer summing them across a call
+/// gets the total itself. Emitted by [`SttStage`](crate::stages::stt::SttStage)
+/// once per final transcript (that's the closest the pipeline gets to a
+/// turn boundary) and once more to flush trailing audio when the session
+/// ends. Mirrors pipecat's `STTUsage`/`STTUsageMetricsData`.
+#[derive(Clone, Copy, Default)]
+pub struct SttUsageFrame {
+    pub audio_seconds: f64,
+}
+
+/// Token usage for one LLM generation, straight from the provider — unlike
+/// [`SttUsageFrame`], never a delta or something the pipeline has to
+/// accumulate itself, since a chat completion already reports one total
+/// for the whole request. Pushed by [`LlmStage`](crate::stages::llm::LlmStage)
+/// as soon as the provider's stream reports it (see
+/// [`LlmEvent::Usage`](crate::services::llm::provider::LlmEvent::Usage)) —
+/// unchanged, since providers report [`LlmEvent::Usage`] as this same
+/// type rather than one of their own `LlmStage` would otherwise have to
+/// convert. Mirrors pipecat's `LLMTokenUsage`/`LLMUsageMetricsData`, minus
+/// the cache/reasoning/audio-token breakdown fields no provider ferry
+/// talks to reports.
+///
+/// `Deserialize`s directly from OpenRouter's (and, by extension, any other
+/// OpenAI-compatible provider's) wire JSON — field names line up exactly.
+/// If a future non-OpenAI-shaped provider reports usage under different
+/// field names, that's the point to give that provider its own wire type
+/// and convert into this one, rather than bending this type with
+/// `#[serde(rename = ...)]` per vendor.
+#[derive(Clone, Copy, Default, serde::Deserialize)]
+pub struct LlmUsageFrame {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+}
+
+/// How many characters of text were sent to the TTS vendor to synthesize,
+/// for one chunk of speech — same shape as [`LlmUsageFrame`], not
+/// [`SttUsageFrame`]: `TtsStage` sends one whole sentence per
+/// `session.send_text()` call, an already-bounded unit, so this reports
+/// each one as it happens rather than accumulating across a turn. Mirrors
+/// pipecat's `TTSUsageMetricsData`, which is likewise emitted per chunk of
+/// text sent, not per turn.
+#[derive(Clone, Copy, Default)]
+pub struct TtsUsageFrame {
+    pub characters: u32,
 }

@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 
 /// Loads `.env` file contents into the process environment, before
 /// anything reads `std::env::var` — including [`crate::logging::init`],
-/// which runs before [`init`] and reads `LOG_FORMAT` directly, so this
+/// which runs before [`init`] and reads `ENVIRONMENT` directly, so this
 /// has to happen first and separately rather than folded into [`init`]
 /// itself. Missing files are fine, not an error: a real deployment sets
 /// environment variables directly (Docker, systemd, ...) rather than
@@ -29,15 +29,18 @@ pub struct Config {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum LogFormat {
-    Pretty,
-    Json,
+pub enum Environment {
+    Dev,
+    Prod,
 }
 
-pub fn log_format() -> LogFormat {
-    match std::env::var("LOG_FORMAT").as_deref() {
-        Ok("json") => LogFormat::Json,
-        _ => LogFormat::Pretty,
+/// Defaults to `Prod` when unset so a deployment that forgets to set
+/// `ENVIRONMENT` fails toward the safer, stricter behavior rather than
+/// silently running with dev-only relaxations.
+pub fn environment() -> Environment {
+    match std::env::var("ENVIRONMENT").as_deref() {
+        Ok("dev") => Environment::Dev,
+        _ => Environment::Prod,
     }
 }
 

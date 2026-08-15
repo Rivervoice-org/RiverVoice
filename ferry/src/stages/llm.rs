@@ -159,6 +159,11 @@ impl FrameProcessor for LlmStage {
                         break;
                     }
                 }
+                Next::Event(Some(LlmEvent::Usage(usage))) => {
+                    if !io.push(Frame::new(FrameKind::LlmUsage(usage))).await {
+                        break;
+                    }
+                }
             }
         }
 

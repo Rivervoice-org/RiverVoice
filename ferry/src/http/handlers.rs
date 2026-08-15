@@ -7,6 +7,7 @@ use crate::observer::latency_observer::LatencyObserver;
 use crate::observer::log_observer::LogObserver;
 use crate::observer::metrics_log_observer::MetricsLogObserver;
 use crate::observer::stage_latency_observer::StageLatencyObserver;
+use crate::observer::usage_observer::UsageObserver;
 use crate::pipeline::pipeline::Pipeline;
 use crate::processor::processor::FrameIo;
 use crate::serializer::stt::deepgram_flux::DeepgramFluxSerializer;
@@ -63,10 +64,6 @@ const TTS_VOICE: &str = "shubh";
 /// two never drift apart (see `browser_stream`'s STT/TTS setup below).
 const PRIMARY_LANGUAGE: Language = Language::Te;
 
-/// `false` means the request's `Origin` header isn't one this server
-/// accepts calls from — every entry point (WebSocket upgrade, WebRTC
-/// signaling POST, ...) checks this the same way before doing anything
-/// else.
 fn origin_allowed(header: &HeaderMap) -> bool {
     let origin = header
         .get(header::ORIGIN)
@@ -75,25 +72,6 @@ fn origin_allowed(header: &HeaderMap) -> bool {
     ALLOWED_ORIGINS.contains(&origin)
 }
 
-/// Builds the STT -> user-aggregator -> LLM -> TTS pipeline shared by
-/// every transport a browser call can arrive over. Each transport's own
-/// handler (`browser_stream` for WebSocket, `browser_stream_webrtc` for
-/// WebRTC) calls this and then only differs in which serializer/transport
-/// client it wraps the resulting `FrameIo` in — see each handler's own
-/// doc comment.
-///
-/// Stages in order; the pipeline creates the channels between them,
-/// spawns them, and returns the transport's two ends.
-///
-/// denoiser -> stt -> user-aggregator -> llm -> tts: the caller's audio
-/// is cleaned up, transcribed, aggregated into whole user turns, answered
-/// by an LLM, and spoken back. Deepgram Flux recommends
-/// `TurnStrategy::External` (see
-/// `DeepgramFluxSttProvider::recommended_turn_strategy`) and nothing here
-/// configures a strategy explicitly, so the user-aggregator stands down
-/// its own local detection and trusts Flux's StartOfTurn/EndOfTurn
-/// instead.
-///
 fn build_browser_pipeline() -> Result<FrameIo, Response> {
     let config = config::get().map_err(|_| {
         ApiResponse::<()>::fail(StatusCode::INTERNAL_SERVER_ERROR, "Server misconfigured")
@@ -150,13 +128,6 @@ fn build_browser_pipeline() -> Result<FrameIo, Response> {
                     TTS_VOICE.to_string(),
                     PRIMARY_LANGUAGE,
                     TtsConfigKind::SarvamTtsConfig(SarvamTtsConfig {
-                        // Sarvam always runs preprocessing for `v3`
-                        // regardless of what's asked for (see Pipecat's
-                        // `sarvam/tts.py`: `preprocessing_always_enabled`
-                        // for both v3 variants) — set explicitly here so
-                        // ferry's request matches what the server does
-                        // rather than relying on the vendor to override
-                        // a `false` silently.
                         enable_preprocessing: Some(true),
                         ..SarvamTtsConfig::new()
                     }),
@@ -169,6 +140,7 @@ fn build_browser_pipeline() -> Result<FrameIo, Response> {
             Arc::new(LatencyObserver::new()),
             Arc::new(StageLatencyObserver::new()),
             Arc::new(MetricsLogObserver),
+            Arc::new(UsageObserver::new()),
         ],
     ))
 }

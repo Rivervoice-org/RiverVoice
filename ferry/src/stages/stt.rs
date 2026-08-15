@@ -3,7 +3,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::audio::resampler::SampleRateAdapter;
-use crate::frames::frames::{Frame, FrameKind, ServiceMetadataFrame, TranscriptionFrame};
+use crate::frames::frames::{
+    Frame, FrameKind, ServiceMetadataFrame, SttUsageFrame, TranscriptionFrame,
+};
 use crate::processor::processor::{FrameIo, FrameProcessor};
 use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::provider::{SttConfig, SttEvent, SttProvider};
@@ -72,6 +74,14 @@ impl FrameProcessor for SttStage {
         // tradeoff on the same situation).
         let mut rate_adapter: Option<(u32, SampleRateAdapter)> = None;
 
+        // Seconds of audio sent to the provider since the last usage
+        // report — a delta, reset to zero each time it's flushed as an
+        // `SttUsageFrame` (per final transcript, and once more for
+        // whatever's left over when the call ends). `SttStage::run` runs
+        // once per call, so this can't carry a total over into the next
+        // one.
+        let mut unreported_audio_seconds: f64 = 0.0;
+
         loop {
             tokio::select! {
                 frame = io.take() => {
@@ -104,9 +114,29 @@ impl FrameProcessor for SttStage {
                             let pcm: Vec<u8> =
                                 resampled.iter().flat_map(|s| s.to_le_bytes()).collect();
 
-                            if session.send_audio(&pcm).await.is_err() {
-                                break;
+                            match session.send_audio(&pcm).await {
+                                Ok(()) => {
+                                    // Counted at the target rate, since
+                                    // that's the audio actually billed by
+                                    // the provider — not the caller's
+                                    // original rate. Counted only on a
+                                    // confirmed send: a chunk that never
+                                    // made it to the provider was never
+                                    // billed, so it shouldn't inflate the
+                                    // meter — but a failed send doesn't
+                                    // invalidate the seconds already
+                                    // banked from earlier, successfully
+                                    // sent chunks this turn, so nothing
+                                    // here needs to be undone on failure.
+                                    unreported_audio_seconds +=
+                                        resampled.len() as f64 / target_sample_rate as f64;
+                                }
+                                Err(e) => {
+                                    tracing::error!("{}: failed to send audio: {e}", io.name());
+                                    break;
+                                }
                             }
+
                             if !io.push(Frame::new(FrameKind::RawAudio(audio))).await {
                                 break;
                             }
@@ -152,6 +182,25 @@ impl FrameProcessor for SttStage {
                         break;
                     }
 
+                    // Final transcript is the closest the pipeline gets to
+                    // a turn boundary, so report (and reset) the meter
+                    // here rather than only at end of call — a long call
+                    // that's killed mid-way still gets everything up to
+                    // its last completed turn counted.
+                    if matches!(&event, SttEvent::Transcript(t) if t.is_final)
+                        && unreported_audio_seconds > 0.0
+                    {
+                        let audio_seconds = std::mem::take(&mut unreported_audio_seconds);
+                        if !io
+                            .push(Frame::new(FrameKind::SttUsage(SttUsageFrame {
+                                audio_seconds,
+                            })))
+                            .await
+                        {
+                            break;
+                        }
+                    }
+
                     let kind = match event {
                         SttEvent::Transcript(t) => FrameKind::Transcription(TranscriptionFrame {
                             text: t.text,
@@ -165,6 +214,17 @@ impl FrameProcessor for SttStage {
                     }
                 }
             }
+        }
+
+        // Flush audio sent since the last final transcript — the call
+        // ended (or the pipeline is tearing down) before one arrived, so
+        // this is the only chance to report it.
+        if unreported_audio_seconds > 0.0 {
+            let _ = io
+                .push(Frame::new(FrameKind::SttUsage(SttUsageFrame {
+                    audio_seconds: unreported_audio_seconds,
+                })))
+                .await;
         }
 
         session.close().await;

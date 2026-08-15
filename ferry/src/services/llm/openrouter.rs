@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{self, Receiver};
 use tokio::task::JoinHandle;
 
+use crate::frames::frames::LlmUsageFrame;
 use crate::services::llm::provider::{
     LlmError, LlmEvent, LlmGeneration, LlmMessage, LlmProvider, LlmRole,
 };
@@ -240,6 +241,12 @@ impl LlmProvider for OpenRouterLlmProvider {
                             continue;
                         }
                     };
+                    if let Some(usage) = chunk.usage
+                        && tx.send(LlmEvent::Usage(usage)).await.is_err()
+                    {
+                        return; // caller dropped the receiver
+                    }
+
                     let Some(content) = chunk
                         .choices
                         .into_iter()
@@ -325,11 +332,14 @@ impl From<&LlmMessage> for WireMessage {
 /// on this object (`id`, `object`, `created`, `model`,
 /// `system_fingerprint`, each choice's `finish_reason`) than this struct
 /// captures — `serde` silently ignores fields it isn't told about, and
-/// nothing here needs any of them yet, only the streamed text.
+/// nothing here needs any of them beyond the streamed text and usage.
 /// <https://openrouter.ai/docs/api-reference/streaming>
 #[derive(Deserialize)]
 struct StreamChunk {
     choices: Vec<StreamChoice>,
+    /// Only present on the final chunk of a generation (`choices` is
+    /// typically empty on that one) — see [`StreamDelta::content`].
+    usage: Option<LlmUsageFrame>,
 }
 
 #[derive(Deserialize)]

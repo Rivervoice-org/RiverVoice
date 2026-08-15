@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use tokio::sync::mpsc::Receiver;
 
+use crate::frames::frames::LlmUsageFrame;
+
 /// One message in a conversation, in the role/content shape every LLM
 /// vendor's chat API expects. `Vec<LlmMessage>` is the whole context
 /// [`LlmStage`](crate::stages::llm::LlmStage) sends on every turn — unlike
@@ -54,6 +56,19 @@ pub enum LlmEvent {
     /// caller that wants sentence-level chunking builds that on top,
     /// rather than this type forcing one granularity.
     TextDelta(String),
+    /// Token usage for the generation this event's channel belongs to.
+    /// Unlike STT (a continuous stream billed by the second, with no
+    /// natural per-request boundary until [`SttStage`](crate::stages::stt::SttStage)
+    /// imposes one), a chat completion is already one bounded request —
+    /// the provider hands back one total, once, near the end of its own
+    /// stream. Nothing to accumulate or flush on this side. Carries
+    /// [`LlmUsageFrame`] directly rather than its own provider-local type:
+    /// `LlmStage` would only have copied the three fields across
+    /// unchanged, so there's nothing a separate type would guard against
+    /// today. If a future provider ever needs to report something
+    /// `LlmUsageFrame` doesn't carry, that's the point to give it its own
+    /// type and convert.
+    Usage(LlmUsageFrame),
 }
 
 /// A single in-flight call to the model, held only long enough to cancel
