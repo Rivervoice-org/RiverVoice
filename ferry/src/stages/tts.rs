@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::frames::frames::{Frame, FrameKind, TtsAudioFrame};
+use crate::frames::frames::{Frame, FrameKind, TtsAudioFrame, TtsUsageFrame};
 use crate::processor::processor::{FrameIo, FrameProcessor};
 use crate::serializer::serializer::FrameSerializer;
 use crate::services::tts::provider::{TtsConfig, TtsEvent, TtsProvider};
@@ -64,7 +64,7 @@ impl FrameProcessor for TtsStage {
         // to close one that was actually opened.
         let mut speaking = false;
 
-        loop {
+        'run: loop {
             tokio::select! {
                 frame = io.take() => {
                     let Some(frame) = frame else { break };
@@ -74,6 +74,15 @@ impl FrameProcessor for TtsStage {
                                 io.start_ttfb_metrics();
                                 if session.send_text(&sentence).await.is_err() {
                                     break;
+                                }
+                                // Only counts text the vendor actually
+                                // accepted — a failed send above already
+                                // `break`s before reaching here.
+                                let usage = TtsUsageFrame {
+                                    characters: sentence.chars().count() as u32,
+                                };
+                                if !io.push(Frame::new(FrameKind::TtsUsage(usage))).await {
+                                    break 'run;
                                 }
                             }
                         }
@@ -90,7 +99,14 @@ impl FrameProcessor for TtsStage {
                                 // text first goes to the vendor for an
                                 // utterance, so it needs the same start.
                                 io.start_ttfb_metrics();
-                                let _ = session.send_text(&sentence).await;
+                                if session.send_text(&sentence).await.is_ok() {
+                                    let usage = TtsUsageFrame {
+                                        characters: sentence.chars().count() as u32,
+                                    };
+                                    if !io.push(Frame::new(FrameKind::TtsUsage(usage))).await {
+                                        break;
+                                    }
+                                }
                             }
                             // Told once per completed turn, after its
                             // last `send_text` — not after every
