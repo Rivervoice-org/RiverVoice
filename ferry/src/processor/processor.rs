@@ -57,31 +57,29 @@ impl FrameIo {
 
     /// Pushes a frame onward, onto whichever of the two queues it belongs
     /// on. `false` means downstream is gone, wind down.
+    ///
+    /// Deliberately does *not* synthesize an `Interruption` for
+    /// `UserStartedSpeaking` here: that used to happen on every push of
+    /// one, at every hop, racing the synthesized control-queue frame
+    /// against the regular-queue frame it was meant to accompany — the
+    /// receiving stage's `take()` sees the control-queue `Interruption`
+    /// first (biased) and `flush()`es its regular queue right as the
+    /// `UserStartedSpeaking` frame lands there, discarding it before the
+    /// stage ever processes it. [`UserAggregatorStage`](crate::stages::user_aggregator::UserAggregatorStage)
+    /// already raises the one `Interruption` that actually matters, once
+    /// it has confirmed (accounting for VAD/strategies) that a turn
+    /// genuinely started — that's the single source of truth, not every
+    /// stage's raw forwarding of the vendor's signal.
     pub async fn push(&self, frame: Frame) -> bool {
         for observer in self.observers.iter() {
             observer.on_push(&self.name, &frame);
         }
-
-        let mut new_frame: Option<Frame> = None;
 
         let queue = if frame.kind().is_control() {
             &self.downstream_control
         } else {
             &self.downstream
         };
-
-        if matches!(frame.kind(), FrameKind::UserStartedSpeaking) {
-            new_frame = Some(Frame::new(FrameKind::Interruption));
-        }
-
-        if let Some(new_frame) = new_frame {
-            let new_frame_queue = if new_frame.kind().is_control() {
-                &self.downstream_control
-            } else {
-                &self.downstream
-            };
-            let _ = new_frame_queue.send(new_frame).await.is_ok();
-        }
 
         queue.send(frame).await.is_ok()
     }
@@ -159,7 +157,17 @@ impl FrameIo {
     /// picks its next frame up fresh instead of still grinding through
     /// work from before the user cut in.
     fn flush(&mut self) {
-        while self.upstream.try_recv().is_ok() {}
+        let mut dropped = 0u32;
+        while self.upstream.try_recv().is_ok() {
+            dropped += 1;
+        }
+        if dropped > 0 {
+            tracing::debug!(
+                stage = %self.name,
+                dropped,
+                "flushed buffered frames on interruption"
+            );
+        }
     }
 }
 
