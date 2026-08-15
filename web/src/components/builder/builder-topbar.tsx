@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import { BuilderPricingSummary } from "@/components/builder/builder-pricing-summary";
 import { MascotPicker } from "@/components/builder/mascot-picker";
 import type { RailView } from "@/components/builder/rail";
 import type { Agent } from "@/lib/agents/types";
@@ -152,6 +153,8 @@ export function BuilderTopbar({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <BuilderPricingSummary agent={agent} />
 
       {/* A panel's own button stands down while that panel is up: there is
           nothing for it to do, and the pair reads as one switch between the two
