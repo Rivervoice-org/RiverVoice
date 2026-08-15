@@ -45,6 +45,16 @@ class PcmPlayer extends AudioWorkletProcessor {
     this.queue = [];
     this.offset = 0;
     this.port.onmessage = (event) => {
+      // An interruption (see browser-voice.ts's channel.onmessage) posts
+      // `{ type: "clear" }` instead of an audio buffer — drop whatever's
+      // still queued so playback actually stops immediately, rather than
+      // finishing audio that was already in flight before the bot's
+      // reply was cut off server-side.
+      if (event.data && event.data.type === "clear") {
+        this.queue = [];
+        this.offset = 0;
+        return;
+      }
       this.queue.push(new Int16Array(event.data));
     };
   }

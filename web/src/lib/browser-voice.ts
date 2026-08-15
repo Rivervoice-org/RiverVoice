@@ -256,7 +256,19 @@ async function start({
     };
 
     channel.onmessage = (event: MessageEvent<ArrayBuffer>) => {
-      player.port.postMessage(event.data, [event.data]);
+      // Server->client messages carry a one-byte tag ferry's
+      // WebRtcSerializer prefixes every message with (see its doc
+      // comment): 0x00 = audio chunk, followed by raw PCM; 0x01 =
+      // interrupt, telling the player to drop whatever it has queued so
+      // the bot's speech actually stops instead of finishing whatever
+      // was already sent before the interruption happened server-side.
+      const tag = new Uint8Array(event.data, 0, 1)[0];
+      if (tag === 0x01) {
+        player.port.postMessage({ type: "clear" });
+        return;
+      }
+      const audio = event.data.slice(1);
+      player.port.postMessage(audio, [audio]);
     };
     // No onerror on RTCDataChannel — connection failure surfaces through
     // connectionState instead.
