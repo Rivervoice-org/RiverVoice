@@ -110,3 +110,12 @@ pub enum CreditTxnKind {
     Topup,
     Usage,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
+#[db_enum(existing_type_path = "crate::db::schema::sql_types::UsageUnit")]
+pub enum UsageUnit {
+    AudioSecond,
+    PromptToken,
+    CompletionToken,
+    Character,
+}

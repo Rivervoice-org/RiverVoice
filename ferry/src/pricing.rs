@@ -36,8 +36,20 @@ pub struct PerMillionCost {
 
 impl PerMillionCost {
     pub fn charge(&self, prompt_tokens: u32, completion_tokens: u32) -> f64 {
+        self.charge_prompt(prompt_tokens) + self.charge_completion(completion_tokens)
+    }
+
+    /// Split out from `charge` because a `credit_transactions` row carries
+    /// exactly one `unit` (see 0012_credit_transactions_unit.sql) — a
+    /// combined prompt+completion charge couldn't record which portion of
+    /// the tokens were which, so a generation's cost becomes two separate
+    /// charges, not one.
+    pub fn charge_prompt(&self, prompt_tokens: u32) -> f64 {
         (prompt_tokens as f64 / 1_000_000.0) * self.prompt
-            + (completion_tokens as f64 / 1_000_000.0) * self.completion
+    }
+
+    pub fn charge_completion(&self, completion_tokens: u32) -> f64 {
+        (completion_tokens as f64 / 1_000_000.0) * self.completion
     }
 }
 
@@ -111,19 +123,28 @@ impl PerMinuteCost {
 }
 
 pub enum DeepgramModels {
-    Flux,
+    FluxMultilingual,
+    FluxEnglish,
+    Nova3General,
+    Nova3Multilingual,
 }
 
 // https://deepgram.com/pricing
-// Flux Multilingual streaming (flux-general-multi, what ferry actually
-// requests — see DeepgramFluxSttConfig::model in
-// services/stt/deepgram/flux.rs): $0.0078/minute. Deepgram's own pricing
-// page marks this a "limited-time promotional rate" — recheck before
-// treating it as durable.
+// flux-general-multi/flux-general-en (services/stt/deepgram/flux.rs) and
+// nova-3-general/nova-3 (services/stt/deepgram/stt.rs — "nova-3-general" is
+// the monolingual one, ferry's Telugu setup uses this) are priced
+// separately. nova-3-general is the only Deepgram model that lists Telugu
+// (`te`) as supported at all — nova-2 does not
+// (https://developers.deepgram.com/docs/models-languages-overview).
+// Deepgram's own pricing page marks all four a "limited-time promotional
+// rate" — recheck before treating any as durable.
 impl DeepgramModels {
     pub fn cost(self) -> PerMinuteCost {
         match self {
-            Self::Flux => PerMinuteCost { audio: 0.0078 },
+            Self::FluxMultilingual => PerMinuteCost { audio: 0.0078 },
+            Self::FluxEnglish => PerMinuteCost { audio: 0.0065 },
+            Self::Nova3General => PerMinuteCost { audio: 0.0048 },
+            Self::Nova3Multilingual => PerMinuteCost { audio: 0.0058 },
         }
     }
 }

@@ -11,7 +11,7 @@ use uuid::Uuid;
 use super::dsl;
 use crate::db::enums::{
     CallConnectivity, CallEndReason, CallEndedBy, CallFailureReason, CallSpeaker, CallType,
-    CreditTxnKind, ToolCallStatus,
+    CreditTxnKind, ToolCallStatus, UsageUnit,
 };
 use crate::db::schema::{call_tool_invocations, call_transcript_turns};
 
@@ -154,13 +154,22 @@ pub async fn charge_usage(
     org_id: Uuid,
     call_id: Uuid,
     amount_micros: i64,
+    unit: UsageUnit,
+    units: f64,
     note: String,
 ) -> anyhow::Result<i64> {
     let mut conn = pool.get().await?;
 
-    let balance = diesel::select(dsl::charge_usage(org_id, call_id, amount_micros, note))
-        .get_result::<i64>(&mut conn)
-        .await?;
+    let balance = diesel::select(dsl::charge_usage(
+        org_id,
+        call_id,
+        amount_micros,
+        unit,
+        units,
+        note,
+    ))
+    .get_result::<i64>(&mut conn)
+    .await?;
 
     Ok(balance)
 }

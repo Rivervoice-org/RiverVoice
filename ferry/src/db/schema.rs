@@ -50,6 +50,10 @@ pub mod sql_types {
     pub struct ToolTrigger;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "usage_unit"))]
+    pub struct UsageUnit;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "version_state"))]
     pub struct VersionState;
 }
@@ -213,6 +217,7 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::CreditTxnKind;
+    use super::sql_types::UsageUnit;
 
     credit_transactions (id) {
         id -> Uuid,
@@ -225,6 +230,8 @@ diesel::table! {
         note -> Text,
         created_at -> Timestamptz,
         call_id -> Nullable<Uuid>,
+        unit -> Nullable<UsageUnit>,
+        units -> Nullable<Double>,
     }
 }
 

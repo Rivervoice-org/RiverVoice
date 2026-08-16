@@ -4,12 +4,14 @@
 //! it does not create one. Kept separate from mod.rs so the call sites
 //! there read as plain Rust wrappers, not macro expansion.
 
-use diesel::sql_types::{Bigint, Float4, Jsonb, Nullable, Text, Timestamptz, Uuid as SqlUuid};
+use diesel::sql_types::{
+    Bigint, Double, Float4, Jsonb, Nullable, Text, Timestamptz, Uuid as SqlUuid,
+};
 
 use crate::db::schema::sql_types::{
     CallConnectivity as SqlCallConnectivity, CallEndReason as SqlCallEndReason,
     CallEndedBy as SqlCallEndedBy, CallFailureReason as SqlCallFailureReason,
-    CallType as SqlCallType, CreditTxnKind as SqlCreditTxnKind,
+    CallType as SqlCallType, CreditTxnKind as SqlCreditTxnKind, UsageUnit as SqlUsageUnit,
 };
 
 diesel::define_sql_function! {
@@ -55,6 +57,8 @@ diesel::define_sql_function! {
         p_org_id: SqlUuid,
         p_call_id: SqlUuid,
         p_amount_micros: Bigint,
+        p_unit: SqlUsageUnit,
+        p_units: Double,
         p_note: Text,
     ) -> Bigint;
 }

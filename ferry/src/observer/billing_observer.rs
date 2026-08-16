@@ -5,6 +5,7 @@ use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool;
 use uuid::Uuid;
 
+use crate::db::enums::UsageUnit;
 use crate::db::mutations;
 use crate::frames::frames::{Frame, FrameKind};
 use crate::observer::observer::FrameObserver;
@@ -72,7 +73,7 @@ impl BillingObserver {
         self.exhausted.load(Ordering::Relaxed)
     }
 
-    fn charge(&self, cost_usd: f64, note: &'static str) {
+    fn charge(&self, cost_usd: f64, unit: UsageUnit, units: f64, note: &'static str) {
         if cost_usd <= 0.0 {
             return;
         }
@@ -84,8 +85,16 @@ impl BillingObserver {
         let exhausted = Arc::clone(&self.exhausted);
 
         tokio::spawn(async move {
-            match mutations::charge_usage(pool, org_id, call_id, amount_micros, note.to_string())
-                .await
+            match mutations::charge_usage(
+                pool,
+                org_id,
+                call_id,
+                amount_micros,
+                unit,
+                units,
+                note.to_string(),
+            )
+            .await
             {
                 Ok(balance) if balance < 0 => exhausted.store(true, Ordering::Relaxed),
                 Ok(_) => {}
@@ -108,17 +117,38 @@ impl FrameObserver for BillingObserver {
         // once per usage event.
         match frame.kind() {
             FrameKind::SttUsage(usage) if stage == "stt" => {
-                self.charge(self.stt_cost.charge(usage.audio_seconds), "stt");
+                self.charge(
+                    self.stt_cost.charge(usage.audio_seconds),
+                    UsageUnit::AudioSecond,
+                    usage.audio_seconds,
+                    "stt",
+                );
             }
             FrameKind::LlmUsage(usage) if stage == "llm" => {
+                // Two charges, not one — a credit_transactions row carries
+                // exactly one `unit`, so prompt and completion tokens can't
+                // share a single row (see PerMillionCost::charge_prompt's
+                // doc comment).
                 self.charge(
-                    self.llm_cost
-                        .charge(usage.prompt_tokens, usage.completion_tokens),
+                    self.llm_cost.charge_prompt(usage.prompt_tokens),
+                    UsageUnit::PromptToken,
+                    usage.prompt_tokens as f64,
+                    "llm",
+                );
+                self.charge(
+                    self.llm_cost.charge_completion(usage.completion_tokens),
+                    UsageUnit::CompletionToken,
+                    usage.completion_tokens as f64,
                     "llm",
                 );
             }
             FrameKind::TtsUsage(usage) if stage == "tts" => {
-                self.charge(self.tts_cost.charge(usage.characters), "tts");
+                self.charge(
+                    self.tts_cost.charge(usage.characters),
+                    UsageUnit::Character,
+                    usage.characters as f64,
+                    "tts",
+                );
             }
             _ => {}
         }
