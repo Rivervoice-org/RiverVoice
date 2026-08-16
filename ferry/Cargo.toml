@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1"
 base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
 axum = { version = "0.8.9", features = ["ws"] }
 dotenvy = "0.15"
@@ -47,6 +48,10 @@ diesel = { version = "2.2", default-features = false, features = [
     "uuid",
     "serde_json",
     "chrono",
+    # agent_versions has 36 columns, past the default 16-column limit
+    # diesel's table! macro supports without this — it also brings in
+    # 32-column-tables, which call_usage's 20 columns need.
+    "64-column-tables",
 ] }
 # Diesel's core connection is sync; ferry is async end to end (axum,
 # tokio), so queries run through diesel-async's AsyncPgConnection instead

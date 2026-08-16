@@ -5,6 +5,11 @@
 # right output path.
 [print_schema]
 file = "src/db/schema.rs"
+# Without this, the generated sql_types::* marker structs (AgentStatus,
+# CallType, ...) only derive SqlType — no QueryId, which diesel-async's
+# LoadQuery bound requires for any query that touches an enum column,
+# including the sql_function! calls in db/mutations/dsl.rs.
+custom_type_derives = ["diesel::query_builder::QueryId", "Clone"]
 
 # app.* SQL functions (record_call_usage, add_credits, ...) live outside
 # the tables Diesel introspects for schema.rs — sql_function! declarations

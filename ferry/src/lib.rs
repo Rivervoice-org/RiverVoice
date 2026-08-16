@@ -1,4 +1,3 @@
-pub mod agent;
 pub mod audio;
 pub mod auth;
 pub mod config;
