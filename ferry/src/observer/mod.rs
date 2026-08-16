@@ -1,3 +1,4 @@
+pub mod billing_observer;
 pub mod latency_observer;
 pub mod log_observer;
 pub mod metrics_log_observer;

@@ -127,6 +127,8 @@ export function BuilderTester({
     }
     try {
       callRef.current = await BrowserVoice.start({
+        agentId: agent.id,
+        version: agent.version,
         onStatus: (status) => {
           setCall(
             status === BrowserVoiceStatus.Ended || status === BrowserVoiceStatus.Error
@@ -149,7 +151,7 @@ export function BuilderTester({
       setCall(BrowserVoiceStatus.Idle);
       toast.error(error instanceof BrowserVoiceError ? error.message : "Could not start the call.");
     }
-  }, [endCall]);
+  }, [endCall, agent.id, agent.version]);
 
   const [language, setLanguage] = React.useState(agent.startingLanguage);
   const [voice, setVoice] = React.useState(agent.voice);

@@ -68,12 +68,7 @@ create type tool_call_status as enum ('success', 'failure', 'timeout');
 
 -- One row per call, written once when the call ends. Per-frame STT/LLM/TTS
 -- totals (already summed for the call's lifetime by ferry's UsageObserver)
--- collapse into this single row rather than one row per usage frame, since
--- billing only needs to charge for a call once, not once per chunk. Tool
--- invocations follow the same rule (see call_tool_invocations below): they
--- happen mid-call, but the row that would reference this one doesn't
--- exist until the call ends, so ferry accumulates them the same way it
--- accumulates usage totals and flushes both together.
+-- collapse into this single row rather than one row per usage frame
 create table
   call_usage (
     id uuid primary key default gen_random_uuid (),

@@ -35,6 +35,9 @@ export interface BrowserVoiceCall {
 }
 
 export interface BrowserVoiceOptions {
+  agentId: string;
+  /** Matches agent_versions.version (harbor/db/migrations/0003_agents.sql). */
+  version: number;
   onStatus: (status: BrowserVoiceStatus) => void;
   /** Fires only after the call was live — setup failures reject `start` instead. */
   onError?: (error: BrowserVoiceError) => void;
@@ -144,7 +147,11 @@ interface WebRtcConnection {
  * still carries the exact same raw PCM messages, matching ferry's
  * `WebRtcSerializer` (the same dialect as `BrowserSerializer`).
  */
-async function openDataChannel(signalingUrl: string): Promise<WebRtcConnection> {
+async function openDataChannel(
+  signalingUrl: string,
+  agentId: string,
+  version: number,
+): Promise<WebRtcConnection> {
   // No STUN server: fine for same-machine/LAN dev, where host candidates
   // alone are enough to connect. TODO: add one (and trickle ICE) once this
   // needs to work across networks.
@@ -194,7 +201,11 @@ async function openDataChannel(signalingUrl: string): Promise<WebRtcConnection> 
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sdp: pc.localDescription?.sdp ?? "" }),
+      body: JSON.stringify({
+        sdp: pc.localDescription?.sdp ?? "",
+        agent_id: agentId,
+        version,
+      }),
     });
     const body = (await response.json().catch(() => null)) as { data?: { sdp?: string } } | null;
     if (!response.ok || !body?.data?.sdp) {
@@ -222,6 +233,8 @@ async function openDataChannel(signalingUrl: string): Promise<WebRtcConnection> 
 }
 
 async function start({
+  agentId,
+  version,
   onStatus,
   onError,
   onLevel,
@@ -242,7 +255,11 @@ async function start({
     source.connect(capture);
     player.connect(context.destination);
 
-    const { pc, channel } = await openDataChannel(`${toHttpUrl(FERRY_URL)}/browser-call/webrtc`);
+    const { pc, channel } = await openDataChannel(
+      `${toHttpUrl(FERRY_URL)}/browser-call/webrtc`,
+      agentId,
+      version,
+    );
 
     let stopped = false;
     const teardown = (status: BrowserVoiceStatus) => {
