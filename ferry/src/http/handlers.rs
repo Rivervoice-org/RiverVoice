@@ -5,12 +5,14 @@ use crate::config;
 use crate::db;
 use crate::http::response::ApiResponse;
 use crate::http::state::AppState;
+use crate::observer::billing_observer::BillingObserver;
 use crate::observer::latency_observer::LatencyObserver;
 use crate::observer::log_observer::LogObserver;
 use crate::observer::metrics_log_observer::MetricsLogObserver;
 use crate::observer::stage_latency_observer::StageLatencyObserver;
 use crate::observer::usage_observer::UsageObserver;
 use crate::pipeline::pipeline::Pipeline;
+use crate::pricing::{AnthropicModels, DeepgramModels, SarvamTtsModels};
 use crate::processor::processor::FrameIo;
 use crate::serializer::stt::deepgram_flux::DeepgramFluxSerializer;
 use crate::serializer::transport::browser::BrowserSerializer;
@@ -69,7 +71,7 @@ const TTS_VOICE: &str = "shubh";
 /// two never drift apart (see `browser_stream`'s STT/TTS setup below).
 const PRIMARY_LANGUAGE: Language = Language::Te;
 
-fn build_browser_pipeline() -> Result<FrameIo, Response> {
+fn build_browser_pipeline(org_id: Uuid, call_id: Uuid) -> Result<FrameIo, Response> {
     let config = config::get().map_err(|_| {
         ApiResponse::<()>::fail(StatusCode::INTERNAL_SERVER_ERROR, "Server misconfigured")
             .into_response()
@@ -138,6 +140,14 @@ fn build_browser_pipeline() -> Result<FrameIo, Response> {
             Arc::new(StageLatencyObserver::new()),
             Arc::new(MetricsLogObserver),
             Arc::new(UsageObserver::new()),
+            Arc::new(BillingObserver::new(
+                db::db::get(),
+                org_id,
+                call_id,
+                AnthropicModels::ClaudeHaiku45.cost(),
+                DeepgramModels::Flux.cost(),
+                SarvamTtsModels::BulbulV3.cost(),
+            )),
         ],
     ))
 }
@@ -219,9 +229,11 @@ pub async fn browser_stream_webrtc(
             }
         };
 
-    tracing::info!(?agent, ?agent_version, "webrtc: browser call starting");
+    let call_id = Uuid::new_v4();
 
-    let io = match build_browser_pipeline() {
+    tracing::info!(?agent, ?agent_version, %call_id, "webrtc: browser call starting");
+
+    let io = match build_browser_pipeline(caller_org_id, call_id) {
         Ok(io) => io,
         Err(resp) => return resp,
     };

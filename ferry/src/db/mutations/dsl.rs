@@ -30,7 +30,6 @@ diesel::define_sql_function! {
         p_llm_prompt_tokens: Bigint,
         p_llm_completion_tokens: Bigint,
         p_tts_characters: Bigint,
-        p_cost_micros: Bigint,
         p_started_at: Timestamptz,
         p_recording_key: Nullable<Text>,
         p_recording_duration_seconds: Nullable<Float4>,
@@ -46,6 +45,16 @@ diesel::define_sql_function! {
         p_kind: SqlCreditTxnKind,
         p_amount_micros: Bigint,
         p_created_by: Nullable<SqlUuid>,
+        p_note: Text,
+    ) -> Bigint;
+}
+
+diesel::define_sql_function! {
+    #[sql_name = "app.charge_usage"]
+    fn charge_usage(
+        p_org_id: SqlUuid,
+        p_call_id: SqlUuid,
+        p_amount_micros: Bigint,
         p_note: Text,
     ) -> Bigint;
 }

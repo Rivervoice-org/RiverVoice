@@ -75,7 +75,6 @@ pub async fn record_call_usage(
     llm_prompt_tokens: i64,
     llm_completion_tokens: i64,
     tts_characters: i64,
-    cost_micros: i64,
     started_at: DateTime<Utc>,
     recording_key: Option<String>,
     recording_duration_seconds: Option<f32>,
@@ -134,7 +133,6 @@ pub async fn record_call_usage(
         llm_prompt_tokens,
         llm_completion_tokens,
         tts_characters,
-        cost_micros,
         started_at,
         recording_key,
         recording_duration_seconds,
@@ -145,6 +143,26 @@ pub async fn record_call_usage(
     .await?;
 
     Ok(usage_id)
+}
+
+/// Debits one usage frame's cost the moment it's known — see
+/// `app.charge_usage` in 0010_usage_charging.sql. Returns the org's balance
+/// right after the debit; a negative result means this call has run the
+/// org's credit out and should be ended.
+pub async fn charge_usage(
+    pool: &diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>,
+    org_id: Uuid,
+    call_id: Uuid,
+    amount_micros: i64,
+    note: String,
+) -> anyhow::Result<i64> {
+    let mut conn = pool.get().await?;
+
+    let balance = diesel::select(dsl::charge_usage(org_id, call_id, amount_micros, note))
+        .get_result::<i64>(&mut conn)
+        .await?;
+
+    Ok(balance)
 }
 
 pub async fn add_credits(

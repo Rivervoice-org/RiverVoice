@@ -224,6 +224,7 @@ diesel::table! {
         created_by -> Nullable<Uuid>,
         note -> Text,
         created_at -> Timestamptz,
+        call_id -> Nullable<Uuid>,
     }
 }
 
