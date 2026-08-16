@@ -5,13 +5,13 @@ a browser, give it a voice and a few tools, and it takes calls.
 
 Three services, three languages, one Postgres:
 
-| | what it does | stack |
-|---|---|---|
-| **web** | the builder and dashboard | Next.js, TypeScript |
-| **harbor** | accounts, agents, tools — everything that persists | Go, pgx |
-| **ferry** | the live call: telephony, speech, audio | Rust, axum, tokio |
+|            | what it does                                       | stack               |
+| ---------- | -------------------------------------------------- | ------------------- |
+| **web**    | the builder and dashboard                          | Next.js, TypeScript |
+| **harbor** | accounts, agents, tools — everything that persists | Go, pgx             |
+| **ferry**  | the live call: telephony, speech, audio            | Rust, axum, tokio   |
 
-The split is by *shape of work*, not by fashion. harbor answers HTTP requests and
+The split is by _shape of work_, not by fashion. harbor answers HTTP requests and
 writes rows. ferry holds thousands of open sockets and moves audio frames with a
 latency budget measured in milliseconds. Those want different runtimes.
 
@@ -148,7 +148,10 @@ the query keys, the hooks, and the types:
 export const agentsQueryKey = ["agents"] as const;
 
 export function useAgents() {
-  return useQuery({ queryKey: agentsQueryKey, queryFn: () => api.get<Agent[]>("/v1/agents") });
+  return useQuery({
+    queryKey: agentsQueryKey,
+    queryFn: () => api.get<Agent[]>("/v1/agents"),
+  });
 }
 ```
 
@@ -268,18 +271,27 @@ Rust, axum, tokio. Holds the call for its whole duration.
 ferry/src/
   main.rs
   config.rs        PUBLIC_BASE_URL and the URLs derived from it
-  state.rs         AppState — config plus the provider
-  retry.rs
   http/
     http.rs        the router
     handlers.rs    dial, audio_stream, twilio_status
     types.rs
+  services/
+    mod.rs
+    stt/           speech-to-text providers and language detection
+      provider.rs  SttProvider trait, Transcript, SttEvent
+      language.rs  Language enum for multilingual support
+      deepgram/    Deepgram STT implementation
+    tts/           text-to-speech providers
+      provider.rs
+    llm/           language model providers
+      provider.rs
+    ws_client.rs   shared websocket client utilities
   telephony/
     provider.rs    the trait every carrier implements
     twilio/        the one that exists
-  stt/
-    provider.rs    AudioEncoding, SttEvent, the socket loop
-    sarvam/
+  audio/           audio frame handling and processing
+  processor/       the call pipeline
+  pipeline/        orchestration of services
 ```
 
 ```
@@ -290,23 +302,48 @@ POST /twilio/status   call lifecycle callbacks
 
 ### Providers are traits
 
-`telephony/provider.rs` and `stt/provider.rs` define what a carrier and a speech
-service must do; `twilio/` and `sarvam/` implement them. Handlers know neither
-name. Swapping Twilio for Exotel is a new module, not a rewrite.
+`services/stt/provider.rs`, `services/tts/provider.rs`, `services/llm/provider.rs`,
+and `telephony/provider.rs` define what each service must implement. Handlers know
+the traits but not the implementations. The provider pattern enables:
 
-`SttEvent` is the vocabulary the rest of the system speaks:
+- Swapping STT from Deepgram to Sarvam without touching handlers
+- Multiple LLM backends (OpenAI, Groq, local)
+- Language-aware processing through the `Language` enum
+- Unified `SttEvent` stream from providers that detect turns themselves
+
+`SttEvent` is the vocabulary the STT layer uses to communicate with the rest of
+the system:
 
 ```rust
-enum SttEvent {
-    SpeechStart,
-    SpeechEnd,
-    Partial(String),                                  // superseded by later events
-    Final { text: String, language: Option<String> },
+pub enum SttEvent {
+    Transcript(Transcript),           // partial or final transcription
+    UserStartedSpeaking,              // provider's own turn detection
+    UserStoppedSpeaking,              // provider's own turn detection
+}
+
+pub struct Transcript {
+    pub text: String,
+    pub language: Option<Language>,   // language per phrase, for code-switching
+    pub is_final: bool,
 }
 ```
 
-Language comes back on the final event because Indian callers code-switch
-mid-sentence, and the agent has to follow.
+Language comes back because Indian callers code-switch mid-sentence, and the
+agent has to follow. Providers that detect turns themselves emit `UserStartedSpeaking`
+and `UserStoppedSpeaking` on the same stream, allowing turn-aware providers to
+manage call flow directly.
+
+### Services as pluggable providers
+
+The three critical services — STT, TTS, LLM — are defined as traits in
+`services/{stt,tts,llm}/provider.rs`. Each provider announces:
+
+- Its name and capabilities
+- Recommended behavior (e.g., turn detection strategy for STT)
+- The events or outputs it produces
+
+This abstraction decouples handlers from implementations, so adding a new STT
+vendor means a new module under `services/stt/`, not changes to the call loop.
 
 ### Why Rust
 
@@ -315,8 +352,8 @@ directions, with a second socket to the STT provider and a third for TTS. Per
 call. The work is IO-bound with hard latency limits and no room for a GC pause
 during someone's sentence.
 
-Providers drop idle sockets — Sarvam closes with 1008 — so the STT loop sends a
-keepalive every 5 seconds.
+Providers drop idle sockets — Deepgram closes on inactivity — so the STT loop
+sends a keepalive frame periodically and handles reconnection gracefully.
 
 ---
 
@@ -370,7 +407,7 @@ and `alter type ... add value` cannot run inside a transaction.
 ### Tools hang off the agent, not the version
 
 A tool holds credentials. Copying those into every commit would mean rotating a
-key in *n* places, so `agent_tools.agent_id` points at the agent.
+key in _n_ places, so `agent_tools.agent_id` points at the agent.
 
 Kind-specific fields are one `jsonb` column:
 
@@ -383,7 +420,7 @@ config      jsonb — url, headers, body for api; response, status for a mock
 ```
 
 Columns per kind would be null for every other kind, and a new kind would mean a
-migration rather than a release. `kind` *is* an enum, because a kind is never a
+migration rather than a release. `kind` _is_ an enum, because a kind is never a
 data-only addition — each needs its own form and its own runtime.
 
 ---
@@ -394,11 +431,11 @@ Many orgs share one database. Nothing in Go decides which rows an org can see.
 
 ### Three roles
 
-| role | can | why |
-|---|---|---|
-| `postgres` | DDL, owns every table | runs migrations |
-| `app_worker` | DML, **BYPASSRLS** | login and signup, where there is no session yet |
-| `app_user` | DML, **RLS applies** | every request on behalf of a signed-in person |
+| role         | can                   | why                                             |
+| ------------ | --------------------- | ----------------------------------------------- |
+| `postgres`   | DDL, owns every table | runs migrations                                 |
+| `app_worker` | DML, **BYPASSRLS**    | login and signup, where there is no session yet |
+| `app_user`   | DML, **RLS applies**  | every request on behalf of a signed-in person   |
 
 The reason this split is mandatory rather than tidy:
 
@@ -462,7 +499,7 @@ create policy agents_all on agents for all to app_user
 
 `using` filters rows already there. `with check` validates rows going in. Without
 the second, `update agents set org_id = '<other org>'` would move a row into
-someone else's tenant — `using` is satisfied, because the row *is* currently
+someone else's tenant — `using` is satisfied, because the row _is_ currently
 yours.
 
 ### What this buys

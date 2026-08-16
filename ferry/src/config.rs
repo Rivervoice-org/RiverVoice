@@ -26,6 +26,7 @@ pub struct Config {
     pub deepgram_stt_api_key: String,
     pub openrouter_api_key: String,
     pub sarvam_tts_api_key: String,
+    pub database_url: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -54,6 +55,12 @@ struct RawConfig {
     openrouter_api_key: String,
     #[validate(length(min = 1, message = "SARVAM_TTS_API_KEY is not set"))]
     sarvam_tts_api_key: String,
+    // harbor and ferry read the same Postgres instance directly — harbor
+    // through its RLS-scoped app_user role, ferry through app_worker,
+    // calling only the SECURITY DEFINER functions that role is granted
+    // execute on (see harbor/db/migrations/0009_credits.sql).
+    #[validate(length(min = 1, message = "DATABASE_URL is not set"))]
+    database_url: String,
 }
 
 #[derive(Clone)]
@@ -80,6 +87,7 @@ impl Config {
             deepgram_stt_api_key: std::env::var("DEEPGRAM_STT_API_KEY").unwrap_or_default(),
             openrouter_api_key: std::env::var("OPENROUTER_API_KEY").unwrap_or_default(),
             sarvam_tts_api_key: std::env::var("SARVAM_TTS_API_KEY").unwrap_or_default(),
+            database_url: std::env::var("DATABASE_URL").unwrap_or_default(),
         };
 
         raw.validate().map_err(ConfigError)?;
@@ -89,6 +97,7 @@ impl Config {
             deepgram_stt_api_key: raw.deepgram_stt_api_key,
             openrouter_api_key: raw.openrouter_api_key,
             sarvam_tts_api_key: raw.sarvam_tts_api_key,
+            database_url: raw.database_url,
         })
     }
 }

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::audio::rnnoise::RnnoiseFilter;
 use crate::config;
+use crate::db;
 use crate::http::response::ApiResponse;
 use crate::http::state::AppState;
 use crate::observer::latency_observer::LatencyObserver;
@@ -33,12 +34,15 @@ use crate::transport::webrtc::transport::WebRtcClient;
 use crate::transport::websockets::transport::WebSocketClient;
 use crate::turns::controller::{DEFAULT_STOP_TIMEOUT, TurnController};
 use axum::{
-    Extension, Json,
+    Extension,
+    body::Bytes,
     extract::ws::WebSocketUpgrade,
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+use validator::Validate;
 
 pub async fn health() -> StatusCode {
     StatusCode::OK
@@ -64,14 +68,6 @@ const TTS_VOICE: &str = "shubh";
 /// The call's primary spoken language — also what TTS replies in, so the
 /// two never drift apart (see `browser_stream`'s STT/TTS setup below).
 const PRIMARY_LANGUAGE: Language = Language::Te;
-
-fn origin_allowed(header: &HeaderMap) -> bool {
-    let origin = header
-        .get(header::ORIGIN)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
-    ALLOWED_ORIGINS.contains(&origin)
-}
 
 fn build_browser_pipeline() -> Result<FrameIo, Response> {
     let config = config::get().map_err(|_| {
@@ -146,9 +142,16 @@ fn build_browser_pipeline() -> Result<FrameIo, Response> {
     ))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 pub struct WebRtcOfferRequest {
     sdp: String,
+    agent_id: Uuid,
+    // Matches agent_versions.version (harbor/db/migrations/0003_agents.sql)
+    // — a positive, sequential per-agent counter, not a free-form number.
+    // No upper bound here: harbor owns that invariant, this just rejects
+    // the values that could never be a real version (0, negative).
+    #[validate(range(min = 1))]
+    version: i32,
 }
 
 #[derive(Serialize)]
@@ -159,8 +162,65 @@ pub struct WebRtcAnswerBody {
 pub async fn browser_stream_webrtc(
     header: HeaderMap,
     Extension(state): Extension<AppState>,
-    Json(offer): Json<WebRtcOfferRequest>,
+    body: Bytes,
 ) -> Response {
+    let offer: WebRtcOfferRequest = match serde_json::from_slice(&body) {
+        Ok(offer) => offer,
+        Err(e) => {
+            return ApiResponse::<()>::fail(StatusCode::BAD_REQUEST, e.to_string()).into_response();
+        }
+    };
+
+    if let Err(e) = offer.validate() {
+        return ApiResponse::<()>::fail(StatusCode::BAD_REQUEST, e.to_string()).into_response();
+    }
+
+    // Session's org_id is the JWT claim as a string (see auth::token::Session)
+    // — parsed here rather than at auth time so a malformed claim fails this
+    // one request instead of every request through the middleware.
+    let caller_org_id = match Uuid::parse_str(&state.session.org_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return ApiResponse::<()>::fail(StatusCode::UNAUTHORIZED, "Invalid session")
+                .into_response();
+        }
+    };
+
+    // Scoped to caller_org_id in Rust, not RLS: app_worker's select on
+    // agents/agent_versions is unconditional (harbor/db/migrations/
+    // 0008_app_worker_agent_reads.sql) precisely because ferry does this
+    // filtering itself.
+    let agent = match db::queries::get_agent(&state.pool, offer.agent_id, caller_org_id).await {
+        Ok(Some(agent)) => agent,
+        Ok(None) => {
+            return ApiResponse::<()>::fail(StatusCode::NOT_FOUND, "Agent not found")
+                .into_response();
+        }
+        Err(e) => {
+            tracing::error!("webrtc: failed to load agent: {e:?}");
+            return ApiResponse::<()>::fail(StatusCode::INTERNAL_SERVER_ERROR, "Server error")
+                .into_response();
+        }
+    };
+
+    let agent_version =
+        match db::queries::get_agent_version(&state.pool, agent.id, offer.version, caller_org_id)
+            .await
+        {
+            Ok(Some(version)) => version,
+            Ok(None) => {
+                return ApiResponse::<()>::fail(StatusCode::NOT_FOUND, "Agent version not found")
+                    .into_response();
+            }
+            Err(e) => {
+                tracing::error!("webrtc: failed to load agent version: {e:?}");
+                return ApiResponse::<()>::fail(StatusCode::INTERNAL_SERVER_ERROR, "Server error")
+                    .into_response();
+            }
+        };
+
+    tracing::info!(?agent, ?agent_version, "webrtc: browser call starting");
+
     let io = match build_browser_pipeline() {
         Ok(io) => io,
         Err(resp) => return resp,
