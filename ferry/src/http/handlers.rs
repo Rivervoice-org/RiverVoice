@@ -175,13 +175,51 @@ pub async fn browser_stream_webrtc(
         return ApiResponse::<()>::fail(StatusCode::BAD_REQUEST, e.to_string()).into_response();
     }
 
-    tracing::info!(
-        org_id = %state.session.org_id,
-        user_id = %state.session.user_id,
-        agent_id = %agent.id,
-        agent_version = offer.version,
-        "webrtc: browser call starting"
-    );
+    // Session's org_id is the JWT claim as a string (see auth::token::Session)
+    // — parsed here rather than at auth time so a malformed claim fails this
+    // one request instead of every request through the middleware.
+    let caller_org_id = match Uuid::parse_str(&state.session.org_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return ApiResponse::<()>::fail(StatusCode::UNAUTHORIZED, "Invalid session")
+                .into_response();
+        }
+    };
+
+    // Scoped to caller_org_id in Rust, not RLS: app_worker's select on
+    // agents/agent_versions is unconditional (harbor/db/migrations/
+    // 0008_app_worker_agent_reads.sql) precisely because ferry does this
+    // filtering itself.
+    let agent = match db::queries::get_agent(&state.pool, offer.agent_id, caller_org_id).await {
+        Ok(Some(agent)) => agent,
+        Ok(None) => {
+            return ApiResponse::<()>::fail(StatusCode::NOT_FOUND, "Agent not found")
+                .into_response();
+        }
+        Err(e) => {
+            tracing::error!("webrtc: failed to load agent: {e:?}");
+            return ApiResponse::<()>::fail(StatusCode::INTERNAL_SERVER_ERROR, "Server error")
+                .into_response();
+        }
+    };
+
+    let agent_version =
+        match db::queries::get_agent_version(&state.pool, agent.id, offer.version, caller_org_id)
+            .await
+        {
+            Ok(Some(version)) => version,
+            Ok(None) => {
+                return ApiResponse::<()>::fail(StatusCode::NOT_FOUND, "Agent version not found")
+                    .into_response();
+            }
+            Err(e) => {
+                tracing::error!("webrtc: failed to load agent version: {e:?}");
+                return ApiResponse::<()>::fail(StatusCode::INTERNAL_SERVER_ERROR, "Server error")
+                    .into_response();
+            }
+        };
+
+    tracing::info!(?agent, ?agent_version, "webrtc: browser call starting");
 
     let io = match build_browser_pipeline() {
         Ok(io) => io,
