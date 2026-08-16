@@ -1,0 +1,12 @@
+# Used by `diesel print-schema` (see scripts/generate_schema.ps1) to
+# regenerate src/db/schema.rs from harbor's real, migrated database.
+# Ferry never runs Diesel's own migrations — harbor/db/migrations owns
+# schema changes via goose; this file only points introspection at the
+# right output path.
+[print_schema]
+file = "src/db/schema.rs"
+
+# app.* SQL functions (record_call_usage, add_credits, ...) live outside
+# the tables Diesel introspects for schema.rs — sql_function! declarations
+# for those stay hand-written in db/mutations.rs, same as any other Diesel
+# project calling a stored procedure.

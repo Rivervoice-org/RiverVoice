@@ -58,7 +58,7 @@ struct RawConfig {
     // harbor and ferry read the same Postgres instance directly — harbor
     // through its RLS-scoped app_user role, ferry through app_worker,
     // calling only the SECURITY DEFINER functions that role is granted
-    // execute on (see harbor/db/migrations/0007_credits.sql).
+    // execute on (see harbor/db/migrations/0009_credits.sql).
     #[validate(length(min = 1, message = "DATABASE_URL is not set"))]
     database_url: String,
 }

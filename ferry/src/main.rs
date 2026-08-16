@@ -8,7 +8,7 @@ async fn main() {
     logging::init();
     config::init();
 
-    if let Err(e) = db::init().await {
+    if let Err(e) = db::db::init().await {
         tracing::error!("failed to connect to database: {e:?}");
         std::process::exit(1);
     }

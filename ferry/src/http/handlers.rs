@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::audio::rnnoise::RnnoiseFilter;
 use crate::config;
+use crate::db;
 use crate::http::response::ApiResponse;
 use crate::http::state::AppState;
 use crate::observer::latency_observer::LatencyObserver;
@@ -173,6 +174,14 @@ pub async fn browser_stream_webrtc(
     if let Err(e) = offer.validate() {
         return ApiResponse::<()>::fail(StatusCode::BAD_REQUEST, e.to_string()).into_response();
     }
+
+    tracing::info!(
+        org_id = %state.session.org_id,
+        user_id = %state.session.user_id,
+        agent_id = %agent.id,
+        agent_version = offer.version,
+        "webrtc: browser call starting"
+    );
 
     let io = match build_browser_pipeline() {
         Ok(io) => io,
