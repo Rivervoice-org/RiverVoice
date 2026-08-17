@@ -1,29 +1,15 @@
 use async_trait::async_trait;
 
 use crate::audio::vad::{VadStateMachine, VadTransition};
-use crate::frames::frames::{Frame, FrameKind, RawAudioFrame, UserTurnAggregationFrame};
+use crate::frames::frames::{Frame, FrameKind, RawAudioFrame};
 use crate::processor::processor::{FrameIo, FrameProcessor};
 use crate::turns::controller::{TurnController, TurnEvent};
 
-/// The pipeline's one stage that sees both audio-derived turn signals
-/// and the text they carry at the same time. Sits between STT and an
-/// LLM stage: VAD/vendor turn signals and every configured start/stop
-/// strategy decide the turn boundaries (via [`TurnController`]), and
-/// this is additionally where the individual `TranscriptionFrame`
-/// fragments that arrive during one open turn get collected into a
-/// single [`UserTurnAggregationFrame`] — the thing an LLM stage
-/// actually wants to run on, not a stream of fragments.
 pub struct UserAggregatorStage {
     controller: TurnController,
-    /// Every transcript segment seen since the turn now open (if any)
-    /// started, joined with spaces. Cleared when a new turn starts,
-    /// flushed and cleared when the current one ends.
+
     buffer: String,
-    /// Local VAD, consulted on every `RawAudio` frame that passes
-    /// through. `None` if no VAD was configured, a deployment that only
-    /// wants the vendor's own `UserStartedSpeaking` or a configured
-    /// start/stop strategy behaves exactly as if this field didn't
-    /// exist.
+
     vad: Option<VadStateMachine>,
     vad_started_at: Option<u32>,
 }
@@ -38,35 +24,11 @@ impl UserAggregatorStage {
         }
     }
 
-    /// Adds local VAD. Every `RawAudio` frame that reaches this stage is
-    /// run through it, and a confirmed speech/silence transition is
-    /// folded into the turn exactly like a real `UserStartedSpeaking`/
-    /// `UserStoppedSpeaking` frame would be.
     pub fn with_vad(mut self, vad: VadStateMachine) -> Self {
         self.vad = Some(vad);
         self
     }
 
-    /// Pushes the buffered text downstream as one [`UserTurnAggregationFrame`]
-    /// and clears it. A no-op if nothing was ever accumulated (e.g. a
-    /// turn opened and closed with no transcript in between).
-    async fn flush(&mut self, io: &FrameIo) -> bool {
-        if self.buffer.is_empty() {
-            return true;
-        }
-        let text = std::mem::take(&mut self.buffer);
-        io.push(Frame::new(FrameKind::UserTurnAggregation(
-            UserTurnAggregationFrame { text },
-        )))
-        .await
-    }
-
-    /// Runs VAD (if configured) on one `RawAudio` frame. `None` when
-    /// there's no VAD, or nothing to report yet; otherwise the frame
-    /// kind a confirmed transition corresponds to, for the caller to
-    /// both fold into the turn controller and push onto the belt as its
-    /// own frame, the same as a real `UserStartedSpeaking`/
-    /// `UserStoppedSpeaking` frame arriving from a vendor would be.
     fn observe_audio(&mut self, audio: &RawAudioFrame) -> Option<FrameKind> {
         let vad = self.vad.as_mut()?;
 
@@ -106,28 +68,10 @@ impl FrameProcessor for UserAggregatorStage {
 
     async fn run(mut self: Box<Self>, mut io: FrameIo) {
         loop {
-            // With a turn open, race the next frame against the
-            // watchdog deadline so a call that's gone quiet still
-            // gets ended (and its buffered text flushed) even though
-            // nothing arrived to prompt it.
-            let frame = match self.controller.deadline() {
-                Some(deadline) => {
-                    tokio::select! {
-                        frame = io.take() => frame,
-                        _ = tokio::time::sleep_until(deadline) => {
-                            if let Some(TurnEvent::Stopped { .. }) = self.controller.timed_out()
-                                && !self.flush(&io).await {
-                                break;
-                            }
-                            continue;
-                        }
-                    }
-                }
-                None => io.take().await,
-            };
+            let frame = io.take().await;
 
             let Some(frame) = frame else {
-                break; // upstream closed: run ends, dropping `io`
+                break;
             };
 
             let vad_kind = match frame.kind() {
@@ -139,9 +83,6 @@ impl FrameProcessor for UserAggregatorStage {
                 None => self.controller.observe(frame.kind()),
             };
 
-            // A turn starting clears the buffer before this frame's
-            // own text (if any) is added — the frame that opened the
-            // turn is itself part of it, not something to discard.
             if let Some(TurnEvent::Started) = event {
                 self.buffer.clear();
             }
@@ -149,9 +90,6 @@ impl FrameProcessor for UserAggregatorStage {
             if self.controller.turn_open()
                 && let FrameKind::Transcription(t) = frame.kind()
             {
-                // Interim/eager transcripts are cumulative re-guesses of
-                // the same utterance, not new text — only a final
-                // transcript is actually new content to append.
                 if t.is_final {
                     if !self.buffer.is_empty() {
                         self.buffer.push(' ');
@@ -160,18 +98,10 @@ impl FrameProcessor for UserAggregatorStage {
                 }
             }
 
-            // The frame that opened/continued/closed the turn goes
-            // out first.
             if !io.push(frame).await {
-                break; // downstream gone, the call is being torn down
+                break;
             }
 
-            // A VAD-detected boundary is represented on the belt the
-            // same way a vendor-provided one is: as its own
-            // UserStartedSpeaking/UserStoppedSpeaking frame, not only
-            // via the Interruption/aggregation that follows. Otherwise
-            // a downstream stage watching for that frame kind
-            // specifically would only ever see vendor-driven turns.
             if let Some(kind) = vad_kind
                 && !io.push(Frame::new(kind)).await
             {
@@ -181,9 +111,6 @@ impl FrameProcessor for UserAggregatorStage {
             match event {
                 Some(TurnEvent::Started) => {
                     tracing::info!("user-aggregator: turn started");
-                    if !io.push(Frame::new(FrameKind::Interruption)).await {
-                        break;
-                    }
                 }
                 Some(TurnEvent::Stopped { by_timeout }) => {
                     tracing::info!(
@@ -191,9 +118,6 @@ impl FrameProcessor for UserAggregatorStage {
                         text = %self.buffer,
                         "user-aggregator: turn stopped"
                     );
-                    if !self.flush(&io).await {
-                        break;
-                    }
                 }
                 None => {}
             }

@@ -10,8 +10,10 @@ use tower_http::trace::TraceLayer;
 use super::handlers;
 use crate::auth::middleware::require_session;
 
+const ALLOWED_ORIGINS: &[&str] = &["http://localhost:3000"];
+
 fn cors_layer() -> CorsLayer {
-    let origins: Vec<HeaderValue> = handlers::ALLOWED_ORIGINS
+    let origins: Vec<HeaderValue> = ALLOWED_ORIGINS
         .iter()
         .map(|origin| {
             origin
@@ -32,17 +34,22 @@ fn http_routes() -> Router {
 }
 
 fn call_routes() -> Router {
-    Router::new()
-        .route(
-            "/browser-call/webrtc",
-            post(handlers::browser_stream_webrtc),
-        )
-        .route_layer(middleware::from_fn(require_session))
+    Router::new().route_layer(middleware::from_fn(require_session))
 }
+
+// fn twilio_routes() -> Router {
+//     Router::new()
+//         .route(
+//             "/v1/twilio/voice",
+//             get(call::twilio_voice).post(call::twilio_voice),
+//         )
+//         .route("/v1/twilio/ws/{call_id}", get(call::twilio_ws))
+// }
 
 pub async fn start_server() -> anyhow::Result<()> {
     let router = http_routes()
         .merge(call_routes())
+        // .merge(twilio_routes())
         .layer(TraceLayer::new_for_http())
         .layer(cors_layer());
 
