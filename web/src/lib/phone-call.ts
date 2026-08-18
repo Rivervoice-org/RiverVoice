@@ -1,48 +1,40 @@
-export enum BrowserVoiceStatus {
-  Idle = "idle",
-  Connecting = "connecting",
-  Live = "live",
-  Ended = "ended",
-  Error = "error",
-}
+/**
+ * WebRTC call to ferry's `/call` endpoint, which sets up translation
+ * pipelines and dials a phone number via Twilio. The browser side is
+ * identical to `browser-voice.ts`: mic → PcmCapture → data channel,
+ * data channel → PcmPlayer → speakers. Only the signaling endpoint
+ * and request shape differ.
+ *
+ * After the data channel opens, the server sends a CONNECTED_TAG
+ * (0x02) once the remote end (Twilio) picks up. Until then the
+ * browser plays a ringing tone so the caller knows the call is
+ * progressing.
+ */
 
-export enum BrowserVoiceErrorCode {
-  Unsupported = "unsupported",
-  MicDenied = "mic-denied",
-  MicNotFound = "mic-not-found",
-  MicBusy = "mic-busy",
-  MicFailed = "mic-failed",
-  AudioFailed = "audio-failed",
-  ConnectFailed = "connect-failed",
-  ConnectTimeout = "connect-timeout",
-  Dropped = "dropped",
-}
+import {
+  BrowserVoiceStatus,
+  BrowserVoiceError,
+  BrowserVoiceErrorCode,
+  type BrowserVoiceCall,
+} from "./browser-voice";
 
-/** Carries a code for callers that branch, and a message fit to show a user. */
-export class BrowserVoiceError extends Error {
-  constructor(
-    readonly code: BrowserVoiceErrorCode,
-    message: string,
-    options?: { cause?: unknown },
-  ) {
-    super(message, options);
-    this.name = "BrowserVoiceError";
-  }
-}
+export type { BrowserVoiceStatus, BrowserVoiceError, BrowserVoiceCall };
 
-export interface BrowserVoiceCall {
-  stop: () => void;
-}
-
-export interface BrowserVoiceOptions {
+interface PhoneCallOptions {
   onStatus: (status: BrowserVoiceStatus) => void;
-  /** Fires only after the call was live — setup failures reject `start` instead. */
   onError?: (error: BrowserVoiceError) => void;
   onLevel?: (level: number) => void;
 }
 
 const FERRY_URL = process.env.NEXT_PUBLIC_FERRY_URL ?? "ws://localhost:8085";
-const SIGNALING_TIMEOUT_MS = 10_000;
+const CONNECT_TIMEOUT_MS = 15_000;
+
+/** Server→client tag meaning the remote end has connected. */
+const CONNECTED_TAG = 0x02;
+
+function toHttpUrl(wsUrl: string): string {
+  return wsUrl.replace(/^ws/, "http");
+}
 
 function chunkLevel(buffer: ArrayBuffer): number {
   const samples = new Int16Array(buffer);
@@ -55,11 +47,6 @@ function chunkLevel(buffer: ArrayBuffer): number {
   return Math.min(1, rms * 4);
 }
 
-/**
- * Asks for the microphone every time. The browser only shows a prompt when the
- * choice has not been made yet, but a previous denial has to surface as a
- * refusal rather than a silent no-op.
- */
 async function requestMic(): Promise<MediaStream> {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new BrowserVoiceError(
@@ -107,18 +94,6 @@ async function requestMic(): Promise<MediaStream> {
   }
 }
 
-/** `ws://`/`wss://` -> `http://`/`https://`, for the signaling endpoint. */
-function toHttpUrl(wsUrl: string): string {
-  return wsUrl.replace(/^ws/, "http");
-}
-
-/**
- * Resolves once every ICE candidate has been gathered. Signaling here is a
- * single request/response with no side channel to trickle candidates back
- * on afterward, so the SDP sent to the server needs every candidate baked
- * in already rather than arriving incrementally (trickle ICE) — fine for
- * same-machine/LAN dev, where gathering finishes near-instantly.
- */
 function waitForIceGatheringComplete(pc: RTCPeerConnection): Promise<void> {
   if (pc.iceGatheringState === "complete") return Promise.resolve();
   return new Promise((resolve) => {
@@ -136,12 +111,7 @@ interface WebRtcConnection {
   channel: RTCDataChannel;
 }
 
-/**
- * Creates a WebRTC peer connection and data channel, performs SDP
- * offer/answer signaling with ferry, and resolves once the data channel
- * is open.
- */
-async function openDataChannel(signalingUrl: string): Promise<WebRtcConnection> {
+async function openDataChannel(): Promise<WebRtcConnection> {
   const pc = new RTCPeerConnection({ iceServers: [] });
   const channel = pc.createDataChannel("audio", { ordered: false, maxRetransmits: 0 });
   channel.binaryType = "arraybuffer";
@@ -169,7 +139,7 @@ async function openDataChannel(signalingUrl: string): Promise<WebRtcConnection> 
           "The call server did not answer. Check that ferry is running.",
         ),
       );
-    }, SIGNALING_TIMEOUT_MS);
+    }, CONNECT_TIMEOUT_MS);
   });
 
   try {
@@ -177,27 +147,26 @@ async function openDataChannel(signalingUrl: string): Promise<WebRtcConnection> 
     await pc.setLocalDescription(offer);
     await waitForIceGatheringComplete(pc);
 
+    const signalingUrl = `${toHttpUrl(FERRY_URL)}/call`;
     const response = await fetch(signalingUrl, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        offer_sdp: pc.localDescription?.sdp ?? "",
+        sdp: pc.localDescription?.sdp ?? "",
       }),
     });
-    const raw = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-    const answerSdp =
-      (typeof (raw as any)?.answer_sdp === "string" && (raw as any).answer_sdp) ||
-      (typeof (raw as any)?.data?.answer_sdp === "string" && (raw as any).data.answer_sdp) ||
-      null;
-    if (!response.ok || !answerSdp) {
+    const body = (await response.json().catch(() => null)) as {
+      data?: { call_id?: string; sdp?: string };
+    } | null;
+    if (!response.ok || !body?.data?.sdp) {
       throw new BrowserVoiceError(
         BrowserVoiceErrorCode.ConnectFailed,
         "Could not reach the call server.",
       );
     }
 
-    await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+    await pc.setRemoteDescription({ type: "answer", sdp: body.data.sdp });
     await Promise.race([opened, timeout]);
 
     return { pc, channel };
@@ -214,17 +183,55 @@ async function openDataChannel(signalingUrl: string): Promise<WebRtcConnection> 
   }
 }
 
+// ── ringing tone ─────────────────────────────────────────────────
+
+/**
+ * Starts a dual-tone ring (440 Hz + 480 Hz) with a 2 s on / 4 s off
+ * cadence. Returns a stop function that kills the oscillators and
+ * clears the interval immediately.
+ */
+function startRinging(ctx: AudioContext): () => void {
+  let cleared = false;
+
+  function burst() {
+    if (cleared) return;
+    const now = ctx.currentTime;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.15, now);
+    gain.connect(ctx.destination);
+
+    const osc1 = ctx.createOscillator();
+    osc1.frequency.value = 440;
+    osc1.connect(gain);
+    osc1.start(now);
+    osc1.stop(now + 2);
+
+    const osc2 = ctx.createOscillator();
+    osc2.frequency.value = 480;
+    osc2.connect(gain);
+    osc2.start(now);
+    osc2.stop(now + 2);
+  }
+
+  burst();
+  const id = setInterval(burst, 4000);
+
+  return () => {
+    cleared = true;
+    clearInterval(id);
+  };
+}
+
 // ── start ────────────────────────────────────────────────────────
 
-async function start({
-  onStatus,
-  onError,
-  onLevel,
-}: BrowserVoiceOptions): Promise<BrowserVoiceCall> {
+const CONNECTED_TIMEOUT_MS = 60_000;
+
+async function start({ onStatus, onError, onLevel }: PhoneCallOptions): Promise<BrowserVoiceCall> {
   onStatus(BrowserVoiceStatus.Connecting);
 
   const stream = await requestMic();
   let context: AudioContext | undefined;
+  let stopRinging: (() => void) | undefined;
 
   try {
     context = new AudioContext({ sampleRate: 16_000 });
@@ -237,12 +244,13 @@ async function start({
     source.connect(capture);
     player.connect(context.destination);
 
-    const { pc, channel } = await openDataChannel(`${toHttpUrl(FERRY_URL)}/v1/webrtc/offer`);
+    const { pc, channel } = await openDataChannel();
 
     let stopped = false;
     const teardown = (status: BrowserVoiceStatus) => {
       if (stopped) return;
       stopped = true;
+      stopRinging?.();
       channel.close();
       pc.close();
       for (const track of stream.getTracks()) track.stop();
@@ -253,6 +261,13 @@ async function start({
     channel.onmessage = (event: MessageEvent<ArrayBuffer>) => {
       const tag = new Uint8Array(event.data, 0, 1)[0];
 
+      if (tag === CONNECTED_TAG) {
+        stopRinging?.();
+        stopRinging = undefined;
+        onStatus(BrowserVoiceStatus.Live);
+        return;
+      }
+
       if (tag === 0x01) {
         player.port.postMessage({ type: "clear" });
         return;
@@ -261,6 +276,7 @@ async function start({
       const audio = event.data.slice(1);
       player.port.postMessage(audio, [audio]);
     };
+
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
         onError?.(
@@ -276,12 +292,49 @@ async function start({
       if (channel.readyState === "open") channel.send(event.data);
     };
 
-    onStatus(BrowserVoiceStatus.Live);
+    // Play ringing while waiting for the remote end to connect.
+    onStatus(BrowserVoiceStatus.Connecting);
+    stopRinging = startRinging(context);
+
+    // If the server never sends CONNECTED_TAG (e.g. Twilio failed to
+    // dial), time out so the caller is not stuck ringing forever.
+    const connectedTimeout = setTimeout(() => {
+      if (!stopped) {
+        onError?.(
+          new BrowserVoiceError(
+            BrowserVoiceErrorCode.ConnectTimeout,
+            "The other party did not answer. Please try again.",
+          ),
+        );
+        teardown(BrowserVoiceStatus.Ended);
+      }
+    }, CONNECTED_TIMEOUT_MS);
+
+    const origTeardown = teardown;
+    const wrappedTeardown = (s: BrowserVoiceStatus) => {
+      clearTimeout(connectedTimeout);
+      origTeardown(s);
+    };
+
+    // Re-wire teardown references so stop() uses the timeout-clearing version.
+    channel.onclose = () => wrappedTeardown(BrowserVoiceStatus.Ended);
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+        onError?.(
+          new BrowserVoiceError(BrowserVoiceErrorCode.Dropped, "The call dropped unexpectedly."),
+        );
+        wrappedTeardown(BrowserVoiceStatus.Error);
+      }
+    };
 
     return {
-      stop: () => teardown(BrowserVoiceStatus.Ended),
+      stop: () => {
+        clearTimeout(connectedTimeout);
+        origTeardown(BrowserVoiceStatus.Ended);
+      },
     };
   } catch (cause) {
+    stopRinging?.();
     for (const track of stream.getTracks()) track.stop();
     void context?.close();
 
@@ -294,4 +347,4 @@ async function start({
   }
 }
 
-export const BrowserVoice = { start };
+export const PhoneCall = { start };

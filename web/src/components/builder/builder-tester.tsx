@@ -13,6 +13,7 @@ import {
   BrowserVoiceStatus,
   type BrowserVoiceCall,
 } from "@/lib/browser-voice";
+import { PhoneCall } from "@/lib/phone-call";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -114,7 +115,7 @@ export function BuilderTester({
   // change is the event that causes it.
   const changeMode = React.useCallback(
     (next: Mode) => {
-      if (next !== Mode.Voice) endCall();
+      if (next !== Mode.Voice && next !== Mode.Phone) endCall();
       setMode(next);
     },
     [endCall],
@@ -125,33 +126,40 @@ export function BuilderTester({
       endCall();
       return;
     }
+
+    const onStatus = (status: BrowserVoiceStatus) => {
+      setCall(
+        status === BrowserVoiceStatus.Ended || status === BrowserVoiceStatus.Error
+          ? BrowserVoiceStatus.Idle
+          : status,
+      );
+      if (status === BrowserVoiceStatus.Ended || status === BrowserVoiceStatus.Error) {
+        callRef.current = null;
+        levelRef.current = 0;
+      }
+    };
+    const onError = (error: BrowserVoiceError) => toast.error(error.message);
+    const onLevel = (level: number) => {
+      levelRef.current = level;
+    };
+
     try {
-      callRef.current = await BrowserVoice.start({
-        agentId: agent.id,
-        version: agent.version,
-        onStatus: (status) => {
-          setCall(
-            status === BrowserVoiceStatus.Ended || status === BrowserVoiceStatus.Error
-              ? BrowserVoiceStatus.Idle
-              : status,
-          );
-          if (status === BrowserVoiceStatus.Ended || status === BrowserVoiceStatus.Error) {
-            callRef.current = null;
-            levelRef.current = 0;
-          }
-        },
-        onError: (error) => toast.error(error.message),
-        onLevel: (level) => {
-          levelRef.current = level;
-        },
-      });
+      if (mode === Mode.Phone) {
+        callRef.current = await PhoneCall.start({ onStatus, onError, onLevel });
+      } else {
+        callRef.current = await BrowserVoice.start({
+          onStatus,
+          onError,
+          onLevel,
+        });
+      }
     } catch (error) {
       callRef.current = null;
       levelRef.current = 0;
       setCall(BrowserVoiceStatus.Idle);
       toast.error(error instanceof BrowserVoiceError ? error.message : "Could not start the call.");
     }
-  }, [endCall, agent.id, agent.version]);
+  }, [endCall, mode]);
 
   const [language, setLanguage] = React.useState(agent.startingLanguage);
   const [voice, setVoice] = React.useState(agent.voice);
@@ -354,23 +362,32 @@ export function BuilderTester({
 
         <Button
           size="lg"
-          disabled={mode !== Mode.Voice || call === BrowserVoiceStatus.Connecting}
-          onClick={mode === Mode.Voice ? toggleCall : undefined}
+          disabled={
+            (mode !== Mode.Voice && mode !== Mode.Phone) || call === BrowserVoiceStatus.Connecting
+          }
+          onClick={mode === Mode.Voice || mode === Mode.Phone ? toggleCall : undefined}
           className={cn("h-12 w-full rounded-2xl text-sm disabled:opacity-100")}
         >
-          {mode !== Mode.Voice ? action : null}
-          {mode === Mode.Voice && call === BrowserVoiceStatus.Idle ? action : null}
-          {mode === Mode.Voice && call === BrowserVoiceStatus.Connecting
+          {(mode === Mode.Voice || mode === Mode.Phone) && call === BrowserVoiceStatus.Idle
+            ? action
+            : null}
+          {(mode === Mode.Voice || mode === Mode.Phone) && call === BrowserVoiceStatus.Connecting
             ? CallLabel.Connecting
             : null}
-          {mode === Mode.Voice && call === BrowserVoiceStatus.Live ? CallLabel.End : null}
+          {(mode === Mode.Voice || mode === Mode.Phone) && call === BrowserVoiceStatus.Live
+            ? CallLabel.End
+            : null}
         </Button>
         <p className="text-center text-[11px] text-muted-foreground">
           {mode === Mode.Voice
             ? call === BrowserVoiceStatus.Live
               ? CallHint.Live
               : CallHint.Ready
-            : CallHint.Unavailable}
+            : mode === Mode.Phone
+              ? call === BrowserVoiceStatus.Live
+                ? "Live — speak and hear the translation through the phone"
+                : "Calls the configured number via Twilio with translation"
+              : CallHint.Unavailable}
         </p>
       </div>
     </aside>
