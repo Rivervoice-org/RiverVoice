@@ -1,11 +1,6 @@
 use crate::frames::frames::FrameKind;
 use crate::turns::user_stop::base::UserTurnStopStrategy;
 
-/// Trusts an external signal for the end of the turn: an STT provider
-/// (or other upstream service) that emits `UserStoppedSpeaking` itself,
-/// same as [`FrameKind::UserStartedSpeaking`]'s vendor-VAD case but for
-/// the other boundary. Does no detection of its own — just watches for
-/// the frame.
 pub struct ExternalUserTurnStopStrategy;
 
 impl UserTurnStopStrategy for ExternalUserTurnStopStrategy {

@@ -5,9 +5,6 @@ use tokio::time::Instant;
 use crate::frames::frames::FrameKind;
 use crate::turns::user_stop::base::UserTurnStopStrategy;
 
-/// Finalizes the turn after `timeout` with no new transcript, while the
-/// turn is open. Gives the user `timeout` after their last sign of life
-/// before deciding they're done.
 pub struct SpeechTimeoutUserTurnStopStrategy {
     timeout: Duration,
     deadline: Option<Instant>,
@@ -21,7 +18,6 @@ impl SpeechTimeoutUserTurnStopStrategy {
         }
     }
 
-    /// Pushes the deadline `timeout` out from now.
     fn touch(&mut self) {
         self.deadline = Some(Instant::now() + self.timeout);
     }
@@ -32,12 +28,6 @@ impl UserTurnStopStrategy for SpeechTimeoutUserTurnStopStrategy {
         "speech-timeout"
     }
 
-    /// Never finalizes directly — silence, not a frame, is what ends
-    /// this strategy's turn. Only a transcript counts as evidence the
-    /// user is (or just was) actually speaking, so only that pushes the
-    /// deadline back out — unlike raw audio, which arrives continuously
-    /// whether or not anyone is talking, and would otherwise defeat a
-    /// silence timeout entirely by never letting it elapse.
     fn observe(&mut self, kind: &FrameKind) -> bool {
         if matches!(kind, FrameKind::Transcription(_)) {
             self.touch();
@@ -100,9 +90,6 @@ mod tests {
 
     #[test]
     fn raw_audio_does_not_push_the_deadline_back() {
-        // Audio arrives continuously whether or not anyone is talking;
-        // treating it as a sign of life would mean silence could never
-        // actually elapse.
         let mut s = strategy();
         s.turn_started();
         let armed = s.deadline().expect("armed by turn_started");

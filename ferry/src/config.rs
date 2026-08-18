@@ -1,19 +1,6 @@
 use std::fmt;
 use std::sync::OnceLock;
 
-/// Loads `.env` file contents into the process environment, before
-/// anything reads `std::env::var` — including [`crate::logging::init`],
-/// which runs before [`init`] and reads `ENVIRONMENT` directly, so this
-/// has to happen first and separately rather than folded into [`init`]
-/// itself. Missing files are fine, not an error: a real deployment sets
-/// environment variables directly (Docker, systemd, ...) rather than
-/// shipping a `.env` file, so both lookups below just no-op there.
-///
-/// Two locations, in order:
-/// - the repo root's `.env` (`../.env` from ferry's usual working
-///   directory), shared with harbor/docker-compose
-/// - the current directory's `.env`, for whoever runs the binary from
-///   somewhere else (repo root directly, a ferry-local override, ...)
 pub fn load_dotenv() {
     let _ = dotenvy::from_filename("../.env");
     let _ = dotenvy::dotenv();
@@ -27,6 +14,12 @@ pub struct Config {
     pub openrouter_api_key: String,
     pub sarvam_tts_api_key: String,
     pub database_url: String,
+    pub twilio_account_sid: String,
+    pub twilio_auth_token: String,
+    pub twilio_twiml_app_sid: String,
+    pub twilio_from_number: String,
+    pub twilio_to_number: String,
+    pub public_base_url: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -34,10 +27,6 @@ pub enum Environment {
     Dev,
     Prod,
 }
-
-/// Defaults to `Prod` when unset so a deployment that forgets to set
-/// `ENVIRONMENT` fails toward the safer, stricter behavior rather than
-/// silently running with dev-only relaxations.
 pub fn environment() -> Environment {
     match std::env::var("ENVIRONMENT").as_deref() {
         Ok("dev") => Environment::Dev,
@@ -55,12 +44,20 @@ struct RawConfig {
     openrouter_api_key: String,
     #[validate(length(min = 1, message = "SARVAM_TTS_API_KEY is not set"))]
     sarvam_tts_api_key: String,
-    // harbor and ferry read the same Postgres instance directly — harbor
-    // through its RLS-scoped app_user role, ferry through app_worker,
-    // calling only the SECURITY DEFINER functions that role is granted
-    // execute on (see harbor/db/migrations/0009_credits.sql).
     #[validate(length(min = 1, message = "DATABASE_URL is not set"))]
     database_url: String,
+    #[validate(length(min = 1, message = "TWILIO_ACCOUNT_SID is not set"))]
+    twilio_account_sid: String,
+    #[validate(length(min = 1, message = "TWILIO_AUTH_TOKEN is not set"))]
+    twilio_auth_token: String,
+    #[validate(length(min = 1, message = "TWILIO_TWIML_APP_SID is not set"))]
+    twilio_twiml_app_sid: String,
+    #[validate(length(min = 1, message = "TWILIO_FROM_NUMBER is not set"))]
+    twilio_from_number: String,
+    #[validate(length(min = 1, message = "TWILIO_TO_NUMBER is not set"))]
+    twilio_to_number: String,
+    #[validate(length(min = 1, message = "PUBLIC_BASE_URL is not set"))]
+    public_base_url: String,
 }
 
 #[derive(Clone)]
@@ -88,6 +85,12 @@ impl Config {
             openrouter_api_key: std::env::var("OPENROUTER_API_KEY").unwrap_or_default(),
             sarvam_tts_api_key: std::env::var("SARVAM_TTS_API_KEY").unwrap_or_default(),
             database_url: std::env::var("DATABASE_URL").unwrap_or_default(),
+            twilio_account_sid: std::env::var("TWILIO_ACCOUNT_SID").unwrap_or_default(),
+            twilio_auth_token: std::env::var("TWILIO_AUTH_TOKEN").unwrap_or_default(),
+            twilio_twiml_app_sid: std::env::var("TWILIO_TWIML_APP_SID").unwrap_or_default(),
+            twilio_from_number: std::env::var("TWILIO_FROM_NUMBER").unwrap_or_default(),
+            twilio_to_number: std::env::var("TWILIO_TO_NUMBER").unwrap_or_default(),
+            public_base_url: std::env::var("PUBLIC_BASE_URL").unwrap_or_default(),
         };
 
         raw.validate().map_err(ConfigError)?;
@@ -98,6 +101,12 @@ impl Config {
             openrouter_api_key: raw.openrouter_api_key,
             sarvam_tts_api_key: raw.sarvam_tts_api_key,
             database_url: raw.database_url,
+            twilio_account_sid: raw.twilio_account_sid,
+            twilio_auth_token: raw.twilio_auth_token,
+            twilio_twiml_app_sid: raw.twilio_twiml_app_sid,
+            twilio_from_number: raw.twilio_from_number,
+            twilio_to_number: raw.twilio_to_number,
+            public_base_url: raw.public_base_url,
         })
     }
 }

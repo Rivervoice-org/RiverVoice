@@ -1,12 +1,6 @@
 use crate::frames::frames::FrameKind;
 use crate::turns::user_start::base::UserTurnStartStrategy;
 
-/// Starts the turn as soon as any transcript arrives.
-///
-/// A backstop for VAD: a transcript is proof someone spoke, even when
-/// they spoke too quietly for a VAD threshold to trip. Slower than VAD —
-/// the audio had to reach STT and come back as text — so run both and
-/// let whichever fires first win.
 pub struct TranscriptionUserTurnStartStrategy;
 
 impl UserTurnStartStrategy for TranscriptionUserTurnStartStrategy {

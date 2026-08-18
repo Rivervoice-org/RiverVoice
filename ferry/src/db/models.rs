@@ -1,8 +1,3 @@
-//! Queryable types for the tables ferry actually reads. Billing/call_usage
-//! rows are write-only from ferry's side (see mutations.rs) — harbor is the
-//! one that reads them back for the dashboard — so they get no struct here
-//! until something in ferry actually selects them.
-
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use uuid::Uuid;

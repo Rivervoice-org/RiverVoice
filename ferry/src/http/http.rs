@@ -30,11 +30,13 @@ fn cors_layer() -> CorsLayer {
 }
 
 fn http_routes() -> Router {
-    Router::new().route("/health", get(handlers::health))
+    Router::new().route("/health", get(axum::Json("OK")))
 }
 
 fn call_routes() -> Router {
-    Router::new().route_layer(middleware::from_fn(require_session))
+    Router::new()
+        .route("/v1/webrtc/offer", post(handlers::webrtc_offer))
+        .route_layer(middleware::from_fn(require_session))
 }
 
 // fn twilio_routes() -> Router {

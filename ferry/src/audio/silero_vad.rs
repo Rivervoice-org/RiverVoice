@@ -5,15 +5,8 @@ use ort::value::Value;
 
 use crate::audio::vad::VadAnalyzer;
 
-/// How often the recurrent state is reset. The model doesn't need
-/// unbounded history, and letting `state`/`context` grow stale would
-/// otherwise drift; matches Pipecat's own Silero analyzer.
 const MODEL_RESET_INTERVAL: Duration = Duration::from_secs(5);
 
-/// Silero's own required sample rates. 512 samples per call at 16 kHz,
-/// 256 at 8 kHz, no other rate is accepted, hence the `Option` in
-/// [`VadAnalyzer::start`]: any other rate leaves this analyzer unusable
-/// rather than silently wrong.
 fn frame_size_for(sample_rate: u32) -> Option<usize> {
     match sample_rate {
         16_000 => Some(512),
@@ -26,51 +19,17 @@ fn context_size_for(sample_rate: u32) -> usize {
     if sample_rate == 16_000 { 64 } else { 32 }
 }
 
-/// Voice activity detection via the Silero VAD ONNX model, run locally
-/// through `ort` (no vendor call, same reason `RnnoiseFilter` lives in
-/// `audio/` rather than `services/`: this is a model, not an API).
-///
-/// UNVERIFIED: written against `ort`'s general 2.x shape from memory,
-/// with no internet access to confirm the exact API and no ability to
-/// fetch/bundle the actual `silero_vad.onnx` file in this environment.
-/// Session construction is now confirmed against a real compiler
-/// (`commit_from_memory`, not `commit_from_file`, which this `ort`
-/// version doesn't have); the tensor I/O below, input/output names,
-/// shapes, `outputs[0]`/`outputs[1]` indexing, still hasn't executed
-/// against the real model. See the `#[ignore]`d test at the bottom of
-/// this file for how to actually verify it.
 pub struct SileroVad {
     session: Session,
     sample_rate: u32,
-    /// [2, 1, 128] recurrent state, flattened; fed back into the model
-    /// every call and replaced with what it returns.
+
     state: Vec<f32>,
-    /// Trailing samples from the previous call, prepended to the next
-    /// input the same way Pipecat's `_context` does, so the model sees
-    /// continuous audio across call boundaries instead of a hard cut.
+
     context: Vec<f32>,
     last_reset: Instant,
 }
 
 impl SileroVad {
-    /// `model_path` must point at a Silero VAD ONNX file (e.g. the one
-    /// Pipecat bundles at `audio/vad/data/silero_vad.onnx`); ferry does
-    /// not ship one.
-    ///
-    /// Reads the file into memory itself and commits from bytes rather
-    /// than a path: this `ort` version's `SessionBuilder` has no
-    /// `commit_from_file` (confirmed by a real compiler error, not a
-    /// guess), only `commit_from_memory`.
-    ///
-    /// Every `ort` fallible step here is turned into a string before
-    /// `anyhow` sees it (`.map_err`, not a bare `?`), rather than
-    /// letting `?` convert the raw `ort::Error` automatically: that
-    /// error type carries the `SessionBuilder` itself on failure so it
-    /// can be retried, and `SessionBuilder` holds raw FFI pointers that
-    /// aren't `Send`/`Sync` — `anyhow::Error` requires both, so the
-    /// automatic conversion doesn't compile (confirmed by a real
-    /// compiler error). Formatting first sidesteps the requirement:
-    /// `anyhow` only ever sees the message, never the non-Send type.
     pub fn new(model_path: &str) -> anyhow::Result<Self> {
         let model_bytes = std::fs::read(model_path)?;
         let session = Session::builder()
@@ -85,9 +44,7 @@ impl SileroVad {
         Ok(Self {
             session,
             sample_rate: 0,
-            // The `1` is the batch size in the `[2, 1, 128]` shape above,
-            // not a no-op — kept literal so this matches that shape at a
-            // glance rather than needing the reader to recompute it.
+
             #[allow(clippy::identity_op)]
             state: vec![0.0; 2 * 1 * 128],
             context: Vec::new(),
@@ -96,8 +53,6 @@ impl SileroVad {
     }
 
     fn reset_state(&mut self) {
-        // See the field's doc comment on `state` for the `[2, 1, 128]`
-        // shape this literal matches.
         #[allow(clippy::identity_op)]
         let state = vec![0.0; 2 * 1 * 128];
         self.state = state;
@@ -131,8 +86,6 @@ impl VadAnalyzer for SileroVad {
             self.reset_state();
         }
 
-        // Signed 16-bit -> [-1.0, 1.0], same normalization as Pipecat's
-        // `audio_int16.astype(np.float32) / 32768.0`.
         let samples: Vec<f32> = buffer.iter().map(|s| f32::from(*s) / 32768.0).collect();
 
         let context_size = context_size_for(self.sample_rate);
@@ -158,12 +111,6 @@ impl VadAnalyzer for SileroVad {
             let confidence = outputs[0].try_extract_tensor::<f32>()?.1[0];
             let (_, new_state) = outputs[1].try_extract_tensor::<f32>()?;
 
-            // Only committed on success, together: `state` and `context`
-            // describe the same processed input, so a failed call must
-            // leave both as they were rather than advance one and not
-            // the other. The next call then retries with an unchanged
-            // state against fresh input, instead of feeding a
-            // now-mismatched context to a stale recurrent state.
             self.state = new_state.to_vec();
             self.context = input[input_len - context_size..].to_vec();
 
@@ -184,20 +131,6 @@ impl VadAnalyzer for SileroVad {
 mod tests {
     use super::*;
 
-    /// Loads and runs the real ONNX model — the actual `ort` API surface
-    /// this file guesses at (`Session::builder`, `Value::from_array`'s
-    /// shapes, the `"input"`/`"state"`/`"sr"` tensor names,
-    /// `outputs[0]`/`outputs[1]` extraction) has never executed, so this
-    /// is the one thing standing between "compiles" and "works".
-    ///
-    /// Not run by default: no model file is bundled with ferry (a
-    /// `.onnx` binary isn't something to commit, and nothing here can
-    /// fetch one). Point `SILERO_VAD_TEST_MODEL` at a real
-    /// `silero_vad.onnx` and run with `cargo test -- --ignored` to
-    /// actually exercise this. Until someone does, treat the
-    /// `SileroVad` implementation as unverified regardless of what
-    /// `cargo check`/clippy say, neither can catch a wrong tensor name
-    /// or a transposed shape.
     #[test]
     #[ignore = "requires a real silero_vad.onnx; set SILERO_VAD_TEST_MODEL and run with --ignored"]
     fn silero_produces_a_plausible_confidence() {
@@ -206,10 +139,6 @@ mod tests {
         let mut vad = SileroVad::new(&path).expect("model should load");
         vad.start(16_000);
 
-        // Silence: real speech isn't required to prove the plumbing
-        // works end to end, only that a well-formed buffer produces a
-        // well-formed (in-range) confidence rather than an error path
-        // silently returning 0.0.
         let silence = vec![0i16; 512];
         let confidence = vad.voice_confidence(&silence);
 

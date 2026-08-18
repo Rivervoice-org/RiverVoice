@@ -1,9 +1,3 @@
-//! Raw diesel bindings for the SQL functions in
-//! harbor/db/migrations/0009_credits.sql. Each `define_sql_function!` here
-//! declares a signature for a function that already exists in Postgres —
-//! it does not create one. Kept separate from mod.rs so the call sites
-//! there read as plain Rust wrappers, not macro expansion.
-
 use diesel::sql_types::{
     Bigint, Double, Float4, Jsonb, Nullable, Text, Timestamptz, Uuid as SqlUuid,
 };
