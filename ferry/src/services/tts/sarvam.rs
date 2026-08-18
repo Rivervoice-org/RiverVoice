@@ -15,48 +15,23 @@ use crate::services::tts::provider::{
 };
 use crate::services::ws_client::WsOutboundClient;
 
-/// <https://docs.sarvam.ai/api-reference-docs/text-to-speech/streaming>
 const ENDPOINT: &str = "wss://api.sarvam.ai/text-to-speech/ws";
 
-/// Header Sarvam authenticates every request (REST or WS) with — not a
-/// bearer token.
 const AUTH_HEADER: &str = "api-subscription-key";
 
-/// Sarvam defaults `output_audio_codec` to `mp3`; ferry's pipeline only
-/// ever carries raw PCM (see [`TtsAudioFrame`](crate::frames::frames::TtsAudioFrame)),
-/// so this is fixed rather than left to that default or exposed as a
-/// per-call choice. Same reasoning as classic Deepgram's
-/// `encoding=linear16`.
 const OUTPUT_AUDIO_CODEC: &str = "linear16";
 
-/// How many outstanding events a session can buffer before
-/// [`TtsStage`](crate::stages::tts::TtsStage) catches up. Same reasoning
-/// as the Deepgram STT provider's own constant of this name.
 const EVENT_CHANNEL_CAPACITY: usize = 32;
 
-/// Sarvam doesn't document a required keepalive cadence for this
-/// endpoint; Pipecat's `SarvamTTSService` pings every 20s, so this
-/// matches that rather than guessing a different number.
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(20);
 
-/// Same reasoning as classic Deepgram's constant of this name: reconnect
-/// attempts before giving up on a connection that keeps failing
-/// immediately, rather than failing an utterance on the first transient
-/// error.
 const MAX_RECONNECT_ATTEMPTS: u32 = 5;
 const RECONNECT_DELAY: Duration = Duration::from_millis(750);
 
-/// Sarvam's two streaming-capable TTS models. Fixed per provider
-/// instance, not per call: each has its own native output rate, and
-/// [`TtsConfig::sample_rate`] is expected to already match whichever one
-/// this provider was built with (the provider has no way to resample).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SarvamModel {
-    /// 22050 Hz. Speakers: anushka, abhilash, manisha, vidya, arya,
-    /// karun, hitesh. Supports `pitch`/`loudness`.
     BulbulV2,
-    /// 24000 Hz, more speakers, `temperature` in place of
-    /// `pitch`/`loudness`.
+
     BulbulV3,
 }
 
@@ -69,53 +44,24 @@ impl SarvamModel {
     }
 }
 
-/// Sarvam's own knobs for its streaming TTS WebSocket, carried on
-/// [`TtsConfig::kind`](crate::services::tts::provider::TtsConfig::kind)
-/// via [`TtsConfigKind::SarvamTtsConfig`](crate::services::tts::provider::TtsConfigKind::SarvamTtsConfig).
-///
-/// Not present here, deliberately: `output_audio_codec`/
-/// `output_audio_bitrate`. Sarvam defaults `output_audio_codec` to
-/// `mp3`, but every downstream stage in ferry expects
-/// [`TtsAudioFrame`](crate::frames::frames::TtsAudioFrame) to carry raw
-/// PCM — nothing in the pipeline can decode a compressed codec. Same
-/// reasoning as classic Deepgram's `encoding=linear16`
-/// (`DeepgramSttConfig`'s docs): this isn't a real per-call choice, so
-/// it's fixed in [`SarvamTtsProvider::open`] instead of exposed as a
-/// field a caller could unknowingly break the pipeline with.
-/// `output_audio_bitrate` only means anything for a compressed codec, so
-/// it has nothing to configure once the codec is fixed.
 #[derive(Debug, Clone, Default)]
 pub struct SarvamTtsConfig {
-    /// Speaking rate multiplier.
     pub pace: Option<f32>,
-    /// Voice pitch adjustment. `bulbul:v2` only — `bulbul:v3` uses
-    /// `temperature` instead. This type is built without knowing which
-    /// model it'll be paired with, so it doesn't enforce that itself;
-    /// `SarvamTtsProvider::open` drops whichever of this/`loudness`/
-    /// `temperature` doesn't apply to `self.model` before sending.
+
     pub pitch: Option<f32>,
-    /// Voice loudness adjustment. `bulbul:v2` only, see `pitch`.
+
     pub loudness: Option<f32>,
-    /// Generation randomness. `bulbul:v3` only, see `pitch`.
+
     pub temperature: Option<f32>,
-    /// Whether Sarvam applies its own text preprocessing (number/
-    /// abbreviation normalization) before synthesizing.
+
     pub enable_preprocessing: Option<bool>,
-    /// Minimum characters Sarvam buffers before starting to synthesize.
+
     pub min_buffer_size: Option<u32>,
-    /// Maximum characters sent per synthesis chunk.
+
     pub max_chunk_length: Option<u32>,
 }
 
 impl SarvamTtsConfig {
-    /// Sarvam's own documented defaults, written out explicitly rather
-    /// than left as `None`/omitted from the request. Functionally the
-    /// same as today — Sarvam applies these same values server-side when
-    /// a field is absent — but stated here so they don't silently drift
-    /// if Sarvam ever changes its own default; what ferry asks for is
-    /// then this file, not a synced docs page. Same approach as
-    /// `DeepgramFluxSttConfig::new()`.
-    /// <https://docs.sarvam.ai/api-reference-docs/text-to-speech/stream>
     pub fn new() -> Self {
         Self {
             pace: Some(1.0),
@@ -129,8 +75,6 @@ impl SarvamTtsConfig {
     }
 }
 
-/// [`TtsProvider`] backed by Sarvam's streaming TTS WebSocket. Ferry's
-/// only TTS vendor, the same way OpenRouter is its only LLM vendor.
 pub struct SarvamTtsProvider {
     api_key: String,
     model: SarvamModel,
@@ -154,12 +98,7 @@ impl TtsProvider for SarvamTtsProvider {
         serializer: Arc<dyn FrameSerializer<Message = Message>>,
     ) -> Result<(Box<dyn TtsSession>, Receiver<TtsEvent>), TtsError> {
         let TtsConfigKind::SarvamTtsConfig(mut vendor) = config.kind;
-        // `pitch`/`loudness` (bulbul:v2) and `temperature` (bulbul:v3) are
-        // mutually exclusive on Sarvam's wire protocol, but `SarvamTtsConfig`
-        // itself is built without knowing which model it'll be paired with
-        // (see its doc comment) — only `self.model` here does, so this is
-        // where the fields that don't apply to it get dropped, rather than
-        // sending both sets and hoping Sarvam ignores the wrong one.
+
         match self.model {
             SarvamModel::BulbulV2 => vendor.temperature = None,
             SarvamModel::BulbulV3 => {
@@ -169,14 +108,12 @@ impl TtsProvider for SarvamTtsProvider {
         }
 
         let config_data = ConfigData {
-            target_language_code: config.language.code(),
+            language_code: config.language.code(),
             speaker: config.voice,
             speech_sample_rate: config.sample_rate,
             enable_preprocessing: vendor.enable_preprocessing.unwrap_or(false),
             model: self.model.slug(),
-            // Fixed, not a caller choice — see `SarvamTtsConfig`'s doc
-            // comment on why `output_audio_codec`/`output_audio_bitrate`
-            // aren't fields on it.
+
             output_audio_codec: OUTPUT_AUDIO_CODEC,
             pace: vendor.pace,
             pitch: vendor.pitch,
@@ -236,10 +173,6 @@ impl TtsProvider for SarvamTtsProvider {
     }
 }
 
-/// Sarvam's `ping` control message carries no fields, so it encodes to
-/// the same JSON every time — built fresh at each keepalive spawn rather
-/// than cached, since it's cheap and this way nothing has to invalidate
-/// a stale cached value if `ClientMessage::Ping`'s shape ever changes.
 fn ping_message() -> Message {
     Message::Text(
         serde_json::to_string(&ClientMessage::Ping).expect("ClientMessage::Ping always serializes"),
@@ -255,28 +188,17 @@ async fn send_json(client: &WsOutboundClient, message: &ClientMessage) -> Result
         .map_err(|e| TtsError::Connection(e.to_string()))
 }
 
-/// [`TtsSession`] backed by a live Sarvam WebSocket connection.
 struct SarvamTtsSession {
     api_key: String,
     model: SarvamModel,
-    /// Kept so [`SarvamTtsSession::interrupt`] can resend it when it
-    /// reconnects — Sarvam requires `config` as the first message on
-    /// every connection, not just the first one.
+
     config_data: ConfigData,
     client: WsOutboundClient,
     read_task: JoinHandle<()>,
     keepalive_task: JoinHandle<()>,
-    /// Kept so a reconnect's fresh read loop can still forward into the
-    /// same channel [`TtsProvider::open`] originally handed back to the
-    /// caller — the caller only ever holds the one `Receiver`, for the
-    /// life of the session, regardless of how many times the underlying
-    /// connection itself gets rebuilt.
+
     tx: Sender<TtsEvent>,
-    /// Kept so [`SarvamTtsSession::interrupt`]'s reconnect can hand the
-    /// same decoder to its fresh read loop — `Arc` rather than `Box`
-    /// because, unlike an STT session (which reads once for its whole
-    /// life), this needs to be reused across however many reconnects an
-    /// interruption causes.
+
     serializer: Arc<dyn FrameSerializer<Message = Message>>,
 }
 
@@ -338,9 +260,6 @@ impl TtsSession for SarvamTtsSession {
             KEEPALIVE_INTERVAL,
         );
 
-        // Old connection torn down (tasks aborted, socket closed) only
-        // once the new one is confirmed up — an interruption is exactly
-        // the wrong moment to end up with neither.
         let old_client = std::mem::replace(&mut self.client, client);
         let old_read_task = std::mem::replace(&mut self.read_task, read_task);
         let old_keepalive_task = std::mem::replace(&mut self.keepalive_task, keepalive_task);
@@ -357,12 +276,6 @@ impl TtsSession for SarvamTtsSession {
     }
 }
 
-/// Every message ferry sends over the socket, as an internally-tagged
-/// enum (`{"type": "...", ...fields}`) so `Flush`/`Ping` — which
-/// Sarvam's protocol gives no `data` field at all — serialize as bare
-/// `{"type":"flush"}`/`{"type":"ping"}` rather than a variant needing a
-/// placeholder `data` value it doesn't have.
-/// <https://docs.sarvam.ai/api-reference-docs/text-to-speech/streaming>
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 enum ClientMessage {
@@ -374,7 +287,7 @@ enum ClientMessage {
 
 #[derive(Serialize, Clone)]
 struct ConfigData {
-    target_language_code: &'static str,
+    language_code: &'static str,
     speaker: String,
     speech_sample_rate: u32,
     enable_preprocessing: bool,
@@ -391,7 +304,7 @@ struct ConfigData {
     min_buffer_size: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_chunk_length: Option<u32>,
-    /// Always `OUTPUT_AUDIO_CODEC` — see `SarvamTtsConfig`'s doc comment.
+
     output_audio_codec: &'static str,
 }
 

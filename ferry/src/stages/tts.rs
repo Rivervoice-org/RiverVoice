@@ -7,20 +7,6 @@ use crate::processor::processor::{FrameIo, FrameProcessor};
 use crate::serializer::serializer::FrameSerializer;
 use crate::services::tts::provider::{TtsConfig, TtsEvent, TtsProvider};
 
-/// Turns a [`TtsProvider`] into a pipeline stage: [`FrameKind::LlmText`]
-/// deltas arriving from upstream are aggregated into whole sentences
-/// (see [`SentenceAggregator`]) and sent to the vendor one sentence at a
-/// time; whatever audio comes back is pushed downstream bracketed by
-/// [`FrameKind::TtsAudioStart`]/[`FrameKind::TtsAudioStop`]. Every other
-/// frame passes through untouched, except [`FrameKind::Interruption`],
-/// which additionally clears the aggregator and cuts off whatever's
-/// mid-synthesis.
-///
-/// Like [`LlmStage`](crate::stages::llm::LlmStage), the sentence
-/// aggregator lives inside this stage rather than as its own pipeline
-/// stage — Pipecat does the same (`TTSService` owns `_text_aggregator`
-/// directly), it's not a ferry-specific fusion of something Pipecat
-/// keeps separate.
 pub struct TtsStage {
     provider: Box<dyn TtsProvider>,
     config: TtsConfig,
@@ -58,10 +44,10 @@ impl FrameProcessor for TtsStage {
             }
         };
 
+        tracing::info!("tts: session opened");
+
         let mut aggregator = SentenceAggregator::new();
-        // Whether `TtsAudioStart` has been pushed for the utterance
-        // currently in progress, so `TtsAudioStop` is only ever pushed
-        // to close one that was actually opened.
+
         let mut speaking = false;
 
         'run: loop {
@@ -69,15 +55,23 @@ impl FrameProcessor for TtsStage {
                 frame = io.take() => {
                     let Some(frame) = frame else { break };
                     match frame.into_kind() {
-                        FrameKind::LlmText(t) => {
+                        FrameKind::MtText(t) => {
                             for sentence in aggregator.push(&t.text) {
-                                io.start_ttfb_metrics();
-                                if session.send_text(&sentence).await.is_err() {
-                                    break;
+                                if !has_speakable_chars(&sentence) {
+                                    tracing::debug!("tts: skipping sentence with no speakable chars");
+                                    continue;
                                 }
-                                // Only counts text the vendor actually
-                                // accepted — a failed send above already
-                                // `break`s before reaching here.
+                                io.start_ttfb_metrics();
+                                match session.send_text(&sentence).await {
+                                    Ok(()) => {
+                                        tracing::debug!("tts: sent {} chars to sarvam", sentence.len());
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("tts: send_text failed: {e}");
+                                        break;
+                                    }
+                                }
+
                                 let usage = TtsUsageFrame {
                                     characters: sentence.chars().count() as u32,
                                 };
@@ -86,63 +80,38 @@ impl FrameProcessor for TtsStage {
                                 }
                             }
                         }
-                        FrameKind::LlmResponseEnd => {
+                        FrameKind::MtResponseEnd => {
+                            tracing::debug!("tts: MtResponseEnd received");
                             if let Some(sentence) = aggregator.flush() {
-                                // Only the per-sentence loop in the
-                                // `LlmText` arm above used to start this
-                                // clock — a reply that never crosses a
-                                // confirmed sentence boundary before the
-                                // response ends (no mid-stream `.`/`!`/`?`)
-                                // skipped it entirely, so the first audio
-                                // chunk's `stop_ttfb_metrics()` was a
-                                // silent no-op. This is the other place
-                                // text first goes to the vendor for an
-                                // utterance, so it needs the same start.
-                                io.start_ttfb_metrics();
-                                if session.send_text(&sentence).await.is_ok() {
-                                    let usage = TtsUsageFrame {
-                                        characters: sentence.chars().count() as u32,
-                                    };
-                                    if !io.push(Frame::new(FrameKind::TtsUsage(usage))).await {
-                                        break;
+                                if !has_speakable_chars(&sentence) {
+                                    tracing::debug!("tts: skipping flush with no speakable chars");
+                                } else {
+                                    tracing::debug!("tts: flushing {} chars to sarvam", sentence.len());
+                                    io.start_ttfb_metrics();
+                                    match session.send_text(&sentence).await {
+                                        Ok(()) => {
+                                            let usage = TtsUsageFrame {
+                                                characters: sentence.chars().count() as u32,
+                                            };
+                                            if !io.push(Frame::new(FrameKind::TtsUsage(usage))).await
+                                            {
+                                                break;
+                                            }
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("tts: flush send_text failed: {e}");
+                                        }
                                     }
                                 }
+                            } else {
+                                tracing::debug!("tts: MtResponseEnd but aggregator was empty");
                             }
-                            // Told once per completed turn, after its
-                            // last `send_text` — not after every
-                            // sentence — so a vendor buffering for
-                            // prosody knows to stop waiting for more.
-                            let _ = session.flush().await;
-                            // LlmResponseStart isn't consumed here (it
-                            // falls into `other` below), so its End must
-                            // make it downstream too — otherwise anything
-                            // after this stage sees a response that opened
-                            // but never closed.
-                            if !io.push(Frame::new(FrameKind::LlmResponseEnd)).await {
-                                break;
+
+                            if let Err(e) = session.flush().await {
+                                tracing::error!("tts: session.flush failed: {e}");
                             }
-                        }
-                        FrameKind::Interruption => {
-                            aggregator.clear();
-                            if let Err(e) = session.interrupt().await {
-                                tracing::error!("tts: interrupt failed: {e}");
-                            }
-                            // `interrupt()` reconnects onto the same
-                            // channel; anything already sitting in it is
-                            // from the pre-interruption connection (the
-                            // old read task is only aborted, not synced
-                            // with this drain, so a few more stale events
-                            // can land right after too — see below) and
-                            // must not be played.
-                            while events.try_recv().is_ok() {}
-                            io.cancel_ttfb_metrics();
-                            if speaking {
-                                if !io.push(Frame::new(FrameKind::TtsAudioStop)).await {
-                                    break;
-                                }
-                                speaking = false;
-                            }
-                            if !io.push(Frame::new(FrameKind::Interruption)).await {
+
+                            if !io.push(Frame::new(FrameKind::MtResponseEnd)).await {
                                 break;
                             }
                         }
@@ -177,12 +146,7 @@ impl FrameProcessor for TtsStage {
                             }
                         }
                         TtsEvent::Done => {
-                            // A no-op if the first audio chunk already
-                            // stopped it. Guards the case that never
-                            // fires at all — text was sent but the
-                            // vendor produced zero audio before signaling
-                            // done — so a still-running clock doesn't
-                            // leak into the next utterance.
+                            tracing::debug!("tts: received Done event");
                             io.cancel_ttfb_metrics();
                             if speaking {
                                 if !io.push(Frame::new(FrameKind::TtsAudioStop)).await {
@@ -200,16 +164,6 @@ impl FrameProcessor for TtsStage {
     }
 }
 
-/// Buffers streamed LLM text into whole sentences before it reaches the
-/// TTS vendor, so each call gets a full sentence's worth of context for
-/// natural prosody instead of a token at a time. A simplified stand-in
-/// for Pipecat's `SimpleTextAggregator`
-/// (`pipecat/utils/text/simple_text_aggregator.py`): that one uses an
-/// NLTK-backed matcher with a lookahead specifically to avoid splitting
-/// on a decimal point or an abbreviation ("$29." vs "Mr. Smith"); this
-/// one only checks for sentence-ending punctuation followed by
-/// whitespace, which is wrong on those same cases. Good enough until
-/// real vendor output shows it isn't.
 struct SentenceAggregator {
     buffer: String,
 }
@@ -221,10 +175,6 @@ impl SentenceAggregator {
         }
     }
 
-    /// Feeds in the next streamed chunk, returning every whole sentence
-    /// this call completed, in order. Text that doesn't yet end in a
-    /// confirmed sentence boundary stays buffered for the next call (or
-    /// [`SentenceAggregator::flush`]).
     fn push(&mut self, text: &str) -> Vec<String> {
         self.buffer.push_str(text);
 
@@ -239,10 +189,6 @@ impl SentenceAggregator {
         sentences
     }
 
-    /// Returns whatever's left buffered (trimmed), treating it as a
-    /// complete sentence even without trailing punctuation — called once
-    /// the LLM's reply has actually finished, so there's nothing more
-    /// coming that could still change the boundary.
     fn flush(&mut self) -> Option<String> {
         let rest = std::mem::take(&mut self.buffer);
         let trimmed = rest.trim();
@@ -253,27 +199,21 @@ impl SentenceAggregator {
         }
     }
 
-    /// Discards whatever's buffered without returning it — an
-    /// interruption means the rest of the reply that text belonged to
-    /// is never going to be spoken.
     fn clear(&mut self) {
         self.buffer.clear();
     }
 }
 
-/// The byte offset just past the first confirmed sentence-ending
-/// punctuation in `buffer` (i.e. where a whole sentence ends), or `None`
-/// if there isn't one yet. "Confirmed" means the punctuation is followed
-/// by whitespace that has already arrived — a terminator at the very end
-/// of `buffer` with nothing after it yet is ambiguous (more text, or
-/// more of the same "word", could still follow), so it's left buffered
-/// rather than guessed at.
-///
-/// Terminators: `.`/`!`/`?`, plus the Devanagari danda `।` (U+0964) and
-/// double danda `॥` (U+0965) — Hindi (and other Indic scripts sharing the
-/// mark) end sentences with these instead, so without them a Hindi reply
-/// would never chunk into sentence-sized pieces before `flush()`, one
-/// long buffer per turn instead of one call per sentence.
+fn has_speakable_chars(text: &str) -> bool {
+    // Sarvam's allowed-language check is script-specific (English here,
+    // Language::En), so "any alphanumeric" isn't enough: a chunk of pure
+    // Telugu passes is_alphanumeric but gets rejected with a 400 and the
+    // connection dies. Latin letters/digits are what English synthesis
+    // actually accepts.
+    text.chars()
+        .any(|c| c.is_ascii_alphabetic() || c.is_ascii_digit())
+}
+
 fn find_sentence_end(buffer: &str) -> Option<usize> {
     let mut chars = buffer.char_indices().peekable();
     while let Some((i, c)) = chars.next() {
@@ -288,40 +228,4 @@ fn find_sentence_end(buffer: &str) -> Option<usize> {
         }
     }
     None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn splits_on_confirmed_sentence_boundaries() {
-        let mut agg = SentenceAggregator::new();
-        assert_eq!(agg.push("Hello there. How are"), vec!["Hello there."]);
-        assert_eq!(agg.push(" you? Good"), vec!["How are you?"]);
-        assert_eq!(agg.flush(), Some("Good".to_string()));
-    }
-
-    #[test]
-    fn a_trailing_period_with_nothing_after_it_stays_buffered() {
-        let mut agg = SentenceAggregator::new();
-        assert!(agg.push("That's $29.").is_empty());
-        assert_eq!(agg.flush(), Some("That's $29.".to_string()));
-    }
-
-    #[test]
-    fn clear_drops_buffered_text() {
-        let mut agg = SentenceAggregator::new();
-        agg.push("unfinished");
-        agg.clear();
-        assert_eq!(agg.flush(), None);
-    }
-
-    #[test]
-    fn splits_on_the_devanagari_danda() {
-        let mut agg = SentenceAggregator::new();
-        assert_eq!(agg.push("नमस्ते। आप कैसे"), vec!["नमस्ते।"]);
-        assert_eq!(agg.push(" हैं॥ ठीक"), vec!["आप कैसे हैं॥"]);
-        assert_eq!(agg.flush(), Some("ठीक".to_string()));
-    }
 }

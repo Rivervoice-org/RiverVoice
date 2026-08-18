@@ -10,15 +10,6 @@ use crate::processor::processor::{FrameIo, FrameProcessor};
 use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::provider::{SttConfig, SttEvent, SttProvider};
 
-/// Turns an [`SttProvider`] into a pipeline stage: `RawAudio` frames
-/// arriving from upstream are resampled (if needed — see
-/// [`SampleRateAdapter`]) to the rate `SttConfig::sample_rate` declared
-/// to the provider, sent to it as audio, then the original, untouched
-/// frame continues on downstream (someone after this stage may still
-/// want the audio at its original rate — a recording stage, an echo
-/// path), and whatever the provider says back (transcripts, turn
-/// boundaries) comes out downstream as frames of its own. Every other
-/// frame passes through untouched.
 pub struct SttStage {
     provider: Box<dyn SttProvider>,
     config: SttConfig,
@@ -66,26 +57,17 @@ impl FrameProcessor for SttStage {
             .await;
         }
 
-        // Built lazily from the first `RawAudio` frame seen, since the
-        // caller's actual rate is only known once real audio arrives.
-        // Kept for the life of the call rather than rebuilt per frame —
-        // an unexpected mid-call rate change just keeps resampling from
-        // the original rate (see the `denoiser` stage for the same
-        // tradeoff on the same situation).
         let mut rate_adapter: Option<(u32, SampleRateAdapter)> = None;
 
-        // Seconds of audio sent to the provider since the last usage
-        // report — a delta, reset to zero each time it's flushed as an
-        // `SttUsageFrame` (per final transcript, and once more for
-        // whatever's left over when the call ends). `SttStage::run` runs
-        // once per call, so this can't carry a total over into the next
-        // one.
         let mut unreported_audio_seconds: f64 = 0.0;
 
         loop {
             tokio::select! {
                 frame = io.take() => {
-                    let Some(frame) = frame else { break };
+                    let Some(frame) = frame else {
+                        tracing::info!("{}: upstream closed", io.name());
+                        break
+                    };
                     match frame.into_kind() {
                         FrameKind::RawAudio(audio) => {
                             let (adapter_rate, adapter) = rate_adapter.get_or_insert_with(|| {
@@ -102,8 +84,8 @@ impl FrameProcessor for SttStage {
                                 );
                             }
 
-                            // Audio travels as s16le bytes; the adapter
-                            // eats i16 samples.
+
+
                             let samples: Vec<i16> = audio
                                 .audio
                                 .chunks_exact(2)
@@ -116,18 +98,6 @@ impl FrameProcessor for SttStage {
 
                             match session.send_audio(&pcm).await {
                                 Ok(()) => {
-                                    // Counted at the target rate, since
-                                    // that's the audio actually billed by
-                                    // the provider — not the caller's
-                                    // original rate. Counted only on a
-                                    // confirmed send: a chunk that never
-                                    // made it to the provider was never
-                                    // billed, so it shouldn't inflate the
-                                    // meter — but a failed send doesn't
-                                    // invalidate the seconds already
-                                    // banked from earlier, successfully
-                                    // sent chunks this turn, so nothing
-                                    // here needs to be undone on failure.
                                     unreported_audio_seconds +=
                                         resampled.len() as f64 / target_sample_rate as f64;
                                 }
@@ -138,36 +108,24 @@ impl FrameProcessor for SttStage {
                             }
 
                             if !io.push(Frame::new(FrameKind::RawAudio(audio))).await {
+                                tracing::info!("{}: downstream closed", io.name());
                                 break;
                             }
                         }
                         other => {
                             if !io.push(Frame::new(other)).await {
+                                tracing::info!("{}: downstream closed", io.name());
                                 break;
                             }
                         }
                     }
                 }
                 event = events.recv() => {
-                    let Some(event) = event else { break };
+                    let Some(event) = event else {
+                        tracing::info!("{}: upstream closed", io.name());
+                        break
+                    };
 
-                    // Starts on `UserStartedSpeaking`, stops on the
-                    // *final* transcript for that utterance (not an
-                    // interim one). `UserStoppedSpeaking` is deliberately
-                    // not the start trigger: for a turn-based provider
-                    // like Deepgram Flux, `EndOfTurn` synthesizes the
-                    // final transcript and `UserStoppedSpeaking` from one
-                    // message and emits them transcript-first (see
-                    // `DeepgramFluxSttProvider`'s read task) — so a clock
-                    // that starts on `UserStoppedSpeaking` would always
-                    // start *after* the very transcript it's meant to
-                    // time. `UserStartedSpeaking` always precedes both,
-                    // for every provider, so it's the only trigger this
-                    // can safely start from. Restarted (cancel then
-                    // start, not just start-if-idle) on every
-                    // `UserStartedSpeaking` so a stale clock from an
-                    // utterance whose final transcript never arrived
-                    // doesn't bleed into this one.
                     let downstream_alive = match &event {
                         SttEvent::UserStartedSpeaking => {
                             io.cancel_ttfb_metrics();
@@ -179,14 +137,10 @@ impl FrameProcessor for SttStage {
                         SttEvent::Transcript(_) => true,
                     };
                     if !downstream_alive {
+                        tracing::info!("{}: downstream closed", io.name());
                         break;
                     }
 
-                    // Final transcript is the closest the pipeline gets to
-                    // a turn boundary, so report (and reset) the meter
-                    // here rather than only at end of call — a long call
-                    // that's killed mid-way still gets everything up to
-                    // its last completed turn counted.
                     if matches!(&event, SttEvent::Transcript(t) if t.is_final)
                         && unreported_audio_seconds > 0.0
                     {
@@ -197,6 +151,7 @@ impl FrameProcessor for SttStage {
                             })))
                             .await
                         {
+                            tracing::info!("{}: downstream closed", io.name());
                             break;
                         }
                     }
@@ -210,15 +165,13 @@ impl FrameProcessor for SttStage {
                         SttEvent::UserStoppedSpeaking => FrameKind::UserStoppedSpeaking,
                     };
                     if !io.push(Frame::new(kind)).await {
+                        tracing::info!("{}: downstream closed", io.name());
                         break;
                     }
                 }
             }
         }
 
-        // Flush audio sent since the last final transcript — the call
-        // ended (or the pipeline is tearing down) before one arrived, so
-        // this is the only chance to report it.
         if unreported_audio_seconds > 0.0 {
             let _ = io
                 .push(Frame::new(FrameKind::SttUsage(SttUsageFrame {

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use crate::audio::vad::{VadStateMachine, VadTransition};
-use crate::frames::frames::{Frame, FrameKind, RawAudioFrame};
+use crate::frames::frames::{Frame, FrameKind, RawAudioFrame, UserTurnAggregationFrame};
 use crate::processor::processor::{FrameIo, FrameProcessor};
 use crate::turns::controller::{TurnController, TurnEvent};
 
@@ -112,12 +112,22 @@ impl FrameProcessor for UserAggregatorStage {
                 Some(TurnEvent::Started) => {
                     tracing::info!("user-aggregator: turn started");
                 }
-                Some(TurnEvent::Stopped { by_timeout }) => {
+                Some(TurnEvent::Stopped { .. }) => {
                     tracing::info!(
-                        by_timeout,
+                        target: "ferry::transcript",
                         text = %self.buffer,
-                        "user-aggregator: turn stopped"
+                        "turn stopped"
                     );
+                    let agg = UserTurnAggregationFrame {
+                        text: std::mem::take(&mut self.buffer),
+                    };
+                    if !io
+                        .push(Frame::new(FrameKind::UserTurnAggregation(agg)))
+                        .await
+                    {
+                        tracing::info!("user-aggregator: downstream closed");
+                        break;
+                    }
                 }
                 None => {}
             }
