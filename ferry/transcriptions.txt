@@ -1,0 +1,29 @@
+# TRANSCRIPTIONS LOG — model: deepseek/deepseek-v4-flash-0731
+#
+# All turns seen in testing so far. New turns append below at runtime
+# (observer format: [timestamp] model=... prompt_tokens=... completion_tokens=...).
+
++----+--------------------------------------------------------------------+---------------+------------------+---------------------------+
+| #  | Transcript                                                         | Input tokens  | Output tokens    | Model                     |
++----+--------------------------------------------------------------------+---------------+------------------+---------------------------+
+| 1  | హలో                                                               |           32  |              123  | deepseek-v4-flash-0731    |
+| 2  | మామయ్య నేను ఇప్పుడు ఉన్నాను కొంచెం సేపు ఫోన్ చేస్తాం              |           70  |              213  | deepseek-v4-flash-0731    |
+| 3  | మామయ్య నేను ఇప్పుడు ఆఫీసులో ఉన్నాను కొంచెం పేపే ఆఫ్ కౌంట్ చేస్తాను |           93  |              184  | deepseek-v4-flash-0731    |
+| 4  | బిజీగా ఉన్నాను ఇప్పుడే ఇప్పుడు ఆఫీస్కి వచ్చాము మీటింగ్లో ఉన్న తరత్ ఫోన్ చేస్తాను |         93  |              184  | deepseek-v4-flash-0731    |
+| 5  | హలో హలో హలో హలో                                                  |           44  |              124  | deepseek-v4-flash-0731    |
+| 6  | అలా ఉన్నారు                                                       |           39  |              137  | deepseek-v4-flash-0731    |
+| 7  | అవును ఆమె నేను ఎప్పుడూ ఆఫీసులో బిజీగా ఉన్నా తర్వాత ఫోన్ చేస్తాం     |           82  |              135  | deepseek-v4-flash-0731    |
+| 8  | హలో                                                               |           32  |               70  | deepseek-v4-flash-0731    |
+| 9  | హలో                                                               |           32  |               85  | deepseek-v4-flash-0731    |
+| 10 | ఆ మమ్మీ మేము తలస్థోం చేస్తాం లేదు                                |            —  |                —  | deepseek-v4-flash-0731    |
++----+--------------------------------------------------------------------+---------------+------------------+---------------------------+
+
+# Notes
+# - Rows 3-4 came from one MT call (prompt=93, completion=184): that was the
+#   pre-queue bug where the second turn aborted the first and only the last
+#   turn's translation was spoken. Both transcripts are listed against the
+#   single surviving usage.
+# - Row 10 has no usage: the call ended before MT returned.
+# - Output tokens are far above a real translation (e.g. "హలో" -> 70-123
+#   tokens for "hello"): the model is emitting extra text before/around the
+#   translation, and MT TTFB was 3-24s in these runs.
