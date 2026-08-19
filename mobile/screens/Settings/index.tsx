@@ -7,7 +7,6 @@ import {
   ChevronRight,
   CircleHelp,
   FileText,
-  Globe,
   Headphones,
   LogOut,
   MessageSquareText,
@@ -16,26 +15,10 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { MascotPicker } from "@/components/MascotPicker";
 import { Card } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-
-const LANGUAGES = [
-  { value: "en", label: "English" },
-  { value: "hi", label: "Hindi" },
-  { value: "kn", label: "Kannada" },
-  { value: "ta", label: "Tamil" },
-  { value: "te", label: "Telugu" },
-  { value: "es", label: "Spanish" },
-];
 
 function SectionLabel({ children }: { children: string }) {
   return (
@@ -77,7 +60,7 @@ function Row({
       onPress={onPress}
       disabled={!onPress}
       className={cn(
-        "flex-row items-center gap-3 bg-card px-4 py-3.5 active:bg-secondary",
+        "flex-row items-center gap-3 bg-card px-4 py-3 active:bg-secondary",
         !last && "border-b border-border"
       )}
     >
@@ -87,7 +70,7 @@ function Row({
         </View>
       ) : null}
       <View className="min-w-0 flex-1">
-        <Text className="text-[15px]">{label}</Text>
+        <Text className="text-sm font-medium">{label}</Text>
         {description ? (
           <Text variant="muted" className="mt-0.5 text-[12px]">
             {description}
@@ -110,7 +93,6 @@ function Row({
 export default function SettingsScreen() {
   const { signOut, user } = useAuth();
   const [mascot, setMascot] = useState<string | undefined>(undefined);
-  const [language, setLanguage] = useState(LANGUAGES[0]);
   const [transcribeVoicemails, setTranscribeVoicemails] = useState(true);
   const [missedCallAlerts, setMissedCallAlerts] = useState(true);
   const [keepRecordings, setKeepRecordings] = useState(true);
@@ -133,9 +115,9 @@ export default function SettingsScreen() {
         contentContainerStyle={{ paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile — the face follows the name unless one is picked */}
+        {/* Profile */}
         <View className="items-center px-6 pt-6 pb-8">
-          <MascotPicker value={mascot} onSelect={setMascot} name={user?.name ?? ""} />
+          <MascotPicker value={mascot} onSelect={setMascot} />
           <Text className="mt-3 text-[20px] font-semibold">{user?.name || "You"}</Text>
           {user?.phone ? (
             <Text variant="muted" className="mt-0.5 text-[13px]">
@@ -151,28 +133,7 @@ export default function SettingsScreen() {
         <SectionLabel>Calls</SectionLabel>
         <Card className="mx-5 mt-2.5 overflow-hidden">
           <Row
-            icon={<Globe size={16} strokeWidth={1.75} color="#3c3832" />}
-            label="Default language"
-            trailing={
-              <Select
-                value={language}
-                onValueChange={(option) => option && setLanguage(option)}
-              >
-                <SelectTrigger className="h-9 w-[130px]">
-                  <SelectValue placeholder="English" />
-                </SelectTrigger>
-                <SelectContent>
-                  {LANGUAGES.map((lang) => (
-                    <SelectItem key={lang.value} value={lang.value} label={lang.label}>
-                      {lang.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            }
-          />
-          <Row
-            icon={<MessageSquareText size={16} strokeWidth={1.75} color="#3c3832" />}
+            icon={<MessageSquareText size={14} strokeWidth={1.75} color="#3c3832" />}
             label="Voicemail transcripts"
             description="Text you a transcript of every voicemail"
             trailing={
@@ -183,7 +144,7 @@ export default function SettingsScreen() {
             }
           />
           <Row
-            icon={<Bell size={16} strokeWidth={1.75} color="#3c3832" />}
+            icon={<Bell size={14} strokeWidth={1.75} color="#3c3832" />}
             label="Missed call alerts"
             description="Notify me when a call goes unanswered"
             trailing={
@@ -197,7 +158,7 @@ export default function SettingsScreen() {
         <SectionLabel>Privacy</SectionLabel>
         <Card className="mx-5 mt-2.5 overflow-hidden">
           <Row
-            icon={<ShieldCheck size={16} strokeWidth={1.75} color="#3c3832" />}
+            icon={<ShieldCheck size={14} strokeWidth={1.75} color="#3c3832" />}
             label="Keep call recordings"
             description="Store audio after the call ends"
             trailing={
@@ -205,7 +166,7 @@ export default function SettingsScreen() {
             }
           />
           <Row
-            icon={<ShieldCheck size={16} strokeWidth={1.75} color="#3c3832" />}
+            icon={<ShieldCheck size={14} strokeWidth={1.75} color="#3c3832" />}
             label="Share diagnostics"
             description="Send crash and usage data to improve the app"
             trailing={
@@ -219,22 +180,22 @@ export default function SettingsScreen() {
         <SectionLabel>Support</SectionLabel>
         <Card className="mx-5 mt-2.5 overflow-hidden">
           <Row
-            icon={<CircleHelp size={16} strokeWidth={1.75} color="#3c3832" />}
+            icon={<CircleHelp size={14} strokeWidth={1.75} color="#3c3832" />}
             label="Help center"
             onPress={() => {}}
           />
           <Row
-            icon={<Headphones size={16} strokeWidth={1.75} color="#3c3832" />}
+            icon={<Headphones size={14} strokeWidth={1.75} color="#3c3832" />}
             label="Contact support"
             onPress={() => {}}
           />
           <Row
-            icon={<FileText size={16} strokeWidth={1.75} color="#3c3832" />}
+            icon={<FileText size={14} strokeWidth={1.75} color="#3c3832" />}
             label="Terms of service"
             onPress={() => {}}
           />
           <Row
-            icon={<FileText size={16} strokeWidth={1.75} color="#3c3832" />}
+            icon={<FileText size={14} strokeWidth={1.75} color="#3c3832" />}
             label="Privacy policy"
             onPress={() => {}}
             last
