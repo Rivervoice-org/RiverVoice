@@ -44,7 +44,7 @@ export default function WelcomeScreen() {
           variant="outline"
           onPress={() => router.push("/(auth)/sign-in")}
         >
-          I already have an account
+          Login with number
         </Button>
       </View>
     </View>

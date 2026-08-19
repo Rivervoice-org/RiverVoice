@@ -1,7 +1,8 @@
 import { Alert } from "react-native";
 import { router } from "expo-router";
-import { useAuth } from "@/state/session";
+import { useAuth } from "@/hooks/use-auth";
 
+/** Guards an action behind a session; prompts to sign in when there is none. */
 export function useRequireAuth() {
   const { isAuthenticated } = useAuth();
 

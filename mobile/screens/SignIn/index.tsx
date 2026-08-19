@@ -1,38 +1,39 @@
 import { useState } from "react";
-import {
-  View,
-  Pressable,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from "react-native";
-import { Link, router } from "expo-router";
-import { Waves } from "lucide-react-native";
-import { useAuth } from "@/state/session";
+import { View, Pressable, KeyboardAvoidingView, Platform } from "react-native";
+import { router } from "expo-router";
+import { ChevronLeft, Waves } from "lucide-react-native";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Text } from "@/components/ui/text";
+
+const COUNTRY_CODE = "+91";
+
+/** "9876543210" → "98765 43210" as it is typed. */
+function formatPhone(raw: string) {
+  const digits = raw.replace(/\D/g, "").slice(0, 10);
+  return digits.length > 5 ? `${digits.slice(0, 5)} ${digits.slice(5)}` : digits;
+}
 
 export default function SignInScreen() {
   const { signIn } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit() {
-    if (!email || !password) {
-      setError("Please fill in all fields.");
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 10) {
+      setError("Enter a valid phone number.");
       return;
     }
     setError("");
     setLoading(true);
     try {
-      await signIn(email, password);
-      router.replace("/(tabs)");
+      await signIn(digits);
+      // The (auth) layout redirects into the app once the session lands.
     } catch {
-      setError("Invalid email or password.");
+      setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -41,106 +42,69 @@ export default function SignInScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      className="flex-1"
+      className="flex-1 bg-canvas"
     >
-      <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View className="flex-1 px-6 py-12">
-          {/* Logo */}
+      <View className="flex-1 px-6">
+        {/* Back + logo, top-left — like Notion's corner wordmark */}
+        <View className="flex-row items-center gap-3 pt-12">
+          <Pressable
+            onPress={() => router.back()}
+            className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
+            hitSlop={8}
+            accessibilityLabel="Go back"
+          >
+            <ChevronLeft size={22} strokeWidth={1.75} color="#2e2a25" />
+          </Pressable>
           <View className="flex-row items-center gap-2">
             <View className="h-6 w-6 items-center justify-center rounded-md border border-border">
               <Waves size={14} strokeWidth={2} color="#3c3832" />
             </View>
             <Text className="text-sm font-medium">Rivervoice</Text>
           </View>
+        </View>
 
-          {/* Form */}
-          <View className="mt-auto mb-auto">
-            <Text className="text-[26px] font-semibold leading-tight tracking-[-0.02em]">
-              Sign in
-            </Text>
-            <Text variant="muted" className="mt-2 text-sm">
-              Pick up where your agents left off.
-            </Text>
+        {/* One centered column with the form — no hero art */}
+        <View className="w-full max-w-sm flex-1 self-center justify-center">
+          <Text className="text-[24px] font-semibold tracking-tight">Login with number</Text>
+          <Text variant="muted" className="mt-1.5 text-sm">
+            No passwords to remember — just your phone.
+          </Text>
 
-            <View className="mt-8 gap-4">
-              {/* Email */}
-              <View className="gap-1.5">
-                <Text className="text-[13px] font-medium">Work email</Text>
-                <Input
-                  placeholder="you@company.com"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  autoComplete="email"
-                />
-              </View>
-
-              {/* Password */}
-              <View className="gap-1.5">
-                <View className="flex-row items-baseline justify-between">
-                  <Text className="text-[13px] font-medium">Password</Text>
-                  <Pressable>
-                    <Text variant="muted" className="text-xs">
-                      Use a code instead
-                    </Text>
-                  </Pressable>
-                </View>
-                <Input
-                  placeholder="••••••••"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoComplete="current-password"
-                />
-              </View>
-
-              {error ? (
-                <Text variant="destructive" className="text-[13px]">
-                  {error}
-                </Text>
-              ) : null}
-
-              {/* Submit */}
-              <Button onPress={handleSubmit} loading={loading} className="mt-1">
-                Sign in
-              </Button>
-            </View>
-
-            {/* Divider */}
-            <View className="my-8 flex-row items-center gap-3">
-              <Separator className="flex-1" />
-              <Text variant="muted" className="text-[11px]">
-                or
-              </Text>
-              <Separator className="flex-1" />
-            </View>
-
-            {/* Google */}
-            <Button variant="outline">Continue with Google</Button>
-
-            {/* Footer */}
-            <View className="mt-8 items-center">
-              <Text variant="muted" className="text-[13px]">
-                New here?{" "}
-                <Link href="/(auth)/sign-up" asChild>
-                  <Pressable>
-                    <Text className="text-sm font-medium underline">Create an account</Text>
-                  </Pressable>
-                </Link>
-              </Text>
-            </View>
+          <View className="mt-7 flex-row items-center rounded-lg border border-border bg-card px-3.5">
+            <Text className="text-[15px] font-medium">{COUNTRY_CODE}</Text>
+            <View className="mx-3 h-5 w-px bg-border" />
+            <Input
+              className="h-12 flex-1 border-0 bg-transparent px-0 text-[15px]"
+              placeholder="98765 43210"
+              placeholderTextColor="#b0ada7"
+              value={phone}
+              onChangeText={(text) => {
+                setPhone(formatPhone(text));
+                setError("");
+              }}
+              keyboardType="phone-pad"
+              autoComplete="tel"
+            />
           </View>
 
-          {/* Copyright */}
+          {error ? (
+            <Text variant="destructive" className="mt-2 text-[13px]">
+              {error}
+            </Text>
+          ) : null}
+
+          <Button onPress={handleSubmit} loading={loading} className="mt-3">
+            Login with number
+          </Button>
+        </View>
+
+        {/* Quiet footer, like Notion's Terms · Privacy line */}
+        <View className="items-center pb-10">
           <Text variant="muted" className="text-center text-[11px]">
             © Rivervoice · Terms · Privacy
           </Text>
         </View>
-      </ScrollView>
+      </View>
     </KeyboardAvoidingView>
   );
 }

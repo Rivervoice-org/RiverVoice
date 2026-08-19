@@ -6,32 +6,35 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
-import { Link, router } from "expo-router";
+import { Link } from "expo-router";
 import { Waves } from "lucide-react-native";
-import { useAuth } from "@/state/session";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Text } from "@/components/ui/text";
 
 export default function SignUpScreen() {
   const { signUp } = useAuth();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit() {
-    if (!name || !email || !password) {
+    const digits = phone.replace(/\D/g, "");
+    if (!name.trim()) {
       setError("Please fill in all fields.");
+      return;
+    }
+    if (digits.length < 10) {
+      setError("Enter a valid phone number.");
       return;
     }
     setError("");
     setLoading(true);
     try {
-      await signUp({ name, email, password });
-      router.replace("/(tabs)");
+      await signUp({ name: name.trim(), phone: digits });
+      // The (auth) layout redirects into the app once the session lands.
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -78,28 +81,15 @@ export default function SignUpScreen() {
                 />
               </View>
 
-              {/* Email */}
+              {/* Phone */}
               <View className="gap-1.5">
-                <Text className="text-[13px] font-medium">Work email</Text>
+                <Text className="text-[13px] font-medium">Phone number</Text>
                 <Input
-                  placeholder="you@company.com"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  autoComplete="email"
-                />
-              </View>
-
-              {/* Password */}
-              <View className="gap-1.5">
-                <Text className="text-[13px] font-medium">Password</Text>
-                <Input
-                  placeholder="At least 8 characters"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoComplete="new-password"
+                  placeholder="9876543210"
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  autoComplete="tel"
                 />
               </View>
 
@@ -115,25 +105,13 @@ export default function SignUpScreen() {
               </Button>
             </View>
 
-            {/* Divider */}
-            <View className="my-8 flex-row items-center gap-3">
-              <Separator className="flex-1" />
-              <Text variant="muted" className="text-[11px]">
-                or
-              </Text>
-              <Separator className="flex-1" />
-            </View>
-
-            {/* Google */}
-            <Button variant="outline">Continue with Google</Button>
-
             {/* Footer */}
             <View className="mt-8 items-center">
               <Text variant="muted" className="text-[13px]">
                 Already have one?{" "}
                 <Link href="/(auth)/sign-in" asChild>
                   <Pressable>
-                    <Text className="text-sm font-medium underline">Sign in</Text>
+                    <Text className="text-sm font-medium underline">Login with number</Text>
                   </Pressable>
                 </Link>
               </Text>
