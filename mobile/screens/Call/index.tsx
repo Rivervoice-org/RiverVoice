@@ -1,11 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
-import { View, SectionList, Pressable, ActivityIndicator } from "react-native";
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
+import { View, SectionList, Linking, type SectionListRenderItem } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Search, Phone, Users, X } from "lucide-react-native";
+import { Phone, Users } from "lucide-react-native";
 import * as Contacts from "expo-contacts";
 import { Mascot } from "@/components/Mascot";
-import { Input } from "@/components/ui/input";
-import { Text as UIText } from "@/components/ui/text";
+import { SearchInput } from "@/components/SearchInput";
+import { CallRow } from "@/components/CallRow";
+import { DialFab } from "@/components/DialFab";
+import { Spinner } from "@/components/ui/spinner";
+import { Text } from "@/components/ui/text";
 
 type Contact = {
   id: string;
@@ -17,6 +20,8 @@ type Section = {
   title: string;
   data: Contact[];
 };
+
+const SEARCH_DEBOUNCE_MS = 150;
 
 function buildSections(contacts: Contact[]): Section[] {
   const map = new Map<string, Contact[]>();
@@ -30,8 +35,53 @@ function buildSections(contacts: Contact[]): Section[] {
     .map(([title, data]) => ({ title, data }));
 }
 
+/**
+ * Memoized so opening/closing the dial pad — or any other unrelated state
+ * change in a parent — doesn't force every visible row to re-render. Only
+ * re-renders when its own contact or divider flag actually changes.
+ */
+const ContactRow = memo(function ContactRow({
+  contact,
+  showDivider,
+}: {
+  contact: Contact;
+  showDivider: boolean;
+}) {
+  return (
+    <View className="px-5">
+      <CallRow
+        avatar={<Mascot seed={contact.name} size={32} />}
+        title={contact.name}
+        subtitle={
+          <Text font="mono" variant="muted" className="text-[11px]" numberOfLines={1}>
+            {contact.phone}
+          </Text>
+        }
+        trailing={
+          <View className="h-8 w-8 items-center justify-center rounded-full bg-river-tint">
+            <Phone size={14} strokeWidth={1.75} color="#3b5dab" />
+          </View>
+        }
+        showDivider={showDivider}
+        onPress={() => Linking.openURL(`tel:${contact.phone}`)}
+      />
+    </View>
+  );
+});
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <View className="bg-canvas px-5 pt-4 pb-1.5">
+      <Text variant="muted" className="text-[11px] font-medium uppercase tracking-[0.14em]">
+        {title}
+      </Text>
+    </View>
+  );
+}
+
 export default function CallScreen() {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -60,116 +110,93 @@ export default function CallScreen() {
     loadContacts();
   }, [loadContacts]);
 
-  const filtered = search
-    ? contacts.filter(
-        (c) =>
-          c.name.toLowerCase().includes(search.toLowerCase()) ||
-          c.phone.includes(search)
-      )
-    : contacts;
+  // Debounced so typing doesn't re-filter/re-sort hundreds of contacts on
+  // every keystroke — only once input settles.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSearchChange = useCallback((text: string) => {
+    setSearch(text);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(text), SEARCH_DEBOUNCE_MS);
+  }, []);
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }, []);
 
-  const sections = buildSections(filtered);
+  const filtered = useMemo(() => {
+    const query = debouncedSearch.toLowerCase();
+    return debouncedSearch
+      ? contacts.filter(
+          (c) => c.name.toLowerCase().includes(query) || c.phone.includes(debouncedSearch)
+        )
+      : contacts;
+  }, [contacts, debouncedSearch]);
 
-  if (loading) {
-    return (
-      <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="small" color="#3c3832" />
-          <UIText variant="muted" className="mt-3 text-sm">
-            Loading contacts…
-          </UIText>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const sections = useMemo(() => buildSections(filtered), [filtered]);
+
+  const keyExtractor = useCallback((item: Contact) => item.id, []);
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: Section }) => <SectionHeader title={section.title} />,
+    []
+  );
+
+  const renderItem: SectionListRenderItem<Contact, Section> = useCallback(
+    ({ item, index, section }) => (
+      <ContactRow contact={item} showDivider={index < section.data.length - 1} />
+    ),
+    []
+  );
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
-      {/* Search */}
-      <View className="px-5 pt-2 pb-2">
-        <View className="relative">
-          {/* NativeWind cannot position lucide's Svg, so the icon sits in a
-              view that is styled instead. The z-index keeps the input's
-              background from painting over it. */}
-          <View className="pointer-events-none absolute top-0 bottom-0 left-3 z-10 justify-center">
-            <Search size={16} strokeWidth={1.75} color="#8f8c87" />
-          </View>
-          <Input
-            className="pl-9 pr-9"
-            placeholder="Search"
-            placeholderTextColor="#b0ada7"
-            value={search}
-            onChangeText={setSearch}
-            autoCapitalize="none"
-          />
-          {search.length > 0 && (
-            <Pressable
-              onPress={() => setSearch("")}
-              hitSlop={8}
-              className="absolute top-0 bottom-0 right-2 z-10 justify-center"
-            >
-              <X size={14} strokeWidth={1.75} color="#8f8c87" />
-            </Pressable>
-          )}
-        </View>
+      {/* Header — matches the other tab roots (Agents, My numbers) */}
+      <View className="px-5 pt-3 pb-1">
+        <Text className="text-[28px] font-semibold tracking-[-0.02em]">
+          Call
+        </Text>
+        {!loading && (
+          <Text variant="muted" className="mt-1 text-sm">
+            {contacts.length} contact{contacts.length === 1 ? "" : "s"}
+          </Text>
+        )}
       </View>
 
-      {filtered.length === 0 ? (
+      {/* Search */}
+      <View className="px-5 pt-2 pb-2">
+        <SearchInput value={search} onChangeText={handleSearchChange} placeholder="Search" />
+      </View>
+
+      {loading ? (
+        <View className="flex-1 items-center justify-center">
+          <Spinner />
+        </View>
+      ) : filtered.length === 0 ? (
         <View className="flex-1 items-center justify-center">
           <View className="h-12 w-12 items-center justify-center rounded-full bg-border">
             <Users size={22} strokeWidth={1.75} color="#b0ada7" />
           </View>
-          <UIText variant="muted" className="mt-3 text-sm">
+          <Text variant="muted" className="mt-3 text-sm">
             {search ? "No contacts found" : "No contacts on this device"}
-          </UIText>
+          </Text>
         </View>
       ) : (
         <SectionList
           sections={sections}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           stickySectionHeadersEnabled={true}
-          contentContainerStyle={{ paddingBottom: 100 }}
-          renderSectionHeader={({ section }) => (
-            <View className="bg-canvas px-5 pt-3 pb-1.5">
-              <UIText variant="muted" className="text-[11px] font-medium uppercase tracking-[0.14em]">
-                {section.title}
-              </UIText>
-            </View>
-          )}
-          renderItem={({ item, index, section }) => (
-            <View>
-              <Pressable
-                onPress={() => {}}
-                className="flex-row items-center bg-card px-5 py-3"
-              >
-                <View className="h-9 w-9 overflow-hidden rounded-full bg-border">
-                  <Mascot seed={item.name} size={36} borderRadius={18} />
-                </View>
-
-                <View className="flex-1 ml-3">
-                  <UIText className="text-[15px] font-medium" numberOfLines={1}>
-                    {item.name}
-                  </UIText>
-                  <UIText variant="muted" className="mt-0.5 text-[13px]" numberOfLines={1}>
-                    {item.phone}
-                  </UIText>
-                </View>
-
-                <Pressable
-                  onPress={() => {}}
-                  className="h-8 w-8 items-center justify-center rounded-full bg-river-tint"
-                  hitSlop={8}
-                >
-                  <Phone size={14} strokeWidth={1.75} color="#3b5dab" />
-                </Pressable>
-              </Pressable>
-              {index < section.data.length - 1 && (
-                <View className="h-px bg-border ml-[68px]" />
-              )}
-            </View>
-          )}
+          contentContainerStyle={{ paddingBottom: 32 }}
+          showsVerticalScrollIndicator={false}
+          renderSectionHeader={renderSectionHeader}
+          renderItem={renderItem}
+          initialNumToRender={16}
+          maxToRenderPerBatch={16}
+          updateCellsBatchingPeriod={50}
+          windowSize={7}
+          removeClippedSubviews
         />
       )}
+
+      <DialFab />
     </SafeAreaView>
   );
 }
