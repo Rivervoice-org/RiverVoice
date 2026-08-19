@@ -2,7 +2,7 @@ import { Tabs } from "expo-router";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Phone, PhoneOutgoing, Settings, BookUser } from "lucide-react-native";
-import { Mascot } from "../../components/mascot";
+import { Mascot } from "@/components/Mascot";
 
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   const icons: Record<string, React.ReactNode> = {
