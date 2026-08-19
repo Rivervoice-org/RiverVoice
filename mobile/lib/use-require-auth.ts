@@ -1,6 +1,6 @@
 import { Alert } from "react-native";
 import { router } from "expo-router";
-import { useAuth } from "./auth-context";
+import { useAuth } from "@/state/session";
 
 export function useRequireAuth() {
   const { isAuthenticated } = useAuth();

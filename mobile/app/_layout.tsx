@@ -2,7 +2,8 @@ import "../global.css";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { AuthProvider } from "../lib/auth-context";
+import { PortalHost } from "@rn-primitives/portal";
+import { AuthProvider } from "@/state/session";
 
 export default function RootLayout() {
   return (
@@ -13,6 +14,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="call-detail" />
         </Stack>
+        <PortalHost />
         <StatusBar style="dark" />
       </AuthProvider>
     </SafeAreaProvider>
