@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Phone, PhoneCall, PhoneOutgoing, Settings } from "lucide-react-native";
+import { Phone, PhoneOutgoing, Settings, Hash } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
@@ -12,7 +12,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
         <PhoneOutgoing size={24} strokeWidth={2} color="#fcfbf9" />
       </View>
     ),
-    phonebook: <PhoneCall size={22} strokeWidth={1.75} color={focused ? "#2e2a25" : "#8f8c87"} />,
+    phonebook: <Hash size={22} strokeWidth={1.75} color={focused ? "#2e2a25" : "#8f8c87"} />,
     agents: <Mascot seed="tab-agents" size={22} />,
     settings: <Settings size={22} strokeWidth={1.75} color={focused ? "#2e2a25" : "#8f8c87"} />,
   };

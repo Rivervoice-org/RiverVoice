@@ -7,6 +7,8 @@ export type PhoneNumber = {
   kind: string;
   provider: string;
   status: NumberStatus;
+  calls: number;
+  assignedAgent: string | null;
 };
 
 export const NUMBERS: PhoneNumber[] = [
@@ -17,6 +19,8 @@ export const NUMBERS: PhoneNumber[] = [
     kind: "Main line",
     provider: "Twilio",
     status: "live",
+    calls: 412,
+    assignedAgent: "Front Desk",
   },
   {
     id: "2",
@@ -25,6 +29,8 @@ export const NUMBERS: PhoneNumber[] = [
     kind: "Toll-free",
     provider: "Exotel",
     status: "live",
+    calls: 198,
+    assignedAgent: "Billing",
   },
   {
     id: "3",
@@ -33,6 +39,8 @@ export const NUMBERS: PhoneNumber[] = [
     kind: "Toll-free",
     provider: "Telnyx",
     status: "live",
+    calls: 87,
+    assignedAgent: "Order Status",
   },
   {
     id: "4",
@@ -41,6 +49,8 @@ export const NUMBERS: PhoneNumber[] = [
     kind: "Mobile",
     provider: "Vobiz",
     status: "paused",
+    calls: 0,
+    assignedAgent: null,
   },
   {
     id: "5",
@@ -49,5 +59,7 @@ export const NUMBERS: PhoneNumber[] = [
     kind: "Toll-free",
     provider: "Plivo",
     status: "paused",
+    calls: 0,
+    assignedAgent: null,
   },
 ];
