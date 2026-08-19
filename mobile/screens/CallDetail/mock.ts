@@ -1,3 +1,41 @@
+import { CallOutcome, type CallRowItem } from "@/components/CallRow";
+
+export const CALL_HISTORY: CallRowItem[] = [
+  {
+    id: "h1",
+    name: "Priya Sharma",
+    number: "+91 98765 43210",
+    fromNumber: "+1 888 799 9666",
+    agent: "Front Desk",
+    language: "Hindi → English",
+    duration: "2:15",
+    outcome: CallOutcome.Resolved,
+    time: "3 days ago",
+  },
+  {
+    id: "h2",
+    name: "Priya Sharma",
+    number: "+91 98765 43210",
+    fromNumber: "+1 888 799 9666",
+    agent: "Billing",
+    language: "Hindi → English",
+    duration: "4:01",
+    outcome: CallOutcome.Transferred,
+    time: "2 weeks ago",
+  },
+  {
+    id: "h3",
+    name: "Priya Sharma",
+    number: "+91 98765 43210",
+    fromNumber: "+1 888 799 9666",
+    agent: null,
+    language: "Hindi → English",
+    duration: "1:02",
+    outcome: CallOutcome.Missed,
+    time: "1 month ago",
+  },
+];
+
 export type TranscriptEntry = {
   speaker: "caller" | "agent";
   name: string;
@@ -16,7 +54,7 @@ export const WAVEFORM = [
 export const TRANSCRIPT: TranscriptEntry[] = [
   {
     speaker: "caller",
-    name: "Caller",
+    name: "Priya Sharma",
     time: "0:00",
     original: "नमस्ते, मुझे अपना बिलिंग विवरण चाहिए।",
     translated: "Hello, I need my billing details.",
@@ -30,7 +68,7 @@ export const TRANSCRIPT: TranscriptEntry[] = [
   },
   {
     speaker: "caller",
-    name: "Caller",
+    name: "Priya Sharma",
     time: "0:10",
     original: "मुझे लगता है मुझे इस महीने ज़्यादा चार्ज किया गया है।",
     translated: "I think I was overcharged this month.",
@@ -44,7 +82,7 @@ export const TRANSCRIPT: TranscriptEntry[] = [
   },
   {
     speaker: "caller",
-    name: "Caller",
+    name: "Priya Sharma",
     time: "0:19",
     original: "ठीक है, धन्यवाद।",
     translated: "Okay, thank you.",

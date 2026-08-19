@@ -18,7 +18,9 @@ export enum CallOutcome {
 
 export type CallRowItem = {
   id: string;
+  name: string;
   number: string;
+  fromNumber: string;
   agent: string | null;
   language: string;
   duration: string;
@@ -64,6 +66,42 @@ export function CallOutcomeAvatar({ outcome }: { outcome: CallOutcome }) {
         </View>
       );
   }
+}
+
+export function CallListItem({
+  call,
+  showDivider,
+  onPress,
+}: {
+  call: CallRowItem;
+  showDivider?: boolean;
+  onPress?: () => void;
+}) {
+  return (
+    <CallRow
+      avatar={
+        call.agent ? (
+          <Mascot seed={call.agent} size={32} />
+        ) : (
+          <CallOutcomeAvatar outcome={call.outcome} />
+        )
+      }
+      title={call.name}
+      subtitle={`${call.name ? "" : `${call.number} · `}${call.agent ? `${call.agent} · ` : ""}${call.language}`}
+      trailing={
+        <View className="items-end">
+          <Text font="mono" variant="muted" className="text-[11px] tabular-nums">
+            {call.duration}
+          </Text>
+          <Text variant="muted" className="text-[11px]">
+            {call.time}
+          </Text>
+        </View>
+      }
+      showDivider={showDivider}
+      onPress={onPress}
+    />
+  );
 }
 
 export function CallRow({

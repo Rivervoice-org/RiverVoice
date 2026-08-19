@@ -3,7 +3,9 @@ import { CallOutcome, type CallRowItem } from "@/components/CallRow";
 export const RECENT_CALLS: CallRowItem[] = [
   {
     id: "1",
+    name: "Priya Sharma",
     number: "+91 98765 43210",
+    fromNumber: "+1 888 799 9666",
     agent: "Front Desk",
     language: "Hindi → English",
     duration: "3:42",
@@ -12,7 +14,9 @@ export const RECENT_CALLS: CallRowItem[] = [
   },
   {
     id: "2",
+    name: "Ravi Kumar",
     number: "+91 87654 32109",
+    fromNumber: "+1 888 799 9666",
     agent: "Billing",
     language: "Tamil → English",
     duration: "1:15",
@@ -21,7 +25,9 @@ export const RECENT_CALLS: CallRowItem[] = [
   },
   {
     id: "3",
+    name: "Anjali Mehta",
     number: "+91 76543 21098",
+    fromNumber: "+1 888 799 9666",
     agent: "Front Desk",
     language: "Bengali → English",
     duration: "5:08",
@@ -30,7 +36,9 @@ export const RECENT_CALLS: CallRowItem[] = [
   },
   {
     id: "4",
+    name: "Amit Patel",
     number: "+91 65432 10987",
+    fromNumber: "+1 888 799 9666",
     agent: null,
     language: "Hindi → English",
     duration: "0:32",
@@ -39,7 +47,9 @@ export const RECENT_CALLS: CallRowItem[] = [
   },
   {
     id: "5",
+    name: "Sneha Reddy",
     number: "+91 54321 09876",
+    fromNumber: "+1 888 799 9666",
     agent: "Order Status",
     language: "Gujarati → English",
     duration: "2:11",
