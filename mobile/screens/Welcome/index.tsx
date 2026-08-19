@@ -1,6 +1,7 @@
 import { View } from "react-native";
 import { router } from "expo-router";
 import { Waves } from "lucide-react-native";
+import { Mascot } from "@/components/Mascot";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 
@@ -22,14 +23,12 @@ export default function WelcomeScreen() {
 
       {/* Center illustration area */}
       <View className="mt-auto mb-auto items-center">
-        <View className="h-40 w-40 items-center justify-center rounded-full bg-muted">
-          <Waves size={64} strokeWidth={1.5} color="#3c3832" />
-        </View>
+        <Mascot seed="welcome-agent" size={160} />
         <Text className="mt-8 text-center text-[26px] font-semibold leading-tight tracking-[-0.02em]">
-          Your agent answers{"\n"}in whichever language{"\n"}the phone rings in.
+          Your calls,{"\n"}answered by an AI agent{"\n"}in the caller's language
         </Text>
         <Text variant="muted" className="mt-4 max-w-xs text-center text-sm leading-6">
-          23 languages, switched mid-call, on a line that picks up in one ring.
+          5 languages, switched mid-call, on a line that picks up in one ring.
         </Text>
       </View>
 

@@ -31,12 +31,12 @@ function warmFaces(style: MascotStyleId) {
   for (const ref of faceRefs(style)) Image.prefetch(avatarUrl(ref, FACE_SIZE));
 }
 
+const DEFAULT_SEED = "new-agent";
+
 interface MascotPickerProps {
-  /** A mascot ref ("style:seed"), or undefined to let the face follow the name. */
+  /** A mascot ref ("style:seed"), or undefined for the default face. */
   value?: string;
   onSelect: (ref: string | undefined) => void;
-  /** Name that seeds the face while no explicit choice is made. */
-  name?: string;
   /** Trigger avatar size. */
   size?: number;
 }
@@ -46,7 +46,7 @@ interface MascotPickerProps {
  * hover popover. Faces are drawn locally and cached, so the grid warms in the
  * background and every open after the first is instant.
  */
-export function MascotPicker({ value, onSelect, name = "", size = 96 }: MascotPickerProps) {
+export function MascotPicker({ value, onSelect, size = 96 }: MascotPickerProps) {
   const [open, setOpen] = useState(false);
   const [style, setStyle] = useState<MascotStyleId>("notionists");
 
@@ -79,7 +79,7 @@ export function MascotPicker({ value, onSelect, name = "", size = 96 }: MascotPi
           className="relative active:opacity-80"
           hitSlop={8}
         >
-          <Mascot ref={value ?? mascotRef("notionists", name.trim() || "new-agent")} size={size} />
+          <Mascot ref={value ?? mascotRef("notionists", DEFAULT_SEED)} size={size} />
           <View className="absolute right-0 bottom-0 h-8 w-8 items-center justify-center rounded-full border-2 border-canvas bg-foreground">
             <Pencil size={13} strokeWidth={2} color="#fafaf9" />
           </View>
@@ -91,7 +91,7 @@ export function MascotPicker({ value, onSelect, name = "", size = 96 }: MascotPi
           <View>
             <DialogTitle>Mascot</DialogTitle>
             <DialogDescription className="mt-1">
-              Pick a face. Skip it and the name picks one for you.
+              Pick a face.
             </DialogDescription>
           </View>
 
@@ -152,7 +152,7 @@ export function MascotPicker({ value, onSelect, name = "", size = 96 }: MascotPi
               className="items-start"
             >
               <Text variant="muted" className="text-[13px] underline">
-                Use the one my name picks
+                Use the default face
               </Text>
             </Pressable>
           )}

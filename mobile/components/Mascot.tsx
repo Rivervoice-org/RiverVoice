@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from "react";
-import { Animated, Image, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, Image, PixelRatio, type StyleProp, type ViewStyle } from "react-native";
 import { avatarUrl, mascotRef, parseMascot } from "@/lib/mascots";
 
 export type MascotStyle = "notionists" | "lorelei";
@@ -45,7 +45,9 @@ export const Mascot = memo(function Mascot({
 
   const ref = mascotRefProp ?? mascotRef(style, seed);
   const { seed: refSeed } = parseMascot(ref);
-  const uri = avatarUrl(ref, size);
+  // Request at physical-pixel resolution — DiceBear renders the PNG at
+  // exactly the size asked for, so a logical-px request blurs on 2x/3x screens.
+  const uri = avatarUrl(ref, Math.round(size * PixelRatio.get()));
 
   return (
     <Animated.View

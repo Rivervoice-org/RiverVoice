@@ -1,5 +1,14 @@
-import { View, Pressable, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  View,
+  Pressable,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { useForm, useStore } from "@tanstack/react-form";
 import { ChevronLeft, Check, PhoneCall } from "lucide-react-native";
@@ -67,7 +76,10 @@ const DEFAULT_VALUES: AgentValues = {
 
 function SectionLabel({ children }: { children: string }) {
   return (
-    <Text variant="muted" className="text-[11px] font-medium uppercase tracking-[0.14em]">
+    <Text
+      variant="muted"
+      className="text-[11px] font-medium uppercase tracking-[0.14em]"
+    >
       {children}
     </Text>
   );
@@ -92,13 +104,15 @@ function ChipGroup<T extends string>({
             onPress={() => onChange(selected ? null : option.value)}
             className={cn(
               "rounded-full border px-3.5 py-2 active:opacity-80",
-              selected ? "border-foreground bg-foreground" : "border-border bg-card"
+              selected
+                ? "border-foreground bg-foreground"
+                : "border-border bg-card",
             )}
           >
             <Text
               className={cn(
                 "text-[13px] font-medium",
-                selected ? "text-primary-foreground" : "text-foreground"
+                selected ? "text-primary-foreground" : "text-foreground",
               )}
             >
               {option.label}
@@ -127,7 +141,7 @@ function ModeList({
             onPress={() => onChange(selected ? null : mode.value)}
             className={cn(
               "flex-row items-center gap-3 rounded-xl border bg-card px-3.5 py-3 active:opacity-80",
-              selected ? "border-foreground" : "border-border"
+              selected ? "border-foreground" : "border-border",
             )}
           >
             <View className="min-w-0 flex-1">
@@ -207,15 +221,15 @@ export default function AgentNewScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Profile block — the mascot follows the name unless one is picked */}
+          {/* Profile block */}
           <View className="items-center pt-4 pb-8">
             <MascotPicker
               value={values.mascot}
               onSelect={(ref) => form.setFieldValue("mascot", ref)}
-              name={values.name}
             />
             <Input
-              className="mt-4 h-12 border-0 bg-transparent px-0 text-center text-[22px] font-semibold"
+              className="mt-4 h-12 w-full border-0 bg-transparent px-0 text-center text-[22px] font-semibold"
+              style={{ textAlign: "center" }}
               placeholder="Untitled agent"
               placeholderTextColor="#b0ada7"
               value={values.name}
@@ -284,7 +298,9 @@ export default function AgentNewScreen() {
             }
           >
             <PhoneCall size={16} strokeWidth={1.75} color="#2e2a25" />
-            <Text className="text-sm font-medium text-foreground">Try agent</Text>
+            <Text className="text-sm font-medium text-foreground">
+              Try agent
+            </Text>
           </Button>
           <Button
             size="lg"
