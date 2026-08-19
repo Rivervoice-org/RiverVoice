@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
 
-use crate::frames::frames::Frame;
+use crate::frames::frames::{Frame, MtTextFrame};
 use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::language::Language;
 use crate::services::ws_client::{self, WsOutboundClient, WsRead};
@@ -34,17 +34,14 @@ pub enum TtsConfigKind {
 
 pub enum TtsEvent {
     AudioChunk(Vec<u8>),
-
     Done,
 }
 
 #[async_trait]
 pub trait TtsSession: Send {
-    async fn send_text(&mut self, text: &str) -> Result<(), TtsError>;
+    async fn send_text(&mut self, text_frame: MtTextFrame) -> Result<(), TtsError>;
 
     async fn flush(&mut self) -> Result<(), TtsError>;
-
-    async fn interrupt(&mut self) -> Result<(), TtsError>;
 
     async fn close(self: Box<Self>);
 }

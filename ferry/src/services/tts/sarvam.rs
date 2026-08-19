@@ -1,19 +1,18 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_trait::async_trait;
-use serde::Serialize;
-use tokio::sync::mpsc::{self, Receiver, Sender};
-use tokio::task::JoinHandle;
-use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::tungstenite::http::HeaderName;
-
-use crate::frames::frames::FrameKind;
+use crate::frames::frames::{Frame, FrameKind, MtTextFrame};
 use crate::serializer::serializer::FrameSerializer;
 use crate::services::tts::provider::{
     TtsConfig, TtsConfigKind, TtsError, TtsEvent, TtsProvider, TtsSession,
 };
 use crate::services::ws_client::WsOutboundClient;
+use async_trait::async_trait;
+use serde::Serialize;
+use tokio::sync::mpsc::{self, Receiver};
+use tokio::task::JoinHandle;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::http::HeaderName;
 
 const ENDPOINT: &str = "wss://api.sarvam.ai/text-to-speech/ws";
 
@@ -97,36 +96,10 @@ impl TtsProvider for SarvamTtsProvider {
         config: TtsConfig,
         serializer: Arc<dyn FrameSerializer<Message = Message>>,
     ) -> Result<(Box<dyn TtsSession>, Receiver<TtsEvent>), TtsError> {
-        let TtsConfigKind::SarvamTtsConfig(mut vendor) = config.kind;
-
-        match self.model {
-            SarvamModel::BulbulV2 => vendor.temperature = None,
-            SarvamModel::BulbulV3 => {
-                vendor.pitch = None;
-                vendor.loudness = None;
-            }
-        }
-
-        let config_data = ConfigData {
-            language_code: config.language.code(),
-            speaker: config.voice,
-            speech_sample_rate: config.sample_rate,
-            enable_preprocessing: vendor.enable_preprocessing.unwrap_or(false),
-            model: self.model.slug(),
-
-            output_audio_codec: OUTPUT_AUDIO_CODEC,
-            pace: vendor.pace,
-            pitch: vendor.pitch,
-            loudness: vendor.loudness,
-            temperature: vendor.temperature,
-            min_buffer_size: vendor.min_buffer_size,
-            max_chunk_length: vendor.max_chunk_length,
+        let vendor = match &config.kind {
+            TtsConfigKind::SarvamTtsConfig(vendor) => vendor,
         };
-
-        let url = format!(
-            "{ENDPOINT}?model={}&send_completion_event=true",
-            self.model.slug()
-        );
+        let url = build_url(&config, self.model);
         let (client, read) = crate::services::ws_client::connect_with_retries(
             &url,
             HeaderName::from_static(AUTH_HEADER),
@@ -137,13 +110,29 @@ impl TtsProvider for SarvamTtsProvider {
         .await
         .map_err(|e| TtsError::Connection(e.to_string()))?;
 
-        send_json(
-            &client,
-            &ClientMessage::Config {
-                data: config_data.clone(),
+        let config_message = ClientMessage::Config {
+            data: ConfigData {
+                language_code: config.language.code(),
+                speaker: config.voice,
+                speech_sample_rate: config.sample_rate,
+                enable_preprocessing: vendor.enable_preprocessing.unwrap_or(false),
+                model: self.model.slug(),
+                pace: vendor.pace,
+                pitch: vendor.pitch,
+                loudness: vendor.loudness,
+                temperature: vendor.temperature,
+                min_buffer_size: vendor.min_buffer_size,
+                max_chunk_length: vendor.max_chunk_length,
+                output_audio_codec: OUTPUT_AUDIO_CODEC,
             },
-        )
-        .await?;
+        };
+        let config_text = serde_json::to_string(&config_message)
+            .map_err(|e| TtsError::Protocol(e.to_string()))?;
+
+        client
+            .send(Message::Text(config_text))
+            .await
+            .map_err(|e| TtsError::Connection(e.to_string()))?;
 
         let (tx, rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
         let read_task =
@@ -159,18 +148,24 @@ impl TtsProvider for SarvamTtsProvider {
 
         Ok((
             Box::new(SarvamTtsSession {
-                api_key: self.api_key.clone(),
-                model: self.model,
-                config_data,
                 client,
                 read_task,
                 keepalive_task,
-                tx,
                 serializer,
             }) as Box<dyn TtsSession>,
             rx,
         ))
     }
+}
+
+fn build_url(config: &TtsConfig, model: SarvamModel) -> String {
+    format!(
+        "{ENDPOINT}?model={}&send_completion_event=true&language_code={}&speaker={}&speech_sample_rate={}",
+        model.slug(),
+        config.language.code(),
+        config.voice,
+        config.sample_rate,
+    )
 }
 
 fn ping_message() -> Message {
@@ -179,94 +174,34 @@ fn ping_message() -> Message {
     )
 }
 
-async fn send_json(client: &WsOutboundClient, message: &ClientMessage) -> Result<(), TtsError> {
-    let text = serde_json::to_string(message)
-        .map_err(|e| TtsError::Protocol(format!("failed to encode message: {e}")))?;
-    client
-        .send(Message::Text(text))
-        .await
-        .map_err(|e| TtsError::Connection(e.to_string()))
-}
-
 struct SarvamTtsSession {
-    api_key: String,
-    model: SarvamModel,
-
-    config_data: ConfigData,
     client: WsOutboundClient,
     read_task: JoinHandle<()>,
     keepalive_task: JoinHandle<()>,
-
-    tx: Sender<TtsEvent>,
-
     serializer: Arc<dyn FrameSerializer<Message = Message>>,
 }
 
 #[async_trait]
 impl TtsSession for SarvamTtsSession {
-    async fn send_text(&mut self, text: &str) -> Result<(), TtsError> {
-        send_json(
-            &self.client,
-            &ClientMessage::Text {
-                data: TextData {
-                    text: text.to_string(),
-                },
-            },
-        )
-        .await
+    async fn send_text(&mut self, text_frame: MtTextFrame) -> Result<(), TtsError> {
+        let msg = self
+            .serializer
+            .serialize(Frame::new(FrameKind::MtText(text_frame)))
+            .map_err(|e| TtsError::Protocol(e.to_string()))?;
+
+        self.client
+            .send(msg)
+            .await
+            .map_err(|e| TtsError::Connection(e.to_string()))
     }
 
     async fn flush(&mut self) -> Result<(), TtsError> {
-        send_json(&self.client, &ClientMessage::Flush).await
-    }
-
-    async fn interrupt(&mut self) -> Result<(), TtsError> {
-        let url = format!(
-            "{ENDPOINT}?model={}&send_completion_event=true",
-            self.model.slug()
-        );
-        let (client, read) = crate::services::ws_client::connect_with_retries(
-            &url,
-            HeaderName::from_static(AUTH_HEADER),
-            self.api_key.clone(),
-            MAX_RECONNECT_ATTEMPTS,
-            RECONNECT_DELAY,
-        )
-        .await
-        .map_err(|e| TtsError::Connection(e.to_string()))?;
-
-        send_json(
-            &client,
-            &ClientMessage::Config {
-                data: self.config_data.clone(),
-            },
-        )
-        .await?;
-
-        let read_task = SarvamTtsProvider::spawn_read_task(
-            "sarvam",
-            read,
-            self.serializer.clone(),
-            self.tx.clone(),
-            |frame| match frame.into_kind() {
-                FrameKind::TtsAudio(audio) => vec![TtsEvent::AudioChunk(audio.audio)],
-                FrameKind::TtsAudioStop => vec![TtsEvent::Done],
-                _ => vec![],
-            },
-        );
-        let keepalive_task = SarvamTtsProvider::spawn_keepalive_task(
-            client.clone(),
-            ping_message(),
-            KEEPALIVE_INTERVAL,
-        );
-
-        let old_client = std::mem::replace(&mut self.client, client);
-        let old_read_task = std::mem::replace(&mut self.read_task, read_task);
-        let old_keepalive_task = std::mem::replace(&mut self.keepalive_task, keepalive_task);
-        old_read_task.abort();
-        old_keepalive_task.abort();
-        old_client.close().await;
-        Ok(())
+        let text = serde_json::to_string(&ClientMessage::Flush)
+            .map_err(|e| TtsError::Protocol(e.to_string()))?;
+        self.client
+            .send(Message::Text(text))
+            .await
+            .map_err(|e| TtsError::Connection(e.to_string()))
     }
 
     async fn close(self: Box<Self>) {

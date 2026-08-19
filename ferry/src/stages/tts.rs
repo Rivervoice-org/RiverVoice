@@ -46,8 +46,6 @@ impl FrameProcessor for TtsStage {
 
         tracing::info!("tts: session opened");
 
-        let mut aggregator = SentenceAggregator::new();
-
         let mut speaking = false;
 
         'run: loop {
@@ -56,56 +54,31 @@ impl FrameProcessor for TtsStage {
                     let Some(frame) = frame else { break };
                     match frame.into_kind() {
                         FrameKind::MtText(t) => {
-                            for sentence in aggregator.push(&t.text) {
-                                if !has_speakable_chars(&sentence) {
-                                    tracing::debug!("tts: skipping sentence with no speakable chars");
-                                    continue;
+                            if !has_speakable_chars(&t.text) {
+                                tracing::debug!("tts: skipping text with no speakable chars");
+                                continue;
+                            }
+                            io.start_ttfb_metrics();
+                            let text_len = t.text.len();
+                            match session.send_text(t).await {
+                                Ok(()) => {
+                                    tracing::debug!("tts: sent {} chars to sarvam", text_len);
                                 }
-                                io.start_ttfb_metrics();
-                                match session.send_text(&sentence).await {
-                                    Ok(()) => {
-                                        tracing::debug!("tts: sent {} chars to sarvam", sentence.len());
-                                    }
-                                    Err(e) => {
-                                        tracing::error!("tts: send_text failed: {e}");
-                                        break;
-                                    }
+                                Err(e) => {
+                                    tracing::error!("tts: send_text failed: {e}");
+                                    break;
                                 }
+                            }
 
-                                let usage = TtsUsageFrame {
-                                    characters: sentence.chars().count() as u32,
-                                };
-                                if !io.push(Frame::new(FrameKind::TtsUsage(usage))).await {
-                                    break 'run;
-                                }
+                            let usage = TtsUsageFrame {
+                                characters: text_len as u32,
+                            };
+                            if !io.push(Frame::new(FrameKind::TtsUsage(usage))).await {
+                                break 'run;
                             }
                         }
                         FrameKind::MtResponseEnd => {
                             tracing::debug!("tts: MtResponseEnd received");
-                            if let Some(sentence) = aggregator.flush() {
-                                if !has_speakable_chars(&sentence) {
-                                    tracing::debug!("tts: skipping flush with no speakable chars");
-                                } else {
-                                    tracing::debug!("tts: flushing {} chars to sarvam", sentence.len());
-                                    io.start_ttfb_metrics();
-                                    match session.send_text(&sentence).await {
-                                        Ok(()) => {
-                                            let usage = TtsUsageFrame {
-                                                characters: sentence.chars().count() as u32,
-                                            };
-                                            if !io.push(Frame::new(FrameKind::TtsUsage(usage))).await
-                                            {
-                                                break;
-                                            }
-                                        }
-                                        Err(e) => {
-                                            tracing::error!("tts: flush send_text failed: {e}");
-                                        }
-                                    }
-                                }
-                            } else {
-                                tracing::debug!("tts: MtResponseEnd but aggregator was empty");
-                            }
 
                             if let Err(e) = session.flush().await {
                                 tracing::error!("tts: session.flush failed: {e}");
@@ -164,46 +137,6 @@ impl FrameProcessor for TtsStage {
     }
 }
 
-struct SentenceAggregator {
-    buffer: String,
-}
-
-impl SentenceAggregator {
-    fn new() -> Self {
-        Self {
-            buffer: String::new(),
-        }
-    }
-
-    fn push(&mut self, text: &str) -> Vec<String> {
-        self.buffer.push_str(text);
-
-        let mut sentences = Vec::new();
-        while let Some(end) = find_sentence_end(&self.buffer) {
-            let sentence = self.buffer[..end].trim().to_string();
-            self.buffer.drain(..end);
-            if !sentence.is_empty() {
-                sentences.push(sentence);
-            }
-        }
-        sentences
-    }
-
-    fn flush(&mut self) -> Option<String> {
-        let rest = std::mem::take(&mut self.buffer);
-        let trimmed = rest.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    }
-
-    fn clear(&mut self) {
-        self.buffer.clear();
-    }
-}
-
 fn has_speakable_chars(text: &str) -> bool {
     // Sarvam's allowed-language check is script-specific (English here,
     // Language::En), so "any alphanumeric" isn't enough: a chunk of pure
@@ -212,20 +145,4 @@ fn has_speakable_chars(text: &str) -> bool {
     // actually accepts.
     text.chars()
         .any(|c| c.is_ascii_alphabetic() || c.is_ascii_digit())
-}
-
-fn find_sentence_end(buffer: &str) -> Option<usize> {
-    let mut chars = buffer.char_indices().peekable();
-    while let Some((i, c)) = chars.next() {
-        if matches!(c, '.' | '!' | '?' | '।' | '॥') {
-            match chars.peek() {
-                Some(&(_, next)) if next.is_whitespace() => {
-                    return Some(i + c.len_utf8() + next.len_utf8());
-                }
-                Some(_) => continue,
-                None => return None,
-            }
-        }
-    }
-    None
 }
