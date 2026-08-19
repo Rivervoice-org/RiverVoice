@@ -8,6 +8,7 @@
     }
   },
   "dependencies": {
+    "@gorhom/bottom-sheet": "^5.2.14",
     "@rn-primitives/avatar": "^1.5.2",
     "@rn-primitives/checkbox": "^1.5.2",
     "@rn-primitives/dialog": "^1.5.2",
