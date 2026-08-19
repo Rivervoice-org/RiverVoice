@@ -3,7 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { ChevronRight, Clock } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
-import { CallOutcomeAvatar, CallRow } from "@/components/CallRow";
+import { CallListItem, CallRow } from "@/components/CallRow";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Text } from "@/components/ui/text";
@@ -120,34 +120,17 @@ export default function HomeScreen() {
 
           <Card className="mx-5 mt-3 overflow-hidden">
             {RECENT_CALLS.map((call, index) => (
-              <CallRow
+              <CallListItem
                 key={call.id}
-                avatar={
-                  call.agent ? (
-                    <Mascot seed={call.agent} size={32} />
-                  ) : (
-                    <CallOutcomeAvatar outcome={call.outcome} />
-                  )
-                }
-                title={call.number}
-                mono
-                subtitle={`${call.agent ? `${call.agent} · ` : ""}${call.language}`}
-                trailing={
-                  <View className="items-end">
-                    <Text font="mono" variant="muted" className="text-[11px] tabular-nums">
-                      {call.duration}
-                    </Text>
-                    <Text variant="muted" className="text-[11px]">
-                      {call.time}
-                    </Text>
-                  </View>
-                }
+                call={call}
                 showDivider={index < RECENT_CALLS.length - 1}
                 onPress={() =>
                   router.push({
                     pathname: "/call-detail",
                     params: {
+                      name: call.name,
                       number: call.number,
+                      fromNumber: call.fromNumber,
                       agent: call.agent || "",
                       language: call.language,
                       duration: call.duration,

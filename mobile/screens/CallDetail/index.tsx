@@ -15,17 +15,18 @@ import {
   Download,
   CalendarDays,
   AudioLines,
-  User,
-  Mic,
   MessageSquareText,
-  ChevronDown,
+  ChevronRight,
 } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
+import { CallListItem } from "@/components/CallRow";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Text } from "@/components/ui/text";
-import { TRANSCRIPT, WAVEFORM, type TranscriptEntry } from "./mock";
+import { cn } from "@/lib/utils";
+import { TRANSCRIPT } from "@/screens/Transcript/mock";
+import { CALL_HISTORY, WAVEFORM } from "./mock";
 
 const OUTCOME_CONFIG = {
   resolved: {
@@ -59,21 +60,23 @@ function StatCard({
   label,
   value,
   caption,
+  className,
 }: {
   icon: typeof Clock;
   label: string;
   value: string;
   caption: string;
+  className?: string;
 }) {
   return (
-    <Card className="flex-1 p-3">
+    <Card className={cn("p-3", className)}>
       <View className="h-7 w-7 items-center justify-center rounded-lg bg-secondary">
         <Icon size={13} strokeWidth={1.75} color="#3c3832" />
       </View>
       <Text variant="muted" className="mt-2.5 text-[11px] font-medium uppercase tracking-[0.12em]">
         {label}
       </Text>
-      <Text font="mono" className="mt-0.5 text-lg font-semibold">
+      <Text font="mono" className="mt-0.5 text-lg font-semibold" numberOfLines={1} adjustsFontSizeToFit>
         {value}
       </Text>
       <Text variant="muted" className="mt-0.5 text-[11px]" numberOfLines={1}>
@@ -83,64 +86,11 @@ function StatCard({
   );
 }
 
-function TranscriptBubble({
-  entry,
-}: {
-  entry: TranscriptEntry;
-}) {
-  const isAgent = entry.speaker === "agent";
-
-  return (
-    <View className={isAgent ? "items-end" : "items-start"}>
-      <View
-        className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 ${
-          isAgent ? "rounded-tr-md bg-foreground" : "rounded-tl-md bg-card border border-border"
-        }`}
-      >
-        <View className="flex-row items-center gap-1.5">
-          {isAgent ? (
-            <Mic size={10} strokeWidth={2} color="#fcfbf9" />
-          ) : (
-            <User size={10} strokeWidth={2} color="#8f8c87" />
-          )}
-          <Text
-            className={`text-[10px] font-semibold uppercase tracking-[0.08em] ${
-              isAgent ? "text-primary-foreground" : "text-muted-foreground"
-            }`}
-          >
-            {entry.name}
-          </Text>
-          <Text
-            font="mono"
-            className={`text-[10px] ${isAgent ? "text-primary-foreground/60" : "text-muted-foreground"}`}
-          >
-            {entry.time}
-          </Text>
-        </View>
-
-        <Text className={`mt-1 text-sm leading-snug ${isAgent ? "text-primary-foreground" : "text-foreground"}`}>
-          {entry.original}
-        </Text>
-
-        {entry.translated && (
-          <View className="mt-1.5 border-t border-border/60 pt-1.5">
-            <View className="flex-row items-center gap-1">
-              <Globe size={10} strokeWidth={2} color="#3b5dab" />
-              <Text className="text-[10px] font-medium uppercase tracking-[0.08em] text-river">
-                Translated
-              </Text>
-            </View>
-            <Text className="mt-0.5 text-sm leading-snug">{entry.translated}</Text>
-          </View>
-        )}
-      </View>
-    </View>
-  );
-}
-
 export default function CallDetailScreen() {
   const params = useLocalSearchParams<{
+    name: string;
     number: string;
+    fromNumber: string;
     agent: string;
     language: string;
     duration: string;
@@ -150,7 +100,6 @@ export default function CallDetailScreen() {
 
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   const outcome = OUTCOME_CONFIG[params.outcome as keyof typeof OUTCOME_CONFIG] ?? OUTCOME_CONFIG.resolved;
   const OutcomeIcon = outcome.icon;
@@ -188,9 +137,9 @@ export default function CallDetailScreen() {
       >
         {/* Hero card */}
         <Card className="mx-5 items-center p-6">
-          {params.agent ? (
+          {params.name || params.agent ? (
             <View className="h-16 w-16 overflow-hidden rounded-full bg-secondary">
-              <Mascot seed={params.agent} size={64} />
+              <Mascot seed={params.name || params.agent} size={64} />
             </View>
           ) : (
             <View className="h-16 w-16 items-center justify-center rounded-full bg-secondary">
@@ -199,11 +148,27 @@ export default function CallDetailScreen() {
           )}
 
           <Text className="mt-3 text-[20px] font-semibold">
-            {params.agent || "Direct call"}
+            {params.name || params.agent || "Direct call"}
           </Text>
-          <Text font="mono" variant="muted" className="mt-0.5 text-sm">
+          <Text font="mono" variant="muted" className="mt-1 text-sm">
             {params.number}
           </Text>
+
+          {params.agent ? (
+            <View className="mt-2.5 flex-row items-center gap-1.5">
+              <Mascot seed={params.agent} size={16} />
+              <Text variant="muted" className="text-xs">
+                Handled by{" "}
+                <Text className="text-xs font-medium text-foreground">
+                  {params.agent}
+                </Text>
+              </Text>
+            </View>
+          ) : (
+            <Text variant="muted" className="mt-2.5 text-xs">
+              Direct call
+            </Text>
+          )}
 
           <Badge
             className="mt-4 px-3 py-1"
@@ -229,24 +194,34 @@ export default function CallDetailScreen() {
         </Card>
 
         {/* Stats */}
-        <View className="mx-5 mt-4 flex-row gap-3">
+        <View className="mx-5 mt-4 flex-row flex-wrap gap-3">
           <StatCard
+            className="w-[47.5%]"
             icon={Clock}
             label="Duration"
             value={params.duration}
             caption="Total call time"
           />
           <StatCard
+            className="w-[47.5%]"
             icon={AudioLines}
             label="Minutes"
             value={String(usedMinutes)}
             caption="Billed minutes"
           />
           <StatCard
+            className="w-[47.5%]"
             icon={Globe}
             label="Language"
             value={params.language.split("→")[0].trim()}
             caption={params.language}
+          />
+          <StatCard
+            className="w-[47.5%]"
+            icon={Phone}
+            label="Called from"
+            value={params.fromNumber}
+            caption="Your number"
           />
         </View>
 
@@ -308,47 +283,72 @@ export default function CallDetailScreen() {
         </Card>
 
         {/* Transcription */}
-        <Card className="mx-5 mt-6 overflow-hidden">
-          <Pressable
-            onPress={() => setTranscriptOpen((o) => !o)}
-            className="flex-row items-center justify-between px-4 py-3.5 active:bg-secondary"
-            hitSlop={4}
-          >
-            <View className="flex-row items-center gap-2">
-              <MessageSquareText size={15} strokeWidth={1.75} color="#3c3832" />
-              <Text className="text-[13px] font-semibold">Transcription</Text>
-            </View>
-            <View className="flex-row items-center gap-2">
-              {!transcriptOpen && (
-                <Text variant="muted" className="text-[11px] font-medium">
-                  View transcript
-                </Text>
-              )}
-              <ChevronDown
-                size={16}
-                strokeWidth={1.75}
-                color="#8f8c87"
-                style={{ transform: [{ rotate: transcriptOpen ? "180deg" : "0deg" }] }}
-              />
-            </View>
-          </Pressable>
+        <Pressable
+          onPress={() =>
+            router.push({
+              pathname: "/transcript",
+              params: {
+                name: params.name,
+                number: params.number,
+                agent: params.agent,
+              },
+            })
+          }
+          className="mx-5 mt-6 flex-row items-center justify-between rounded-xl border border-border bg-card px-4 py-3.5 shadow-float active:bg-secondary"
+        >
+          <View className="flex-row items-center gap-2">
+            <MessageSquareText size={15} strokeWidth={1.75} color="#3c3832" />
+            <Text className="text-[13px] font-semibold">View transcription</Text>
+          </View>
+          <View className="flex-row items-center gap-2">
+            <Text variant="muted" className="text-[11px] font-medium">
+              {TRANSCRIPT.length} lines
+            </Text>
+            <ChevronRight size={16} strokeWidth={1.75} color="#8f8c87" />
+          </View>
+        </Pressable>
 
-          {transcriptOpen && (
-            <View className="gap-3 border-t border-border bg-canvas/50 px-4 py-4">
-              {TRANSCRIPT.map((entry, index) => (
-                <TranscriptBubble key={index} entry={entry} />
-              ))}
-            </View>
-          )}
-        </Card>
+        {/* History */}
+        <View className="mt-8">
+          <View className="flex-row items-center justify-between px-5">
+            <Text variant="muted" className="text-[11px] font-medium uppercase tracking-[0.14em]">
+              History
+            </Text>
+            <Pressable className="flex-row items-center gap-1">
+              <Text className="text-xs font-medium">See all</Text>
+              <ChevronRight size={14} strokeWidth={1.75} color="#3c3832" />
+            </Pressable>
+          </View>
+
+          <Card className="mx-5 mt-3 overflow-hidden">
+            {CALL_HISTORY.map((call, index) => (
+              <CallListItem
+                key={call.id}
+                call={call}
+                showDivider={index < CALL_HISTORY.length - 1}
+                onPress={() =>
+                  router.push({
+                    pathname: "/call-detail",
+                    params: {
+                      name: call.name,
+                      number: call.number,
+                      fromNumber: call.fromNumber,
+                      agent: call.agent || "",
+                      language: call.language,
+                      duration: call.duration,
+                      outcome: call.outcome,
+                      time: call.time,
+                    },
+                  })
+                }
+              />
+            ))}
+          </Card>
+        </View>
 
         {/* Actions */}
-        <View className="mx-5 mt-8 flex-row gap-3">
-          <Button className="flex-1 h-12">
-            <Phone size={16} strokeWidth={1.75} color="#fcfbf9" />
-            <Text className="text-sm font-medium text-primary-foreground">Call back</Text>
-          </Button>
-          <Button variant="outline" className="flex-1 h-12">
+        <View className="mx-5 mt-8">
+          <Button variant="outline" className="h-12">
             <Mascot seed="retry-agent" size={16} />
             <Text className="text-sm font-medium">New call</Text>
           </Button>
