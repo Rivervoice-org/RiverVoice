@@ -1,53 +1,53 @@
-export const TELEPHONY_SERVICES = [
+export type NumberStatus = "live" | "paused";
+
+export type PhoneNumber = {
+  id: string;
+  label: string;
+  number: string;
+  kind: string;
+  provider: string;
+  status: NumberStatus;
+};
+
+export const NUMBERS: PhoneNumber[] = [
   {
     id: "1",
-    name: "Twilio",
-    number: "+1 888 799 9666",
-    type: "VoIP Provider",
-    icon: "twilio",
+    label: "Front desk",
+    number: "+1 415 555 0132",
+    kind: "Main line",
+    provider: "Twilio",
+    status: "live",
   },
   {
     id: "2",
-    name: "Vobiz",
+    label: "Billing support",
     number: "+91 80 4567 8901",
-    type: "Cloud Telephony",
-    icon: "vobiz",
+    kind: "Toll-free",
+    provider: "Exotel",
+    status: "live",
   },
   {
     id: "3",
-    name: "Exotel",
-    number: "+91 80 6754 3210",
-    type: "Cloud Telephony",
-    icon: "exotel",
+    label: "Order status",
+    number: "+1 888 555 0187",
+    kind: "Toll-free",
+    provider: "Telnyx",
+    status: "live",
   },
   {
     id: "4",
-    name: "Plivo",
-    number: "+1 800 970 5238",
-    type: "VoIP Provider",
-    icon: "plivo",
+    label: "Collections",
+    number: "+91 80 6754 3210",
+    kind: "Mobile",
+    provider: "Vobiz",
+    status: "paused",
   },
   {
     id: "5",
-    name: "Telnyx",
-    number: "+1 888 979 5273",
-    type: "VoIP Provider",
-    icon: "telnyx",
-  },
-  {
-    id: "6",
-    name: "Vonage",
-    number: "+1 866 512 7777",
-    type: "Cloud Communication",
-    icon: "vonage",
+    label: "Sales line",
+    number: "+1 800 555 0144",
+    kind: "Toll-free",
+    provider: "Plivo",
+    status: "paused",
   },
 ];
-
-export const SERVICE_COLORS: Record<string, string> = {
-  twilio: "#F22F46",
-  vobiz: "#3b5dab",
-  exotel: "#1DB9C1",
-  plivo: "#25B76F",
-  telnyx: "#7B61FF",
-  vonage: "#00B9F1",
-};

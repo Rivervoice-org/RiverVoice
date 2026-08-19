@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Phone, PhoneOutgoing, Settings, BookUser } from "lucide-react-native";
+import { Phone, PhoneCall, PhoneOutgoing, Settings } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
@@ -12,7 +12,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
         <PhoneOutgoing size={24} strokeWidth={2} color="#fcfbf9" />
       </View>
     ),
-    phonebook: <BookUser size={22} strokeWidth={1.75} color={focused ? "#2e2a25" : "#8f8c87"} />,
+    phonebook: <PhoneCall size={22} strokeWidth={1.75} color={focused ? "#2e2a25" : "#8f8c87"} />,
     agents: <Mascot seed="tab-agents" size={22} />,
     settings: <Settings size={22} strokeWidth={1.75} color={focused ? "#2e2a25" : "#8f8c87"} />,
   };
@@ -34,6 +34,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        animation: "shift",
         tabBarStyle: {
           backgroundColor: "#ffffff",
           borderTopColor: "#ebe9e6",
@@ -75,7 +76,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="phonebook"
         options={{
-          title: "Phonebook",
+          title: "My numbers",
           tabBarIcon: ({ focused }) => <TabIcon name="phonebook" focused={focused} />,
         }}
       />
