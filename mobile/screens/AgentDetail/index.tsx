@@ -4,18 +4,11 @@ import { useLocalSearchParams, router } from "expo-router";
 import { ChevronLeft, Phone, Clock, Hash, Pencil } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { CallListItem } from "@/components/CallRow";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { AGENTS } from "@/screens/Agents/mock";
 import { AGENT_CALLS } from "./mock";
-
-const STATUS_CONFIG = {
-  live: { label: "Live", variant: "green" as const },
-  paused: { label: "Paused", variant: "amber" as const },
-  draft: { label: "Draft", variant: "secondary" as const },
-};
 
 function StatCard({
   icon: Icon,
@@ -62,7 +55,6 @@ export default function AgentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const agent = AGENTS.find((a) => a.id === id) ?? AGENTS[0];
 
-  const status = STATUS_CONFIG[agent.status];
   const recentCalls = AGENT_CALLS[agent.id] ?? [];
 
   const numberUsage = agent.numbers.map((number) => ({
@@ -109,11 +101,7 @@ export default function AgentDetailScreen() {
             {agent.purpose}
           </Text>
 
-          <Badge className="mt-4" variant={status.variant}>
-            {status.label}
-          </Badge>
-
-          <Text variant="muted" className="mt-3 text-xs">
+          <Text variant="muted" className="mt-4 text-xs">
             Edited {agent.editedAt}
           </Text>
         </Card>

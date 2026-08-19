@@ -103,7 +103,12 @@ export default function HomeScreen() {
                   <ChevronRight size={14} strokeWidth={1.75} color="#8f8c87" />
                 }
                 showDivider={index < ACTIVE_AGENTS.length - 1}
-                onPress={() => {}}
+                onPress={() =>
+                  router.push({
+                    pathname: "/agent-detail",
+                    params: { id: agent.id },
+                  })
+                }
               />
             ))}
           </Card>
