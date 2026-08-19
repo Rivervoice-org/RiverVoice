@@ -8,7 +8,7 @@ use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 
 use super::percent_encode;
-use crate::frames::frames::FrameKind;
+use crate::frames::frames::{Frame, FrameKind, RawAudioFrame};
 use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::deepgram::{
     EVENT_CHANNEL_CAPACITY, KEEPALIVE_INTERVAL, MAX_RECONNECT_ATTEMPTS, RECONNECT_DELAY,
@@ -43,10 +43,8 @@ impl SttProvider for DeepgramSttProvider {
         config: SttConfig,
         serializer: Arc<dyn FrameSerializer<Message = Message>>,
     ) -> Result<(Box<dyn SttSession>, mpsc::Receiver<SttEvent>), SttError> {
-        let SttConfigKind::DeepgramSttConfig(vendor) = &config.kind else {
-            return Err(SttError::Protocol(
-                "deepgram: config is not a DeepgramSttConfig".to_string(),
-            ));
+        let vendor = match &config.kind {
+            SttConfigKind::DeepgramSttConfig(vendor) => vendor,
         };
 
         if vendor.utterance_end_ms.is_some() && vendor.interim_results != Some(true) {
@@ -68,8 +66,12 @@ impl SttProvider for DeepgramSttProvider {
         .await?;
 
         let (tx, rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
-        let read_task = Self::spawn_read_task("deepgram", read, serializer, tx, move |frame| {
-            match frame.into_kind() {
+        let read_task = Self::spawn_read_task(
+            "deepgram",
+            read,
+            serializer.clone(),
+            tx,
+            move |frame| match frame.into_kind() {
                 FrameKind::Transcription(t) => vec![SttEvent::Transcript(Transcript {
                     text: t.text,
                     language,
@@ -78,8 +80,8 @@ impl SttProvider for DeepgramSttProvider {
                 FrameKind::UserStartedSpeaking => vec![SttEvent::UserStartedSpeaking],
                 FrameKind::UserStoppedSpeaking => vec![SttEvent::UserStoppedSpeaking],
                 _ => vec![],
-            }
-        });
+            },
+        );
 
         let keepalive_task = Self::spawn_keepalive_task(
             client.clone(),
@@ -92,6 +94,7 @@ impl SttProvider for DeepgramSttProvider {
                 client,
                 read_task,
                 keepalive_task,
+                serializer,
             }) as Box<dyn SttSession>,
             rx,
         ))
@@ -102,16 +105,18 @@ struct DeepgramSttSession {
     client: WsOutboundClient,
     read_task: JoinHandle<()>,
     keepalive_task: JoinHandle<()>,
+    serializer: Arc<dyn FrameSerializer<Message = Message>>,
 }
 
 #[async_trait]
 impl SttSession for DeepgramSttSession {
-    async fn send_audio(&mut self, pcm: &[u8]) -> Result<(), SttError> {
-        let payload = pcm.to_vec();
-        self.client
-            .send(Message::Binary(payload))
-            .await
-            .map_err(Into::into)
+    async fn send_audio(&mut self, frame: RawAudioFrame) -> Result<(), SttError> {
+        let msg = self
+            .serializer
+            .serialize(Frame::new(FrameKind::RawAudio(frame)))
+            .map_err(|e| SttError::Protocol(e.to_string()))?;
+
+        self.client.send(msg).await.map_err(Into::into)
     }
 
     async fn close(self: Box<Self>) {

@@ -6,11 +6,10 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::frames::frames::Frame;
+use crate::frames::frames::{Frame, RawAudioFrame};
 use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::language::Language;
 use crate::services::ws_client;
-use crate::turns::strategy::TurnStrategy;
 
 pub struct Transcript {
     pub text: String,
@@ -29,10 +28,6 @@ pub enum SttEvent {
 #[async_trait]
 pub trait SttProvider: Send {
     fn name(&self) -> &'static str;
-
-    fn recommended_turn_strategy(&self) -> Option<TurnStrategy> {
-        None
-    }
 
     async fn open(
         &self,
@@ -89,7 +84,7 @@ pub enum SttConfigKind {
 
 #[async_trait]
 pub trait SttSession: Send {
-    async fn send_audio(&mut self, pcm: &[u8]) -> Result<(), SttError>;
+    async fn send_audio(&mut self, frame: RawAudioFrame) -> Result<(), SttError>;
 
     async fn close(self: Box<Self>);
 }

@@ -61,7 +61,6 @@ impl FrameProcessor for DenoiserStage {
                 other @ (FrameKind::Transcription(_)
                 | FrameKind::UserStartedSpeaking
                 | FrameKind::UserStoppedSpeaking
-                | FrameKind::ServiceMetadata(_)
                 | FrameKind::UserTurnAggregation(_)
                 | FrameKind::MtResponseStart
                 | FrameKind::MtText(_)

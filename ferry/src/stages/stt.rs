@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::audio::resampler::SampleRateAdapter;
-use crate::frames::frames::{
-    Frame, FrameKind, ServiceMetadataFrame, SttUsageFrame, TranscriptionFrame,
-};
+use crate::frames::frames::{Frame, FrameKind, SttUsageFrame};
 use crate::processor::processor::{FrameIo, FrameProcessor};
 use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::provider::{SttConfig, SttEvent, SttProvider};
@@ -37,7 +34,6 @@ impl FrameProcessor for SttStage {
     }
 
     async fn run(self: Box<Self>, mut io: FrameIo) {
-        let target_sample_rate = self.config.sample_rate;
         let (mut session, mut events) = match self.provider.open(self.config, self.serializer).await
         {
             Ok(opened) => opened,
@@ -47,20 +43,9 @@ impl FrameProcessor for SttStage {
             }
         };
 
-        if let Some(turn_strategy) = self.provider.recommended_turn_strategy() {
-            io.push(Frame::new(FrameKind::ServiceMetadata(
-                ServiceMetadataFrame {
-                    service_name: self.provider.name().to_string(),
-                    turn_strategy: Some(turn_strategy),
-                },
-            )))
-            .await;
-        }
-
-        let mut rate_adapter: Option<(u32, SampleRateAdapter)> = None;
-
         let mut unreported_audio_seconds: f64 = 0.0;
 
+        let mut buffer = String::new();
         loop {
             tokio::select! {
                 frame = io.take() => {
@@ -70,36 +55,12 @@ impl FrameProcessor for SttStage {
                     };
                     match frame.into_kind() {
                         FrameKind::RawAudio(audio) => {
-                            let (adapter_rate, adapter) = rate_adapter.get_or_insert_with(|| {
-                                (
-                                    audio.sample_rate,
-                                    SampleRateAdapter::new(audio.sample_rate, target_sample_rate),
-                                )
-                            });
-                            if *adapter_rate != audio.sample_rate {
-                                tracing::warn!(
-                                    expected = *adapter_rate,
-                                    got = audio.sample_rate,
-                                    "stt: sample rate changed mid-call, resampling from the original rate"
-                                );
-                            }
-
-
-
-                            let samples: Vec<i16> = audio
-                                .audio
-                                .chunks_exact(2)
-                                .map(|b| i16::from_le_bytes([b[0], b[1]]))
-                                .collect();
-                            let mut resampled = Vec::new();
-                            adapter.push(&samples, &mut resampled);
-                            let pcm: Vec<u8> =
-                                resampled.iter().flat_map(|s| s.to_le_bytes()).collect();
-
-                            match session.send_audio(&pcm).await {
+                            match session.send_audio(audio.clone()).await {
                                 Ok(()) => {
                                     unreported_audio_seconds +=
-                                        resampled.len() as f64 / target_sample_rate as f64;
+                                        audio.audio.len() as f64
+                                            / 2.0
+                                            / audio.sample_rate as f64;
                                 }
                                 Err(e) => {
                                     tracing::error!("{}: failed to send audio: {e}", io.name());
@@ -107,16 +68,10 @@ impl FrameProcessor for SttStage {
                                 }
                             }
 
-                            if !io.push(Frame::new(FrameKind::RawAudio(audio))).await {
-                                tracing::info!("{}: downstream closed", io.name());
-                                break;
-                            }
                         }
                         other => {
-                            if !io.push(Frame::new(other)).await {
-                                tracing::info!("{}: downstream closed", io.name());
-                                break;
-                            }
+                            tracing::warn!("{}: unexpected frame kind: {}", io.name(), other.get_name());
+                            break;
                         }
                     }
                 }
@@ -126,20 +81,48 @@ impl FrameProcessor for SttStage {
                         break
                     };
 
-                    let downstream_alive = match &event {
+
+                    let is_user_speaking = match &event {
                         SttEvent::UserStartedSpeaking => {
                             io.cancel_ttfb_metrics();
                             io.start_ttfb_metrics();
                             true
                         }
-                        SttEvent::UserStoppedSpeaking => true,
-                        SttEvent::Transcript(t) if t.is_final => io.stop_ttfb_metrics().await,
+                        SttEvent::UserStoppedSpeaking => false,
+                        SttEvent::Transcript(t) if t.is_final => {
+                            io.stop_ttfb_metrics().await;
+                            false
+                        }
                         SttEvent::Transcript(_) => true,
                     };
-                    if !downstream_alive {
-                        tracing::info!("{}: downstream closed", io.name());
-                        break;
+
+
+                    if is_user_speaking {
+                        if let SttEvent::Transcript(t) = &event {
+                            buffer.push_str(&t.text);
+                        }
+                    } else {
+                        if !buffer.is_empty() {
+                        let text = std::mem::take(&mut buffer);
+                                tracing::info!(target: "ferry::transcript", text = %text);
+                        if !io
+                            .push(Frame::new(FrameKind::UserTurnAggregation(
+                                crate::frames::frames::UserTurnAggregationFrame { text },
+                            )))
+                            .await
+                        {
+                            tracing::info!("{}: downstream closed", io.name());
+                            break;
+                        }
+                        else {
+                        tracing::debug!("User stopped speaking. No buffer to send.");
+
+                        }
                     }
+                    }
+
+
+
 
                     if matches!(&event, SttEvent::Transcript(t) if t.is_final)
                         && unreported_audio_seconds > 0.0
@@ -156,18 +139,7 @@ impl FrameProcessor for SttStage {
                         }
                     }
 
-                    let kind = match event {
-                        SttEvent::Transcript(t) => FrameKind::Transcription(TranscriptionFrame {
-                            text: t.text,
-                            is_final: t.is_final,
-                        }),
-                        SttEvent::UserStartedSpeaking => FrameKind::UserStartedSpeaking,
-                        SttEvent::UserStoppedSpeaking => FrameKind::UserStoppedSpeaking,
-                    };
-                    if !io.push(Frame::new(kind)).await {
-                        tracing::info!("{}: downstream closed", io.name());
-                        break;
-                    }
+
                 }
             }
         }

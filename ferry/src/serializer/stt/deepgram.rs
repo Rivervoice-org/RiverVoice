@@ -1,20 +1,23 @@
+use std::sync::Mutex;
+
 use serde::Deserialize;
 use tokio_tungstenite::tungstenite::Message;
 
+use crate::audio::resampler::SampleRateAdapter;
 use crate::frames::frames::{Frame, FrameKind, TranscriptionFrame};
 use crate::serializer::serializer::FrameSerializer;
 
-pub struct DeepgramSerializer;
-
-impl DeepgramSerializer {
-    pub fn new() -> Self {
-        Self
-    }
+pub struct DeepgramSerializer {
+    target_sample_rate: u32,
+    rate_adapter: Mutex<Option<(u32, SampleRateAdapter)>>,
 }
 
-impl Default for DeepgramSerializer {
-    fn default() -> Self {
-        Self::new()
+impl DeepgramSerializer {
+    pub fn new(target_sample_rate: u32) -> Self {
+        Self {
+            target_sample_rate,
+            rate_adapter: Mutex::new(None),
+        }
     }
 }
 
@@ -23,23 +26,37 @@ impl FrameSerializer for DeepgramSerializer {
 
     fn serialize(&self, frame: Frame) -> anyhow::Result<Message> {
         match frame.into_kind() {
-            FrameKind::RawAudio(audio) => Ok(Message::Binary(audio.audio)),
-            FrameKind::Transcription(_)
-            | FrameKind::UserStartedSpeaking
-            | FrameKind::UserStoppedSpeaking
-            | FrameKind::ServiceMetadata(_)
-            | FrameKind::UserTurnAggregation(_)
-            | FrameKind::MtResponseStart
-            | FrameKind::MtText(_)
-            | FrameKind::MtResponseEnd
-            | FrameKind::TtsAudioStart
-            | FrameKind::TtsAudio(_)
-            | FrameKind::TtsAudioStop
-            | FrameKind::Metrics(_)
-            | FrameKind::SttUsage(_)
-            | FrameKind::MtUsage(_)
-            | FrameKind::TtsUsage(_) => {
-                anyhow::bail!("deepgram serializer: cannot send this frame to deepgram")
+            FrameKind::RawAudio(audio) => {
+                let mut rate_adapter = self
+                    .rate_adapter
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("deepgram: rate adapter lock poisoned"))?;
+                let (adapter_rate, adapter) = rate_adapter.get_or_insert_with(|| {
+                    (
+                        audio.sample_rate,
+                        SampleRateAdapter::new(audio.sample_rate, self.target_sample_rate),
+                    )
+                });
+                if *adapter_rate != audio.sample_rate {
+                    tracing::warn!(
+                        expected = *adapter_rate,
+                        got = audio.sample_rate,
+                        "stt: sample rate changed mid-call, resampling from the original rate"
+                    );
+                }
+
+                let samples: Vec<i16> = audio
+                    .audio
+                    .chunks_exact(2)
+                    .map(|b| i16::from_le_bytes([b[0], b[1]]))
+                    .collect();
+                let mut resampled = Vec::new();
+                adapter.push(&samples, &mut resampled);
+                let pcm: Vec<u8> = resampled.iter().flat_map(|s| s.to_le_bytes()).collect();
+                Ok(Message::Binary(pcm))
+            }
+            _other => {
+                anyhow::bail!("deepgram serializer: no wire representation for this frame yet")
             }
         }
     }

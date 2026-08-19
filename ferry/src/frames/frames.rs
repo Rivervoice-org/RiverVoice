@@ -1,7 +1,5 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::turns::strategy::TurnStrategy;
-
 static NEXT_FRAME_ID: AtomicU32 = AtomicU32::new(0);
 
 pub struct Frame {
@@ -46,8 +44,6 @@ pub enum FrameKind {
 
     UserStoppedSpeaking,
 
-    ServiceMetadata(ServiceMetadataFrame),
-
     UserTurnAggregation(UserTurnAggregationFrame),
 
     MtResponseStart,
@@ -78,7 +74,6 @@ impl FrameKind {
             FrameKind::Transcription(_) => "TranscriptionFrame".to_string(),
             FrameKind::UserStartedSpeaking => "UserStartedSpeakingFrame".to_string(),
             FrameKind::UserStoppedSpeaking => "UserStoppedSpeakingFrame".to_string(),
-            FrameKind::ServiceMetadata(_) => "ServiceMetadataFrame".to_string(),
             FrameKind::UserTurnAggregation(_) => "UserTurnAggregationFrame".to_string(),
             FrameKind::MtResponseStart => "MtResponseStartFrame".to_string(),
             FrameKind::MtText(_) => "MtTextFrame".to_string(),
@@ -94,12 +89,7 @@ impl FrameKind {
     }
 }
 
-pub struct ServiceMetadataFrame {
-    pub service_name: String,
-
-    pub turn_strategy: Option<TurnStrategy>,
-}
-
+#[derive(Clone)]
 pub struct RawAudioFrame {
     pub audio: Vec<u8>,
     pub sample_rate: u32,
@@ -122,6 +112,7 @@ pub struct MtTextFrame {
     pub text: String,
 }
 
+#[derive(Clone)]
 pub struct TtsAudioFrame {
     pub audio: Vec<u8>,
     pub sample_rate: u32,
