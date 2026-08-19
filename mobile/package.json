@@ -23,6 +23,7 @@
     "@rn-primitives/tabs": "^1.5.2",
     "@rn-primitives/toast": "^1.5.2",
     "@rn-primitives/tooltip": "^1.5.2",
+    "@tanstack/react-form": "^1.33.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "expo": "~54.0.0",
