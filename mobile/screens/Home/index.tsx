@@ -82,7 +82,10 @@ export default function HomeScreen() {
             <Text variant="muted" className="text-[11px] font-medium uppercase tracking-[0.14em]">
               Agents
             </Text>
-            <Pressable className="flex-row items-center gap-1">
+            <Pressable
+              className="flex-row items-center gap-1"
+              onPress={() => router.push("/agents")}
+            >
               <Text className="text-xs font-medium">All</Text>
               <ChevronRight size={14} strokeWidth={1.75} color="#3c3832" />
             </Pressable>
@@ -108,14 +111,10 @@ export default function HomeScreen() {
 
         {/* Recent Calls */}
         <View className="mt-8">
-          <View className="flex-row items-center justify-between px-5">
+          <View className="px-5">
             <Text variant="muted" className="text-[11px] font-medium uppercase tracking-[0.14em]">
               Recent calls
             </Text>
-            <Pressable className="flex-row items-center gap-1">
-              <Text className="text-xs font-medium">Call log</Text>
-              <ChevronRight size={14} strokeWidth={1.75} color="#3c3832" />
-            </Pressable>
           </View>
 
           <Card className="mx-5 mt-3 overflow-hidden">
