@@ -1,33 +1,10 @@
 use async_trait::async_trait;
-use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::{self, Receiver};
-use tokio::task::JoinHandle;
 
-use crate::frames::frames::MtUsageFrame;
-use crate::services::mt::provider::{MtError, MtEvent, MtGeneration, MtProvider};
+use crate::frames::frames::{MtTextFrame, MtUsageFrame};
+use crate::services::mt::provider::{MtError, MtProvider};
 
 const ENDPOINT: &str = "https://openrouter.ai/api/v1/chat/completions";
-
-const EVENT_CHANNEL_CAPACITY: usize = 32;
-
-pub struct OpenRouterMtProvider {
-    api_key: String,
-    model: MtModel,
-    system_prompt: Option<String>,
-    client: reqwest::Client,
-}
-
-impl OpenRouterMtProvider {
-    pub fn new(api_key: String, model: MtModel, system_prompt: Option<String>) -> Self {
-        Self {
-            api_key,
-            model,
-            system_prompt,
-            client: reqwest::Client::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MtModel {
@@ -115,118 +92,76 @@ impl SarvamModel {
     }
 }
 
+pub struct OpenRouterMtProvider {
+    pub api_key: String,
+    pub model: MtModel,
+    pub system_prompt: Option<String>,
+}
+
+impl OpenRouterMtProvider {
+    pub fn new(api_key: String, model: MtModel, system_prompt: Option<String>) -> Self {
+        Self {
+            api_key,
+            model,
+            system_prompt,
+        }
+    }
+}
+
 #[async_trait]
 impl MtProvider for OpenRouterMtProvider {
     fn name(&self) -> &'static str {
         "openrouter"
     }
 
-    async fn stream(
-        &self,
-        text: &str,
-    ) -> Result<(Box<dyn MtGeneration>, Receiver<MtEvent>), MtError> {
-        let mut messages = Vec::with_capacity(2);
-        if let Some(prompt) = &self.system_prompt {
-            messages.push(WireMessage {
-                role: MessageRole::System,
-                content: prompt.clone(),
-            });
-        }
-        messages.push(WireMessage {
-            role: MessageRole::User,
-            content: text.to_string(),
-        });
-
-        let body = ChatCompletionRequest {
-            model: self.model.slug(),
-            stream: true,
-            messages,
-        };
-
-        let response = self
-            .client
+    async fn send(&self, text: &str) -> Result<(MtTextFrame, MtUsageFrame), MtError> {
+        let response = reqwest::Client::new()
             .post(ENDPOINT)
             .bearer_auth(&self.api_key)
-            .json(&body)
+            .json(&ChatCompletionRequest {
+                model: self.model.slug(),
+                stream: false,
+                messages: vec![
+                    WireMessage {
+                        role: MessageRole::System,
+                        content: self.system_prompt.clone().unwrap_or_else(|| {
+                            "You are a helpful assistant that translates text.".to_string()
+                        }),
+                    },
+                    WireMessage {
+                        role: MessageRole::User,
+                        content: text.to_string(),
+                    },
+                ],
+            })
             .send()
             .await
-            .map_err(|e| MtError::Connection(e.to_string()))?;
+            .map_err(|error| MtError::Connection(error.to_string()))?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(MtError::Rejected(format!("{status}: {text}")));
+            return Err(MtError::Rejected(response.text().await.unwrap_or_default()));
         }
 
-        let (tx, rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
-        let task = tokio::spawn(async move {
-            let mut stream = response.bytes_stream();
+        let response: ChatCompletionResponse = response
+            .json()
+            .await
+            .map_err(|error| MtError::Protocol(error.to_string()))?;
 
-            let mut buffer: Vec<u8> = Vec::new();
+        let text = response
+            .choices
+            .into_iter()
+            .next()
+            .ok_or_else(|| MtError::Protocol("OpenRouter returned no choices".to_string()))?
+            .message
+            .content;
 
-            while let Some(chunk) = stream.next().await {
-                let chunk = match chunk {
-                    Ok(c) => c,
-                    Err(e) => {
-                        tracing::warn!("openrouter: stream read error, closing: {e}");
-                        break;
-                    }
-                };
-                buffer.extend_from_slice(&chunk);
+        let Some(usage) = response.usage else {
+            return Err(MtError::Protocol(
+                "OpenRouter returned no usage info".to_string(),
+            ));
+        };
 
-                while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
-                    let line_bytes: Vec<u8> = buffer.drain(..=pos).collect();
-                    let line = String::from_utf8_lossy(&line_bytes[..line_bytes.len() - 1]);
-                    let line = line.trim_end_matches('\r');
-
-                    let Some(data) = line.strip_prefix("data: ") else {
-                        continue;
-                    };
-                    if data == "[DONE]" {
-                        return;
-                    }
-                    let chunk: StreamChunk = match serde_json::from_str(data) {
-                        Ok(c) => c,
-                        Err(e) => {
-                            tracing::trace!("openrouter: dropping unparsable chunk: {e}");
-                            continue;
-                        }
-                    };
-                    if let Some(usage) = chunk.usage
-                        && tx.send(MtEvent::Usage(usage)).await.is_err()
-                    {
-                        return;
-                    }
-
-                    let Some(content) = chunk
-                        .choices
-                        .into_iter()
-                        .next()
-                        .and_then(|choice| choice.delta.content)
-                    else {
-                        continue;
-                    };
-                    if !content.is_empty() && tx.send(MtEvent::TextDelta(content)).await.is_err() {
-                        return;
-                    }
-                }
-            }
-        });
-
-        Ok((
-            Box::new(OpenRouterMtGeneration { task }) as Box<dyn MtGeneration>,
-            rx,
-        ))
-    }
-}
-
-struct OpenRouterMtGeneration {
-    task: JoinHandle<()>,
-}
-
-impl MtGeneration for OpenRouterMtGeneration {
-    fn cancel(self: Box<Self>) {
-        self.task.abort();
+        Ok((MtTextFrame { text }, usage))
     }
 }
 
@@ -237,6 +172,22 @@ struct ChatCompletionRequest {
     stream: bool,
 
     messages: Vec<WireMessage>,
+}
+
+#[derive(Deserialize)]
+struct ChatCompletionResponse {
+    choices: Vec<CompletionChoice>,
+    usage: Option<MtUsageFrame>,
+}
+
+#[derive(Deserialize)]
+struct CompletionChoice {
+    message: CompletionMessage,
+}
+
+#[derive(Deserialize)]
+struct CompletionMessage {
+    content: String,
 }
 
 #[derive(Serialize)]
@@ -250,21 +201,4 @@ enum MessageRole {
 struct WireMessage {
     role: MessageRole,
     content: String,
-}
-
-#[derive(Deserialize)]
-struct StreamChunk {
-    choices: Vec<StreamChoice>,
-
-    usage: Option<MtUsageFrame>,
-}
-
-#[derive(Deserialize)]
-struct StreamChoice {
-    delta: StreamDelta,
-}
-
-#[derive(Deserialize, Default)]
-struct StreamDelta {
-    content: Option<String>,
 }

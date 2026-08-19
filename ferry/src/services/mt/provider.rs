@@ -1,17 +1,6 @@
 use async_trait::async_trait;
-use tokio::sync::mpsc::Receiver;
 
-use crate::frames::frames::MtUsageFrame;
-
-pub enum MtEvent {
-    TextDelta(String),
-
-    Usage(MtUsageFrame),
-}
-
-pub trait MtGeneration: Send {
-    fn cancel(self: Box<Self>);
-}
+use crate::frames::frames::{MtTextFrame, MtUsageFrame};
 
 #[derive(Debug)]
 pub enum MtError {
@@ -36,8 +25,5 @@ impl std::error::Error for MtError {}
 pub trait MtProvider: Send {
     fn name(&self) -> &'static str;
 
-    async fn stream(
-        &self,
-        text: &str,
-    ) -> Result<(Box<dyn MtGeneration>, Receiver<MtEvent>), MtError>;
+    async fn send(&self, text: &str) -> Result<(MtTextFrame, MtUsageFrame), MtError>;
 }
