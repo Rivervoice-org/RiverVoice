@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::audio::rnnoise::RnnoiseFilter;
 use crate::config::{self, Config};
+use crate::frames::frames::{Frame, FrameKind, UserTurnAggregationFrame};
 use crate::http::response::ApiResponse;
 use crate::observer::latency_observer::LatencyObserver;
 use crate::observer::log_observer::LogObserver;
@@ -16,7 +17,8 @@ use crate::pipeline::pipeline::Pipeline;
 use crate::serializer::stt::deepgram::DeepgramSerializer;
 use crate::serializer::transport::webrtc_dc::WebRtcSerializer;
 use crate::serializer::tts::sarvam::SarvamSerializer;
-use crate::services::mt::openrouter::{DeepSeekModel, MtModel, OpenRouterMtProvider};
+use crate::services::mt::openrouter::{DeepSeekModel, MtModel};
+use crate::services::mt::sarvam::SarvamMtProvider;
 use crate::services::stt::deepgram::{DeepgramSttConfig, DeepgramSttProvider};
 use crate::services::stt::language::Language;
 use crate::services::stt::provider::{SttConfig, SttConfigKind};
@@ -26,10 +28,8 @@ use crate::stages::denoiser::DenoiserStage;
 use crate::stages::mt::MtStage;
 use crate::stages::stt::SttStage;
 use crate::stages::tts::TtsStage;
-use crate::stages::user_aggregator::UserAggregatorStage;
 use crate::transport::base::BaseTransport;
 use crate::transport::webrtc::transport::WebRtcClient;
-use crate::turns::controller::TurnController;
 
 const SAMPLE_RATE: u32 = 16_000;
 const NUM_CHANNELS: u16 = 1;
@@ -57,7 +57,6 @@ pub async fn webrtc_offer(
     })?;
 
     let frame_io = build_pipeline(config);
-
     let serializer = WebRtcSerializer::new(SAMPLE_RATE, NUM_CHANNELS);
     let base = BaseTransport::new(frame_io, serializer);
 
@@ -78,12 +77,41 @@ pub async fn webrtc_offer(
     ))
 }
 
+pub async fn test_mt() -> Result<ApiResponse<&'static str>, ApiResponse<()>> {
+    let config = config::get().map_err(|e| {
+        ApiResponse::fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("server misconfigured: {e}"),
+        )
+    })?;
+
+    let frame_io = build_pipeline(config);
+    if !frame_io
+        .push(Frame::new(FrameKind::UserTurnAggregation(
+            UserTurnAggregationFrame {
+                text: "హలో ఎలా ఉన్నారు".to_string(),
+            },
+        )))
+        .await
+    {
+        return Err(ApiResponse::fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "MT pipeline is closed",
+        ));
+    }
+
+    Ok(ApiResponse::ok(
+        StatusCode::OK,
+        "MT frame pushed to pipeline",
+    ))
+}
+
 fn build_pipeline(config: &Config) -> crate::processor::processor::FrameIo {
     let stt_serializer: Arc<
         dyn crate::serializer::serializer::FrameSerializer<
                 Message = tokio_tungstenite::tungstenite::Message,
             >,
-    > = Arc::new(DeepgramSerializer::new());
+    > = Arc::new(DeepgramSerializer::new(SAMPLE_RATE));
     let tts_serializer: Arc<
         dyn crate::serializer::serializer::FrameSerializer<
                 Message = tokio_tungstenite::tungstenite::Message,
@@ -97,10 +125,10 @@ fn build_pipeline(config: &Config) -> crate::processor::processor::FrameIo {
         SttConfigKind::DeepgramSttConfig(DeepgramSttConfig::new()),
     );
 
-    let mt_provider = OpenRouterMtProvider::new(
-        config.openrouter_api_key.to_string(),
-        MtModel::DeepSeek(DeepSeekModel::V4Flash),
-        Some(SYSTEM_PROMPT.to_string()),
+    let mt_provider = SarvamMtProvider::new(
+        config.sarvam_tts_api_key.to_string(),
+        Language::Te,
+        Language::En,
     );
 
     let tts_provider =
@@ -112,23 +140,19 @@ fn build_pipeline(config: &Config) -> crate::processor::processor::FrameIo {
         TtsConfigKind::SarvamTtsConfig(SarvamTtsConfig::new()),
     );
 
-    let turn_controller = TurnController::new(None, crate::turns::controller::DEFAULT_STOP_TIMEOUT)
-        .with_default_start_strategies();
-
     let stages: Vec<Box<dyn crate::processor::processor::FrameProcessor>> = vec![
-        Box::new(DenoiserStage::new(vec![Box::new(RnnoiseFilter::new())])),
-        Box::new(SttStage::new(
-            Box::new(stt_provider),
-            stt_config,
-            stt_serializer,
-        )),
-        Box::new(UserAggregatorStage::new(turn_controller)),
+        // Box::new(DenoiserStage::new(vec![Box::new(RnnoiseFilter::new())])),
+        // Box::new(SttStage::new(
+        //     Box::new(stt_provider),
+        //     stt_config,
+        //     stt_serializer,
+        // )),
         Box::new(MtStage::new(Box::new(mt_provider))),
-        Box::new(TtsStage::new(
-            Box::new(tts_provider),
-            tts_config,
-            tts_serializer,
-        )),
+        // Box::new(TtsStage::new(
+        //     Box::new(tts_provider),
+        //     tts_config,
+        //     tts_serializer,
+        // )),
     ];
 
     let usage_observer = Arc::new(UsageObserver::new());

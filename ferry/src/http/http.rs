@@ -36,7 +36,8 @@ fn http_routes() -> Router {
 fn call_routes() -> Router {
     Router::new()
         .route("/v1/webrtc/offer", post(handlers::webrtc_offer))
-        .route_layer(middleware::from_fn(require_session))
+        .route("/v1/test/mt", get(handlers::test_mt))
+    // .route_layer(middleware::from_fn(require_session))
 }
 
 // fn twilio_routes() -> Router {
