@@ -13,6 +13,7 @@ export default function RootLayout() {
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="call-detail" />
+          <Stack.Screen name="transcript" />
         </Stack>
         <PortalHost />
         <StatusBar style="dark" />
