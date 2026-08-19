@@ -348,9 +348,9 @@ export default function CallDetailScreen() {
 
         {/* Actions */}
         <View className="mx-5 mt-8">
-          <Button variant="outline" className="h-12">
-            <Mascot seed="retry-agent" size={16} />
-            <Text className="text-sm font-medium">New call</Text>
+          <Button size="lg">
+            <Phone size={16} strokeWidth={2} color="#fcfbf9" />
+            <Text className="text-sm font-medium text-primary-foreground">Call</Text>
           </Button>
         </View>
       </ScrollView>

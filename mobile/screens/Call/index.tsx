@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { View, SectionList, Pressable, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Search, Phone, Users } from "lucide-react-native";
+import { Search, Phone, Users, X } from "lucide-react-native";
 import * as Contacts from "expo-contacts";
 import { Mascot } from "@/components/Mascot";
 import { Input } from "@/components/ui/input";
@@ -88,20 +88,29 @@ export default function CallScreen() {
       {/* Search */}
       <View className="px-5 pt-2 pb-2">
         <View className="relative">
-          <Search
-            size={16}
-            strokeWidth={1.75}
-            color="#8f8c87"
-            className="absolute left-3 top-3 z-10"
-          />
+          {/* NativeWind cannot position lucide's Svg, so the icon sits in a
+              view that is styled instead. The z-index keeps the input's
+              background from painting over it. */}
+          <View className="pointer-events-none absolute top-0 bottom-0 left-3 z-10 justify-center">
+            <Search size={16} strokeWidth={1.75} color="#8f8c87" />
+          </View>
           <Input
-            className="pl-9"
+            className="pl-9 pr-9"
             placeholder="Search"
             placeholderTextColor="#b0ada7"
             value={search}
             onChangeText={setSearch}
             autoCapitalize="none"
           />
+          {search.length > 0 && (
+            <Pressable
+              onPress={() => setSearch("")}
+              hitSlop={8}
+              className="absolute top-0 bottom-0 right-2 z-10 justify-center"
+            >
+              <X size={14} strokeWidth={1.75} color="#8f8c87" />
+            </Pressable>
+          )}
         </View>
       </View>
 
