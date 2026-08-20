@@ -6,7 +6,12 @@ import {
 } from "react-native-webrtc";
 
 import { postOffer, SignalingError } from "./signaling";
-import { decodeWireMessage, type TranscriptMessage } from "./wire";
+import {
+  decodeWireMessage,
+  WireMessageKind,
+  type TranscriptMessage,
+  type TranslationMessage,
+} from "./wire";
 
 export enum CallStatus {
   Idle = "idle",
@@ -19,6 +24,7 @@ export enum CallStatus {
 export type FerryCallEvents = {
   onStatusChange: (status: CallStatus) => void;
   onTranscript: (message: TranscriptMessage) => void;
+  onTranslation: (message: TranslationMessage) => void;
   onError: (message: string) => void;
 };
 
@@ -127,8 +133,10 @@ export class FerryCall {
       dc.binaryType = "arraybuffer";
       dc.onmessage = (event: { data: ArrayBuffer }) => {
         const message = decodeWireMessage(event.data);
-        if (message.kind === "transcript") {
+        if (message.kind === WireMessageKind.Transcript) {
           this.events.onTranscript(message.transcript);
+        } else if (message.kind === WireMessageKind.Translation) {
+          this.events.onTranslation(message.translation);
         }
       };
       this.dataChannel = dc;

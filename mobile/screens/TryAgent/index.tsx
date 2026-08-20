@@ -1,13 +1,13 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { View, Pressable, ScrollView, Animated, Easing } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
-import { X, PhoneOff, Mic, MicOff } from "lucide-react-native";
+import { X, PhoneOff, Mic, MicOff, Globe } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { TranscriptPhase } from "@/components/Transcript";
 import { Text } from "@/components/ui/text";
 import { CallStatus } from "@/lib/webrtc/ferry-call";
-import { useFerryCall } from "@/hooks/use-ferry-call";
+import { Speaker, useFerryCall, type ConversationLine } from "@/hooks/use-ferry-call";
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -61,39 +61,60 @@ function PulsingRing({ active, children }: { active: boolean; children: React.Re
 }
 
 /**
- * Live captions of the caller's own speech, as ferry streams them (see
- * ferry/src/stages/stt.rs's per-chunk `Transcription` frames). The agent's
- * translated reply isn't captioned here — only its audio comes back, over
- * the WebRTC track — so this only ever renders "caller" bubbles: one per
- * finished utterance, plus the in-progress one still being transcribed.
+ * Live conversation: your captioned speech ("caller") interleaved with
+ * ferry's translated text ("agent") — both come off the same data channel
+ * from ferry/src/stages/stt.rs (Transcription frames) and
+ * ferry/src/stages/tts.rs (MtText frames), already in true chronological
+ * order by the time they reach `conversation`. Only the translated *text*
+ * is captioned here; the agent's actual voice comes back separately over
+ * the WebRTC audio track, not through this data channel.
  *
  * Memoized so the per-second duration tick in the screen never re-renders
- * the bubbles — this only changes when a new caption line arrives.
+ * the bubbles — this only changes when a new line arrives.
  */
 const Transcript = memo(function Transcript({
-  lines,
+  conversation,
   interim,
   phase,
+  agentName,
 }: {
-  lines: string[];
+  conversation: ConversationLine[];
   interim: string;
   phase: TranscriptPhase;
+  agentName: string;
 }) {
   return (
     <View className="gap-3">
-      {lines.map((text, index) => (
-        <View key={index} className="items-start">
-          <View className="max-w-[85%] rounded-2xl rounded-tl-md border border-border bg-secondary px-3.5 py-2.5">
-            <View className="flex-row items-center gap-1.5">
-              <Mic size={10} strokeWidth={2} color="#8f8c87" />
-              <Text className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground">
-                You
-              </Text>
+      {conversation.map((line, index) => {
+        const isAgent = line.speaker === Speaker.Agent;
+        return (
+          <View key={index} className={isAgent ? "items-end" : "items-start"}>
+            <View
+              className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 ${
+                isAgent
+                  ? "rounded-tr-md border border-border bg-card"
+                  : "rounded-tl-md border border-border bg-secondary"
+              }`}
+            >
+              <View className="flex-row items-center gap-1.5">
+                {isAgent ? (
+                  <Globe size={10} strokeWidth={2} color="#3b5dab" />
+                ) : (
+                  <Mic size={10} strokeWidth={2} color="#8f8c87" />
+                )}
+                <Text
+                  className={`text-[10px] font-semibold uppercase tracking-[0.08em] ${
+                    isAgent ? "text-muted-foreground" : "text-foreground"
+                  }`}
+                >
+                  {isAgent ? agentName : "You"}
+                </Text>
+              </View>
+              <Text className="mt-1 text-sm leading-snug text-foreground">{line.text}</Text>
             </View>
-            <Text className="mt-1 text-sm leading-snug text-foreground">{text}</Text>
           </View>
-        </View>
-      ))}
+        );
+      })}
 
       {phase === TranscriptPhase.Live && interim.length > 0 && (
         <View className="items-start">
@@ -122,7 +143,8 @@ export default function TryAgentScreen() {
   const insets = useSafeAreaInsets();
   const agentName = params.name || "Your agent";
 
-  const { status, transcript, error, isMuted, start, end, toggleMute } = useFerryCall();
+  const { status, conversation, interimCaption, error, isMuted, start, end, toggleMute } =
+    useFerryCall();
   const phase = callStatusToPhase(status);
 
   const [duration, setDuration] = useState(0);
@@ -140,27 +162,9 @@ export default function TryAgentScreen() {
     return () => clearInterval(interval);
   }, [status]);
 
-  // Reduces the raw interim/final caption stream into committed lines plus
-  // whatever's still being transcribed — each interim event carries the
-  // full current hypothesis for the in-progress utterance, not a delta, so
-  // the latest one simply replaces the last, it isn't appended.
-  const { lines, interim } = useMemo(() => {
-    const committed: string[] = [];
-    let current = "";
-    for (const message of transcript) {
-      if (message.isFinal) {
-        committed.push(message.text);
-        current = "";
-      } else {
-        current = message.text;
-      }
-    }
-    return { lines: committed, interim: current };
-  }, [transcript]);
-
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
-  }, [lines, interim]);
+  }, [conversation, interimCaption]);
 
   function endCall() {
     end();
@@ -214,14 +218,19 @@ export default function TryAgentScreen() {
         </View>
       </View>
 
-      {/* Transcript — fills in with live captions of the caller's speech */}
+      {/* Transcript — fills in with live captions and translations */}
       <ScrollView
         ref={scrollRef}
         className="flex-1"
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
       >
-        <Transcript lines={lines} interim={interim} phase={phase} />
+        <Transcript
+          conversation={conversation}
+          interim={interimCaption}
+          phase={phase}
+          agentName={agentName}
+        />
       </ScrollView>
 
       {/* Footer */}
