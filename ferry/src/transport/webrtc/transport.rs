@@ -40,6 +40,18 @@ const OPUS_SDP_CHANNELS: u16 = 2;
 const FRAME_DURATION_MS: u64 = 20;
 const FRAME_BYTES: usize = (SAMPLE_RATE as usize * FRAME_DURATION_MS as usize / 1000) * 2;
 
+/// The answerer must echo back whatever payload type number the offer used
+/// for a matching codec (JSEP) — not necessarily `OPUS_PAYLOAD_TYPE`, which
+/// is only the number we register the codec under locally. Reads the number
+/// actually written into our own answer SDP so outgoing packets are tagged
+/// with what the client was told to expect.
+fn parse_negotiated_opus_payload_type(sdp: &str) -> Option<u8> {
+    sdp.lines().find_map(|line| {
+        let (pt, rest) = line.strip_prefix("a=rtpmap:")?.split_once(' ')?;
+        rest.starts_with("opus/").then(|| pt.parse().ok())?
+    })
+}
+
 fn opus_codec() -> RTCRtpCodec {
     RTCRtpCodec {
         mime_type: "audio/opus".to_string(),
@@ -80,6 +92,11 @@ pub struct WebRtcClient<S: FrameSerializer<Message = bytes::Bytes>> {
     inbound_audio_rx: Receiver<Frame>,
     output_track: Arc<TrackLocalStaticSample>,
     output_ssrc: u32,
+    /// The Opus payload type actually negotiated in the answer SDP for this
+    /// call — varies per client/call, not the fixed `OPUS_PAYLOAD_TYPE` we
+    /// register our codec under locally. Sending with the wrong value means
+    /// the client silently drops every audio packet as unrecognized.
+    output_payload_type: u8,
     opus_encoder: OpusEncoder,
     /// Accumulates PCM across `TtsAudio` frames (which arrive in
     /// provider-chosen chunk sizes, not 20ms-aligned) until a full Opus
@@ -187,13 +204,23 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
 
         let config = RTCConfigurationBuilder::new().build();
 
+        // Binding to 0.0.0.0 makes the ICE agent advertise 0.0.0.0 itself as
+        // the host candidate address in SDP — an unroutable candidate, not a
+        // wildcard the OS resolves for us. Must be a real, routable
+        // interface address (e.g. the LAN IP mobile clients connect to
+        // ferry on).
+        let bind_ip = crate::config::get()
+            .map_err(|e| anyhow::anyhow!("webrtc: {e}"))?
+            .webrtc_bind_ip
+            .clone();
+
         let peer_connection = PeerConnectionBuilder::new()
             .with_configuration(config)
             .with_media_engine(media_engine)
             .with_interceptor_registry(registry)
             .with_handler(handler)
             .with_runtime(runtime)
-            .with_udp_addrs(vec!["0.0.0.0:0".to_string()])
+            .with_udp_addrs(vec![format!("{bind_ip}:0")])
             .build()
             .await?;
 
@@ -231,6 +258,9 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
             .ok_or_else(|| anyhow::anyhow!("webrtc: no local description after ICE gathering"))?
             .sdp;
 
+        let output_payload_type =
+            parse_negotiated_opus_payload_type(&answer_sdp).unwrap_or(OPUS_PAYLOAD_TYPE);
+
         let opus_encoder = OpusEncoder::new().map_err(|e| anyhow::anyhow!("webrtc: {e}"))?;
 
         Ok((
@@ -241,6 +271,7 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                 inbound_audio_rx,
                 output_track,
                 output_ssrc,
+                output_payload_type,
                 opus_encoder,
                 pcm_buffer: Vec::new(),
             },
@@ -275,7 +306,7 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
             };
             match self
                 .output_track
-                .write_sample(self.output_ssrc, OPUS_PAYLOAD_TYPE, &sample, &[])
+                .write_sample(self.output_ssrc, self.output_payload_type, &sample, &[])
                 .await
             {
                 Ok(()) => {
@@ -283,7 +314,7 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                     tracing::debug!(
                         "webrtc: wrote opus frame #{frames_sent}, {opus_len} bytes, ssrc={}, payload_type={}",
                         self.output_ssrc,
-                        OPUS_PAYLOAD_TYPE
+                        self.output_payload_type
                     );
                 }
                 Err(e) => {

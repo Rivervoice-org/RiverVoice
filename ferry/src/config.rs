@@ -20,6 +20,7 @@ pub struct Config {
     pub twilio_from_number: String,
     pub twilio_to_number: String,
     pub public_base_url: String,
+    pub webrtc_bind_ip: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -58,6 +59,10 @@ struct RawConfig {
     twilio_to_number: String,
     #[validate(length(min = 1, message = "PUBLIC_BASE_URL is not set"))]
     public_base_url: String,
+    // No #[validate]: has a sane default (0.0.0.0) for same-machine dev,
+    // but must be a real, routable interface address (e.g. the LAN IP
+    // mobile clients reach ferry on) for WebRTC audio to actually work.
+    webrtc_bind_ip: String,
 }
 
 #[derive(Clone)]
@@ -91,6 +96,8 @@ impl Config {
             twilio_from_number: std::env::var("TWILIO_FROM_NUMBER").unwrap_or_default(),
             twilio_to_number: std::env::var("TWILIO_TO_NUMBER").unwrap_or_default(),
             public_base_url: std::env::var("PUBLIC_BASE_URL").unwrap_or_default(),
+            webrtc_bind_ip: std::env::var("WEBRTC_BIND_IP")
+                .unwrap_or_else(|_| "0.0.0.0".to_string()),
         };
 
         raw.validate().map_err(ConfigError)?;
@@ -107,6 +114,7 @@ impl Config {
             twilio_from_number: raw.twilio_from_number,
             twilio_to_number: raw.twilio_to_number,
             public_base_url: raw.public_base_url,
+            webrtc_bind_ip: raw.webrtc_bind_ip,
         })
     }
 }

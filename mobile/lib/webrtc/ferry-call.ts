@@ -1,4 +1,5 @@
 import InCallManager from "react-native-incall-manager";
+import { DeviceEventEmitter } from "react-native";
 import {
   MediaStream,
   RTCPeerConnection,
@@ -78,7 +79,7 @@ export class FerryCall {
     // no audible output at all. Must happen before media starts flowing.
     // Best-effort: a failure here (native module hiccup) shouldn't take the
     // whole call down — worst case, audio routing just isn't guaranteed.
-    startInCallManager();
+    startInCallManager(() => this.aborted);
 
     try {
       const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
@@ -119,12 +120,12 @@ export class FerryCall {
             "muted:",
             event.track.muted
           );
-          // A remote track starts muted and fires `unmute` the instant the
-          // first real RTP packet arrives — negotiation succeeding (ontrack
-          // firing) doesn't mean any audio packets actually showed up.
+          // Fires as soon as the track is created during SDP negotiation,
+          // not when real RTP packets actually arrive — not proof audio is
+          // flowing, just that negotiation reached this point.
           event.track.addEventListener("unmute", () => {
             console.log(
-              "[ferry] remote track unmuted — audio packets are arriving:",
+              "[ferry] remote track unmuted:",
               event.track.id
             );
           });
@@ -139,6 +140,11 @@ export class FerryCall {
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "connected") {
           this.setStatus(CallStatus.Connected);
+          // Belt-and-braces re-assertion: only runs on whichever call
+          // instance actually reaches "connected", so a second StrictMode
+          // instance's teardown can't undo it the way the earlier
+          // startInCallManager()-time attempt could.
+          this.setSpeakerOn(true);
         } else if (pc.connectionState === "failed" || pc.connectionState === "closed") {
           this.teardown();
           this.setStatus(CallStatus.Ended);
@@ -252,13 +258,80 @@ export class FerryCall {
   }
 }
 
-function startInCallManager(): void {
+// react-native-incall-manager builds its list of available audio routes
+// (audioDevices) asynchronously, on the native UI thread, via its own
+// internal updateAudioDeviceState() — start() only *schedules* that, it
+// doesn't wait for it. Calling setForceSpeakerphoneOn() immediately after
+// start() races that: if the device list is still empty when it runs, the
+// library's own guard (`if (!audioDevices.contains(device)) return;`)
+// silently rejects the request and falls back to its own default (earpiece
+// for a plain audio call) — confirmed via `adb logcat`:
+// "selectAudioDevice() Can not select SPEAKER_PHONE from available []".
+//
+// Rather than guessing how long that takes, wait for the real signal: the
+// native module emits "onAudioDeviceChanged" (with the current device
+// list) every time it updates its state, including right after start().
+// We only force speakerphone once SPEAKER_PHONE actually shows up in that
+// list. A timeout is kept as a safety net in case the event never fires
+// (e.g. a library/platform variant without it) — without one, a stalled
+// event would leave the call silently stuck on whatever default route it
+// picked, with the user never told why.
+const SPEAKER_WAIT_TIMEOUT_MS = 2_000;
+
+type AudioDeviceChangedEvent = { availableAudioDeviceList?: string };
+
+function waitForSpeakerAvailable(timeoutMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) {
+        return;
+      }
+      done = true;
+      subscription.remove();
+      clearTimeout(timeout);
+      resolve();
+    };
+
+    const subscription = DeviceEventEmitter.addListener(
+      "onAudioDeviceChanged",
+      (event: AudioDeviceChangedEvent) => {
+        try {
+          const devices: string[] = event.availableAudioDeviceList
+            ? JSON.parse(event.availableAudioDeviceList)
+            : [];
+          if (devices.includes("SPEAKER_PHONE")) {
+            finish();
+          }
+        } catch (e) {
+          console.warn("[ferry] failed to parse onAudioDeviceChanged payload:", e);
+        }
+      }
+    );
+
+    const timeout = setTimeout(finish, timeoutMs);
+  });
+}
+
+function startInCallManager(isAborted: () => boolean): void {
   try {
     InCallManager.start({ media: "audio" });
     // Default to loudspeaker rather than earpiece — this is a translation
     // agent you talk *through*, not a private phone call, and earpiece
     // routing is exactly what made audio inaudible before this was added.
-    InCallManager.setForceSpeakerphoneOn(true);
+    waitForSpeakerAvailable(SPEAKER_WAIT_TIMEOUT_MS).then(() => {
+      // The call may have already ended by the time this resolves (fast
+      // hang-up, StrictMode abort) — don't force speaker mode back on for
+      // a call that's already been torn down.
+      if (isAborted()) {
+        return;
+      }
+      try {
+        InCallManager.setForceSpeakerphoneOn(true);
+      } catch (e) {
+        console.warn("[ferry] InCallManager.setForceSpeakerphoneOn failed:", e);
+      }
+    });
   } catch (e) {
     console.warn("[ferry] InCallManager.start failed:", e);
   }
