@@ -1,7 +1,10 @@
 use axum::{
     Router,
+    extract::Request,
     http::{HeaderValue, Method, header},
     middleware,
+    middleware::Next,
+    response::Response,
     routing::{get, post},
 };
 use tower_http::cors::CorsLayer;
@@ -29,6 +32,11 @@ fn cors_layer() -> CorsLayer {
         .allow_credentials(true)
 }
 
+async fn log_request(req: Request, next: Next) -> Response {
+    tracing::debug!(method = %req.method(), uri = %req.uri(), "started processing request");
+    next.run(req).await
+}
+
 fn http_routes() -> Router {
     Router::new().route("/health", get(axum::Json("OK")))
 }
@@ -54,9 +62,10 @@ pub async fn start_server() -> anyhow::Result<()> {
         .merge(call_routes())
         // .merge(twilio_routes())
         .layer(TraceLayer::new_for_http())
+        .layer(middleware::from_fn(log_request))
         .layer(cors_layer());
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:8085").await?;
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8085").await?;
     tracing::info!("listening on http://{}", listener.local_addr()?);
 
     axum::serve(listener, router).await?;

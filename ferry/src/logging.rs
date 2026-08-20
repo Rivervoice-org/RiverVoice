@@ -31,6 +31,12 @@ pub fn init() {
                 .init();
         }
         Environment::Dev => {
+            // Windows consoles don't interpret ANSI escape codes by default —
+            // without this, every `paint()` call below just prints raw
+            // escape sequences (or nothing) instead of actual color.
+            #[cfg(windows)]
+            let _ = nu_ansi_term::enable_ansi_support();
+
             tracing_subscriber::fmt()
                 .event_format(ColorEventFormatter)
                 .with_env_filter(filter)
@@ -60,6 +66,13 @@ fn level_color(level: &Level) -> Color {
     }
 }
 
+// One consistent color per log *kind* — so "this is a metrics line" / "this
+// is a usage line" is recognizable at a glance regardless of which stage it
+// came from. The stage name itself still gets `stage_color` within that line,
+// so which stage is still visually distinct too.
+const METRICS_COLOR: Color = Color::LightYellow;
+const USAGE_COLOR: Color = Color::LightBlue;
+
 #[derive(Default)]
 struct Captured {
     message: String,
@@ -68,6 +81,17 @@ struct Captured {
     latency_ms: Option<i64>,
     text: Option<String>,
     by_timeout: Option<bool>,
+    // ferry::usage fields — one event only ever carries the subset for its
+    // own frame kind (stt/mt/tts), the rest stay None.
+    audio_seconds: Option<f64>,
+    total_audio_seconds: Option<f64>,
+    prompt_tokens: Option<i64>,
+    completion_tokens: Option<i64>,
+    total_tokens: Option<i64>,
+    total_prompt_tokens: Option<i64>,
+    total_completion_tokens: Option<i64>,
+    characters: Option<i64>,
+    total_characters: Option<i64>,
 }
 
 impl Visit for Captured {
@@ -79,10 +103,25 @@ impl Visit for Captured {
         }
     }
 
+    fn record_f64(&mut self, field: &Field, value: f64) {
+        match field.name() {
+            "audio_seconds" => self.audio_seconds = Some(value),
+            "total_audio_seconds" => self.total_audio_seconds = Some(value),
+            _ => {}
+        }
+    }
+
     fn record_i64(&mut self, field: &Field, value: i64) {
         match field.name() {
             "ttfb_ms" => self.ttfb_ms = Some(value),
             "latency_ms" => self.latency_ms = Some(value),
+            "prompt_tokens" => self.prompt_tokens = Some(value),
+            "completion_tokens" => self.completion_tokens = Some(value),
+            "total_tokens" => self.total_tokens = Some(value),
+            "total_prompt_tokens" => self.total_prompt_tokens = Some(value),
+            "total_completion_tokens" => self.total_completion_tokens = Some(value),
+            "characters" => self.characters = Some(value),
+            "total_characters" => self.total_characters = Some(value),
             _ => {}
         }
     }
@@ -148,16 +187,69 @@ where
             match target {
                 "ferry::metrics" => {
                     let stage = fields.stage.as_deref().unwrap_or("?");
-                    let color = stage_color(stage);
+                    let stage_col = stage_color(stage);
                     write!(
                         w,
-                        "{}: ttfb {}={} {}={}",
-                        target,
-                        paint(color, ansi, "stage"),
-                        paint(color, ansi, stage),
-                        paint(color, ansi, "ttfb_ms"),
-                        paint(color, ansi, &fields.ttfb_ms.unwrap_or_default().to_string()),
+                        "{}: {} {}={} {}={}",
+                        paint(METRICS_COLOR, ansi, target),
+                        paint(METRICS_COLOR, ansi, "ttfb"),
+                        paint(METRICS_COLOR, ansi, "stage"),
+                        paint(stage_col, ansi, stage),
+                        paint(METRICS_COLOR, ansi, "ttfb_ms"),
+                        paint(
+                            METRICS_COLOR,
+                            ansi,
+                            &fields.ttfb_ms.unwrap_or_default().to_string()
+                        ),
                     )?;
+                }
+                "ferry::usage" => {
+                    let stage = fields.stage.as_deref().unwrap_or("?");
+                    let stage_col = stage_color(stage);
+                    let label = |s: &str| paint(USAGE_COLOR, ansi, s);
+
+                    write!(
+                        w,
+                        "{}: {} {}={}",
+                        label(target),
+                        label(&fields.message),
+                        label("stage"),
+                        paint(stage_col, ansi, stage),
+                    )?;
+
+                    match fields.message.as_str() {
+                        "stt_usage" => write!(
+                            w,
+                            " {}={:.2} {}={:.2}",
+                            label("audio_seconds"),
+                            fields.audio_seconds.unwrap_or_default(),
+                            label("total_audio_seconds"),
+                            fields.total_audio_seconds.unwrap_or_default(),
+                        )?,
+                        "mt_usage" => write!(
+                            w,
+                            " {}={} {}={} {}={} {}={} {}={}",
+                            label("prompt_tokens"),
+                            fields.prompt_tokens.unwrap_or_default(),
+                            label("completion_tokens"),
+                            fields.completion_tokens.unwrap_or_default(),
+                            label("total_tokens"),
+                            fields.total_tokens.unwrap_or_default(),
+                            label("total_prompt_tokens"),
+                            fields.total_prompt_tokens.unwrap_or_default(),
+                            label("total_completion_tokens"),
+                            fields.total_completion_tokens.unwrap_or_default(),
+                        )?,
+                        "tts_usage" => write!(
+                            w,
+                            " {}={} {}={}",
+                            label("characters"),
+                            fields.characters.unwrap_or_default(),
+                            label("total_characters"),
+                            fields.total_characters.unwrap_or_default(),
+                        )?,
+                        _ => {}
+                    }
                 }
                 "ferry::latency" => {
                     let color = Color::LightGreen;
