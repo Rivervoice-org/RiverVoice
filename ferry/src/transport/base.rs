@@ -33,6 +33,21 @@ impl<S: FrameSerializer> BaseTransport<S> {
         None
     }
 
+    /// Like [`next_wire_message`](Self::next_wire_message), but hands back the
+    /// raw `Frame` instead of serializing it — for transports (WebRTC) that need
+    /// to route some frame kinds somewhere other than the serializer/wire-message
+    /// path (e.g. `TtsAudio` going out over a real RTP track instead of the data
+    /// channel).
+    pub async fn next_frame(&mut self) -> Option<Frame> {
+        self.io.take().await
+    }
+
+    /// Serializes a single frame already pulled via [`next_frame`](Self::next_frame)
+    /// into a wire message, for the caller to send after handling it specially.
+    pub fn serialize(&self, frame: Frame) -> anyhow::Result<S::Message> {
+        self.serializer.serialize(frame)
+    }
+
     pub async fn push_frame(&self, frame: Frame) -> bool {
         self.io.push(frame).await
     }
