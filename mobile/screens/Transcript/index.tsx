@@ -3,6 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { ChevronLeft, Globe, Mic, User } from "lucide-react-native";
 import { Text } from "@/components/ui/text";
+import { Rise } from "@/motion/rise";
 import { TRANSCRIPT, type TranscriptEntry } from "./mock";
 
 function TranscriptBubble({ entry }: { entry: TranscriptEntry }) {
@@ -105,7 +106,9 @@ export default function TranscriptScreen() {
       >
         <View className="gap-3">
           {TRANSCRIPT.map((entry, index) => (
-            <TranscriptBubble key={index} entry={entry} />
+            <Rise key={index} delay={index * 60}>
+              <TranscriptBubble entry={entry} />
+            </Rise>
           ))}
         </View>
       </ScrollView>

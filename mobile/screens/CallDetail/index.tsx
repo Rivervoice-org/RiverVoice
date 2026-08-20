@@ -25,6 +25,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
+import { Equalizer } from "@/motion/equalizer";
+import { PulseRing } from "@/motion/pulse-ring";
+import { Rise } from "@/motion/rise";
 import { TRANSCRIPT } from "@/screens/Transcript/mock";
 import { CALL_HISTORY, WAVEFORM } from "./mock";
 
@@ -136,12 +139,15 @@ export default function CallDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Hero card */}
-        <Card className="mx-5 items-center p-6">
-          {params.name || params.agent ? (
-            <View className="h-16 w-16 overflow-hidden rounded-full bg-secondary">
-              <Mascot seed={params.name || params.agent} size={64} />
-            </View>
-          ) : (
+        <Rise>
+          <Card className="mx-5 items-center p-6">
+            {params.name || params.agent ? (
+              <PulseRing size={64} duration={2400}>
+                <View className="h-16 w-16 overflow-hidden rounded-full bg-secondary">
+                  <Mascot seed={params.name || params.agent} size={64} />
+                </View>
+              </PulseRing>
+            ) : (
             <View className="h-16 w-16 items-center justify-center rounded-full bg-secondary">
               <Phone size={24} strokeWidth={1.75} color="#8f8c87" />
             </View>
@@ -181,20 +187,22 @@ export default function CallDetailScreen() {
           </Badge>
 
           <View className="mt-4 flex-row items-center gap-4">
-            <View className="flex-row items-center gap-1.5">
-              <CalendarDays size={12} strokeWidth={1.75} color="#8f8c87" />
-              <Text variant="muted" className="text-xs">{params.time}</Text>
+              <View className="flex-row items-center gap-1.5">
+                <CalendarDays size={12} strokeWidth={1.75} color="#8f8c87" />
+                <Text variant="muted" className="text-xs">{params.time}</Text>
+              </View>
+              <View className="h-3 w-px bg-border" />
+              <View className="flex-row items-center gap-1.5">
+                <Clock size={12} strokeWidth={1.75} color="#8f8c87" />
+                <Text font="mono" variant="muted" className="text-xs">{params.duration}</Text>
+              </View>
             </View>
-            <View className="h-3 w-px bg-border" />
-            <View className="flex-row items-center gap-1.5">
-              <Clock size={12} strokeWidth={1.75} color="#8f8c87" />
-              <Text font="mono" variant="muted" className="text-xs">{params.duration}</Text>
-            </View>
-          </View>
-        </Card>
+          </Card>
+        </Rise>
 
         {/* Stats */}
-        <View className="mx-5 mt-4 flex-row flex-wrap gap-3">
+        <Rise delay={70}>
+          <View className="mx-5 mt-4 flex-row flex-wrap gap-3">
           <StatCard
             className="w-[47.5%]"
             icon={Clock}
@@ -221,12 +229,14 @@ export default function CallDetailScreen() {
             icon={Phone}
             label="Called from"
             value={params.fromNumber}
-            caption="Your number"
-          />
-        </View>
+caption="Your number"
+            />
+          </View>
+        </Rise>
 
         {/* Recording */}
-        <Card className="mx-5 mt-6 p-4">
+        <Rise delay={140}>
+          <Card className="mx-5 mt-6 p-4">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-2">
               <AudioLines size={15} strokeWidth={1.75} color="#3c3832" />
@@ -249,18 +259,22 @@ export default function CallDetailScreen() {
             </Pressable>
 
             <View className="flex-1">
-              <View className="h-10 flex-row items-center justify-between gap-[2px]">
-                {WAVEFORM.map((height, index) => {
-                  const reached = index / WAVEFORM.length <= progress / 100;
-                  return (
-                    <View
-                      key={index}
-                      className={`flex-1 rounded-full ${reached ? "bg-foreground" : "bg-border"}`}
-                      style={{ height: height * 0.7 }}
-                    />
-                  );
-                })}
-              </View>
+              {playing ? (
+                <Equalizer bars={WAVEFORM.length} height={32} color="#3c3832" />
+              ) : (
+                <View className="h-10 flex-row items-center justify-between gap-[2px]">
+                  {WAVEFORM.map((height, index) => {
+                    const reached = index / WAVEFORM.length <= progress / 100;
+                    return (
+                      <View
+                        key={index}
+                        className={`flex-1 rounded-full ${reached ? "bg-foreground" : "bg-border"}`}
+                        style={{ height: height * 0.7 }}
+                      />
+                    );
+                  })}
+                </View>
+              )}
               <View className="mt-1.5 flex-row items-center justify-between">
                 <Text font="mono" variant="muted" className="text-[11px]">
                   {formatTime(Math.floor((progress / 100) * totalSeconds))}
@@ -280,7 +294,8 @@ export default function CallDetailScreen() {
               <Text className="text-xs font-medium">Share</Text>
             </Button>
           </View>
-        </Card>
+          </Card>
+        </Rise>
 
         {/* Transcription */}
         <Pressable
