@@ -97,6 +97,21 @@ impl FrameProcessor for SttStage {
                     };
 
 
+                    if let SttEvent::Transcript(t) = &event {
+                        if !io
+                            .push(Frame::new(FrameKind::Transcription(
+                                crate::frames::frames::TranscriptionFrame {
+                                    text: t.text.clone(),
+                                    is_final: t.is_final,
+                                },
+                            )))
+                            .await
+                        {
+                            tracing::info!("{}: downstream closed", io.name());
+                            break;
+                        }
+                    }
+
                     if is_user_speaking {
                         if let SttEvent::Transcript(t) = &event {
                             buffer.push_str(&t.text);

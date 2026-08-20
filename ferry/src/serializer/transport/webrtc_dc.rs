@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use serde::Serialize;
 
 use crate::frames::frames::{Frame, FrameKind, RawAudioFrame};
 use crate::serializer::serializer::FrameSerializer;
@@ -11,6 +12,14 @@ pub struct WebRtcSerializer {
 const AUDIO_TAG: u8 = 0x00;
 
 const INTERRUPT_TAG: u8 = 0x01;
+
+const TRANSCRIPT_TAG: u8 = 0x02;
+
+#[derive(Serialize)]
+struct TranscriptPayload<'a> {
+    text: &'a str,
+    is_final: bool,
+}
 
 impl WebRtcSerializer {
     pub fn new(sample_rate: u32, num_channels: u16) -> Self {
@@ -32,8 +41,17 @@ impl FrameSerializer for WebRtcSerializer {
                 payload.extend_from_slice(&audio.audio);
                 Ok(payload.into())
             }
+            FrameKind::Transcription(t) => {
+                let json = serde_json::to_vec(&TranscriptPayload {
+                    text: &t.text,
+                    is_final: t.is_final,
+                })?;
+                let mut payload = Vec::with_capacity(1 + json.len());
+                payload.push(TRANSCRIPT_TAG);
+                payload.extend_from_slice(&json);
+                Ok(payload.into())
+            }
             FrameKind::RawAudio(_)
-            | FrameKind::Transcription(_)
             | FrameKind::UserStartedSpeaking
             | FrameKind::UserStoppedSpeaking
             | FrameKind::UserTurnAggregation(_)

@@ -27,11 +27,13 @@ impl FrameProcessor for MtStage {
                 break;
             };
 
-            let frame_name = frame.get_name();
             let text = match frame.into_kind() {
                 FrameKind::UserTurnAggregation(t) => t.text,
-                _other => {
-                    tracing::warn!("MT stage: ignoring frame {}", frame_name);
+                other => {
+                    if !io.push(Frame::new(other)).await {
+                        tracing::info!("MT stage: downstream closed");
+                        break;
+                    }
                     continue;
                 }
             };

@@ -213,7 +213,7 @@ impl TtsSession for SarvamTtsSession {
 
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
-enum ClientMessage {
+pub(crate) enum ClientMessage {
     Config { data: ConfigData },
     Text { data: TextData },
     Flush,
@@ -244,6 +244,6 @@ struct ConfigData {
 }
 
 #[derive(Serialize)]
-struct TextData {
-    text: String,
+pub(crate) struct TextData {
+    pub text: String,
 }

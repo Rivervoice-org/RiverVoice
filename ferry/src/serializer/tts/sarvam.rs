@@ -4,6 +4,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::frames::frames::{Frame, FrameKind, TtsAudioFrame};
 use crate::serializer::serializer::FrameSerializer;
+use crate::services::tts::sarvam::{ClientMessage, TextData};
 
 pub struct SarvamSerializer {
     sample_rate: u32,
@@ -20,7 +21,12 @@ impl FrameSerializer for SarvamSerializer {
 
     fn serialize(&self, frame: Frame) -> anyhow::Result<Message> {
         match frame.into_kind() {
-            FrameKind::TtsAudio(audio) => Ok(Message::Binary(audio.audio)),
+            FrameKind::MtText(text) => {
+                let msg = ClientMessage::Text {
+                    data: TextData { text: text.text },
+                };
+                Ok(Message::Text(serde_json::to_string(&msg)?))
+            }
             _ => anyhow::bail!("sarvam serializer: no wire representation for this frame yet"),
         }
     }
