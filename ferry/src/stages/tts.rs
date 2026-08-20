@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::frames::frames::{Frame, FrameKind, TtsAudioFrame, TtsUsageFrame};
+use crate::frames::frames::{Frame, FrameKind, MtTextFrame, TtsAudioFrame, TtsUsageFrame};
 use crate::processor::processor::{FrameIo, FrameProcessor};
 use crate::serializer::serializer::FrameSerializer;
 use crate::services::tts::provider::{TtsConfig, TtsEvent, TtsProvider};
@@ -60,6 +60,20 @@ impl FrameProcessor for TtsStage {
                             }
                             io.start_ttfb_metrics();
                             let text_len = t.text.len();
+
+                            // Relay the translated text to the client before
+                            // consuming it for synthesis — otherwise it dies
+                            // here, since this is the only stage that reads
+                            // MtText frames at all.
+                            if !io
+                                .push(Frame::new(FrameKind::MtText(MtTextFrame {
+                                    text: t.text.clone(),
+                                })))
+                                .await
+                            {
+                                break 'run;
+                            }
+
                             match session.send_text(t).await {
                                 Ok(()) => {
                                     tracing::debug!("tts: sent {} chars to sarvam", text_len);

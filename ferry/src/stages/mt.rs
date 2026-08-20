@@ -58,6 +58,15 @@ impl FrameProcessor for MtStage {
                         tracing::info!("MT stage: downstream closed");
                         break;
                     }
+
+                    // Tells TtsStage to flush Sarvam's session — without this,
+                    // Sarvam just buffers the text and only synthesizes audio
+                    // once its own min_buffer_size threshold happens to be
+                    // crossed, which short responses may never reach.
+                    if !io.push(Frame::new(FrameKind::MtResponseEnd)).await {
+                        tracing::info!("MT stage: downstream closed");
+                        break;
+                    }
                 }
                 Err(e) => {
                     tracing::error!(error = %e, "MT provider request failed");

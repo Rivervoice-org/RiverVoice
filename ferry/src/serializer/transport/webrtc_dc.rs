@@ -15,10 +15,17 @@ const INTERRUPT_TAG: u8 = 0x01;
 
 const TRANSCRIPT_TAG: u8 = 0x02;
 
+const TRANSLATION_TAG: u8 = 0x03;
+
 #[derive(Serialize)]
 struct TranscriptPayload<'a> {
     text: &'a str,
     is_final: bool,
+}
+
+#[derive(Serialize)]
+struct TranslationPayload<'a> {
+    text: &'a str,
 }
 
 impl WebRtcSerializer {
@@ -51,12 +58,18 @@ impl FrameSerializer for WebRtcSerializer {
                 payload.extend_from_slice(&json);
                 Ok(payload.into())
             }
+            FrameKind::MtText(t) => {
+                let json = serde_json::to_vec(&TranslationPayload { text: &t.text })?;
+                let mut payload = Vec::with_capacity(1 + json.len());
+                payload.push(TRANSLATION_TAG);
+                payload.extend_from_slice(&json);
+                Ok(payload.into())
+            }
             FrameKind::RawAudio(_)
             | FrameKind::UserStartedSpeaking
             | FrameKind::UserStoppedSpeaking
             | FrameKind::UserTurnAggregation(_)
             | FrameKind::MtResponseStart
-            | FrameKind::MtText(_)
             | FrameKind::MtResponseEnd
             | FrameKind::TtsAudioStart
             | FrameKind::TtsAudioStop
