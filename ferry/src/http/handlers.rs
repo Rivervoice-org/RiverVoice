@@ -3,7 +3,6 @@ use std::sync::Arc;
 use axum::{Json, http::StatusCode};
 use serde::{Deserialize, Serialize};
 
-use crate::audio::rnnoise::RnnoiseFilter;
 use crate::config::{self, Config};
 use crate::frames::frames::{Frame, FrameKind, UserTurnAggregationFrame};
 use crate::http::response::ApiResponse;
@@ -24,7 +23,6 @@ use crate::services::stt::language::Language;
 use crate::services::stt::provider::{SttConfig, SttConfigKind};
 use crate::services::tts::provider::TtsConfigKind;
 use crate::services::tts::sarvam::{SarvamModel, SarvamTtsConfig, SarvamTtsProvider};
-use crate::stages::denoiser::DenoiserStage;
 use crate::stages::mt::MtStage;
 use crate::stages::stt::SttStage;
 use crate::stages::tts::TtsStage;
@@ -141,18 +139,17 @@ fn build_pipeline(config: &Config) -> crate::processor::processor::FrameIo {
     );
 
     let stages: Vec<Box<dyn crate::processor::processor::FrameProcessor>> = vec![
-        // Box::new(DenoiserStage::new(vec![Box::new(RnnoiseFilter::new())])),
-        // Box::new(SttStage::new(
-        //     Box::new(stt_provider),
-        //     stt_config,
-        //     stt_serializer,
-        // )),
+        Box::new(SttStage::new(
+            Box::new(stt_provider),
+            stt_config,
+            stt_serializer,
+        )),
         Box::new(MtStage::new(Box::new(mt_provider))),
-        // Box::new(TtsStage::new(
-        //     Box::new(tts_provider),
-        //     tts_config,
-        //     tts_serializer,
-        // )),
+        Box::new(TtsStage::new(
+            Box::new(tts_provider),
+            tts_config,
+            tts_serializer,
+        )),
     ];
 
     let usage_observer = Arc::new(UsageObserver::new());
