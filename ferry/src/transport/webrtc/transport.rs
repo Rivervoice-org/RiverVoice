@@ -251,6 +251,7 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
     /// Encodes and sends as many complete 20ms Opus frames as `pcm_buffer`
     /// now holds, leaving any partial trailing frame buffered for next time.
     async fn flush_outbound_audio(&mut self) {
+        let mut frames_sent = 0u32;
         while self.pcm_buffer.len() >= FRAME_BYTES {
             let chunk: Vec<u8> = self.pcm_buffer.drain(..FRAME_BYTES).collect();
             let samples: Vec<i16> = chunk
@@ -265,18 +266,29 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                     continue;
                 }
             };
+            let opus_len = opus_bytes.len();
 
             let sample = Sample {
                 data: opus_bytes.into(),
                 duration: std::time::Duration::from_millis(FRAME_DURATION_MS),
                 ..Default::default()
             };
-            if let Err(e) = self
+            match self
                 .output_track
                 .write_sample(self.output_ssrc, OPUS_PAYLOAD_TYPE, &sample, &[])
                 .await
             {
-                tracing::warn!("webrtc: write_sample failed: {e}");
+                Ok(()) => {
+                    frames_sent += 1;
+                    tracing::debug!(
+                        "webrtc: wrote opus frame #{frames_sent}, {opus_len} bytes, ssrc={}, payload_type={}",
+                        self.output_ssrc,
+                        OPUS_PAYLOAD_TYPE
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("webrtc: write_sample failed: {e}");
+                }
             }
         }
     }
@@ -313,6 +325,12 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                     let Some(frame) = frame else { break };
                     match frame.into_kind() {
                         FrameKind::TtsAudio(audio) => {
+                            tracing::debug!(
+                                "webrtc: got TtsAudio frame, {} bytes (sample_rate={}), buffer now {} bytes",
+                                audio.audio.len(),
+                                audio.sample_rate,
+                                self.pcm_buffer.len() + audio.audio.len()
+                            );
                             self.pcm_buffer.extend_from_slice(&audio.audio);
                             self.flush_outbound_audio().await;
                         }
