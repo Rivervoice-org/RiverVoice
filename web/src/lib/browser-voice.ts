@@ -186,9 +186,13 @@ async function openDataChannel(signalingUrl: string): Promise<WebRtcConnection> 
       }),
     });
     const raw = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    const nestedData =
+      raw && typeof raw["data"] === "object" && raw["data"] !== null
+        ? (raw["data"] as Record<string, unknown>)
+        : null;
     const answerSdp =
-      (typeof (raw as any)?.answer_sdp === "string" && (raw as any).answer_sdp) ||
-      (typeof (raw as any)?.data?.answer_sdp === "string" && (raw as any).data.answer_sdp) ||
+      (typeof raw?.["answer_sdp"] === "string" && raw["answer_sdp"]) ||
+      (typeof nestedData?.["answer_sdp"] === "string" && nestedData["answer_sdp"]) ||
       null;
     if (!response.ok || !answerSdp) {
       throw new BrowserVoiceError(
