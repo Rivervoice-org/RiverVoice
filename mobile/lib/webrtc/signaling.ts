@@ -8,7 +8,7 @@
 const DEFAULT_FERRY_URL = "http://127.0.0.1:8085";
 
 function ferryBaseUrl(): string {
-  return process.env.EXPO_PUBLIC_FERRY_URL ?? DEFAULT_FERRY_URL;
+  return DEFAULT_FERRY_URL;
 }
 
 type ApiResponse<T> = {
@@ -28,7 +28,10 @@ export async function postOffer(offerSdp: string): Promise<string> {
 
   let response: Response;
   try {
-    console.log("[ferry] posting offer to", `${ferryBaseUrl()}/v1/webrtc/offer`);
+    console.log(
+      "[ferry] posting offer to",
+      `${ferryBaseUrl()}/v1/webrtc/offer`,
+    );
     response = await fetch(`${ferryBaseUrl()}/v1/webrtc/offer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -40,7 +43,7 @@ export async function postOffer(offerSdp: string): Promise<string> {
       throw new SignalingError("Timed out reaching the call server");
     }
     throw new SignalingError(
-      `Could not reach the call server: ${err instanceof Error ? err.message : String(err)}`
+      `Could not reach the call server: ${err instanceof Error ? err.message : String(err)}`,
     );
   } finally {
     clearTimeout(timeout);
@@ -49,7 +52,9 @@ export async function postOffer(offerSdp: string): Promise<string> {
   const body = (await response.json()) as ApiResponse<{ answer_sdp: string }>;
 
   if (!response.ok || body.error) {
-    throw new SignalingError(body.error?.message ?? `Call server returned ${response.status}`);
+    throw new SignalingError(
+      body.error?.message ?? `Call server returned ${response.status}`,
+    );
   }
   if (!body.data) {
     throw new SignalingError("Call server returned no answer");
