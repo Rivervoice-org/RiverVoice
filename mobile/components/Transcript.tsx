@@ -35,7 +35,7 @@ export const Transcript = memo(function Transcript({
   phase?: TranscriptPhase;
 }) {
   const callerSpeaking =
-    phase === TranscriptPhase.Live && revealed > 0 && lines[revealed - 1].speaker === "caller";
+    phase === TranscriptPhase.Live && revealed > 0 && lines[revealed - 1]?.speaker === "caller";
 
   return (
     <View className="gap-3">

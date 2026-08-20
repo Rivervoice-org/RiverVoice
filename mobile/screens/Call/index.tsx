@@ -98,7 +98,7 @@ export default function CallScreen() {
         .map((c) => ({
           id: c.id,
           name: c.name!,
-          phone: c.phoneNumbers![0].number || "",
+          phone: c.phoneNumbers?.[0]?.number || "",
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
       setContacts(mapped);

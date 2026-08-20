@@ -47,6 +47,14 @@ export default function NumberDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const number = NUMBERS.find((n) => n.id === id) ?? NUMBERS[0];
 
+  if (!number) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["top"]}>
+        <Text variant="muted">Number not found</Text>
+      </SafeAreaView>
+    );
+  }
+
   const live = number.status === "live";
   const recentCalls = NUMBER_CALLS[number.id] ?? [];
   const assignedAgent = number.assignedAgent

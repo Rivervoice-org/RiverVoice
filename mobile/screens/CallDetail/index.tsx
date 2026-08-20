@@ -105,7 +105,7 @@ export default function CallDetailScreen() {
   const OutcomeIcon = outcome.icon;
 
   const [minutes, seconds] = params.duration.split(":").map(Number);
-  const totalSeconds = minutes * 60 + (seconds || 0);
+  const totalSeconds = (minutes || 0) * 60 + (seconds || 0);
   const usedMinutes = Math.max(1, Math.ceil(totalSeconds / 60));
 
   function togglePlay() {
@@ -213,7 +213,7 @@ export default function CallDetailScreen() {
             className="w-[47.5%]"
             icon={Globe}
             label="Language"
-            value={params.language.split("→")[0].trim()}
+            value={(params.language.split("→")[0] ?? params.language).trim()}
             caption={params.language}
           />
           <StatCard

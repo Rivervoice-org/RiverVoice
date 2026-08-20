@@ -45,7 +45,7 @@ function avgDuration(durations: string[]) {
   if (durations.length === 0) return "0:00";
   const totalSeconds = durations.reduce((sum, d) => {
     const [m, s] = d.split(":").map(Number);
-    return sum + m * 60 + (s || 0);
+    return sum + (m || 0) * 60 + (s || 0);
   }, 0);
   const avg = Math.round(totalSeconds / durations.length);
   return `${Math.floor(avg / 60)}:${(avg % 60).toString().padStart(2, "0")}`;
@@ -54,6 +54,14 @@ function avgDuration(durations: string[]) {
 export default function AgentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const agent = AGENTS.find((a) => a.id === id) ?? AGENTS[0];
+
+  if (!agent) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["top"]}>
+        <Text variant="muted">Agent not found</Text>
+      </SafeAreaView>
+    );
+  }
 
   const recentCalls = AGENT_CALLS[agent.id] ?? [];
 

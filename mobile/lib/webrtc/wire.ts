@@ -32,6 +32,9 @@ export type WireMessage =
 /** Decodes one inbound data-channel binary message by its leading tag byte. */
 export function decodeWireMessage(data: ArrayBuffer): WireMessage {
   const bytes = new Uint8Array(data);
+  if (bytes.length === 0) {
+    return { kind: WireMessageKind.Unknown, tag: -1 };
+  }
   const tag = bytes[0];
   const rest = bytes.subarray(1);
 
@@ -50,5 +53,5 @@ export function decodeWireMessage(data: ArrayBuffer): WireMessage {
     return { kind: WireMessageKind.Translation, translation: { text: parsed.text } };
   }
 
-  return { kind: WireMessageKind.Unknown, tag };
+  return { kind: WireMessageKind.Unknown, tag: tag ?? -1 };
 }
