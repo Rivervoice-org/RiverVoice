@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { ScrollView, View, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Constants from "expo-constants";
@@ -31,19 +31,39 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
+const noop = () => {};
+
+/**
+ * Module-level so their identity never changes — a memoized Row has to see
+ * the same icon node across renders or it re-renders anyway.
+ */
+const ICONS = {
+  transcript: <MessageSquareText size={14} strokeWidth={1.75} color="#3c3832" />,
+  bell: <Bell size={14} strokeWidth={1.75} color="#3c3832" />,
+  shield: <ShieldCheck size={14} strokeWidth={1.75} color="#3c3832" />,
+  help: <CircleHelp size={14} strokeWidth={1.75} color="#3c3832" />,
+  headset: <Headphones size={14} strokeWidth={1.75} color="#3c3832" />,
+  doc: <FileText size={14} strokeWidth={1.75} color="#3c3832" />,
+};
+
 /**
  * Every row shares one shape — icon chip, label (+ optional description),
  * then either a trailing control (switch/select) or a chevron if it navigates.
  * The rest of the app puts icons inside a bg-secondary chip (StatCard,
  * CallRow, AgentDetail's numbers list); Settings previously floated bare
  * icons, which is what read as inconsistent.
+ *
+ * Memoized because every toggle lives in SettingsScreen — without it, one
+ * switch flip re-renders all six rows and the mascot picker. The switch is
+ * built here from stable props so only the toggled row sees new props.
  */
-function Row({
+const Row = memo(function Row({
   icon,
   label,
   description,
   value,
-  trailing,
+  switchChecked,
+  onSwitchChange,
   onPress,
   last,
 }: {
@@ -51,10 +71,16 @@ function Row({
   label: string;
   description?: string;
   value?: string;
-  trailing?: React.ReactNode;
+  switchChecked?: boolean;
+  onSwitchChange?: (checked: boolean) => void;
   onPress?: () => void;
   last?: boolean;
 }) {
+  const control =
+    switchChecked !== undefined && onSwitchChange ? (
+      <Switch checked={switchChecked} onCheckedChange={onSwitchChange} />
+    ) : null;
+
   return (
     <Pressable
       onPress={onPress}
@@ -82,13 +108,13 @@ function Row({
           {value}
         </Text>
       ) : null}
-      {trailing}
-      {onPress && !trailing ? (
+      {control}
+      {onPress && !control ? (
         <ChevronRight size={16} strokeWidth={1.75} color="#8f8c87" />
       ) : null}
     </Pressable>
   );
-}
+});
 
 export default function SettingsScreen() {
   const { signOut, user } = useAuth();
@@ -133,23 +159,18 @@ export default function SettingsScreen() {
         <SectionLabel>Calls</SectionLabel>
         <Card className="mx-5 mt-2.5 overflow-hidden">
           <Row
-            icon={<MessageSquareText size={14} strokeWidth={1.75} color="#3c3832" />}
+            icon={ICONS.transcript}
             label="Voicemail transcripts"
             description="Text you a transcript of every voicemail"
-            trailing={
-              <Switch
-                checked={transcribeVoicemails}
-                onCheckedChange={setTranscribeVoicemails}
-              />
-            }
+            switchChecked={transcribeVoicemails}
+            onSwitchChange={setTranscribeVoicemails}
           />
           <Row
-            icon={<Bell size={14} strokeWidth={1.75} color="#3c3832" />}
+            icon={ICONS.bell}
             label="Missed call alerts"
             description="Notify me when a call goes unanswered"
-            trailing={
-              <Switch checked={missedCallAlerts} onCheckedChange={setMissedCallAlerts} />
-            }
+            switchChecked={missedCallAlerts}
+            onSwitchChange={setMissedCallAlerts}
             last
           />
         </Card>
@@ -158,20 +179,18 @@ export default function SettingsScreen() {
         <SectionLabel>Privacy</SectionLabel>
         <Card className="mx-5 mt-2.5 overflow-hidden">
           <Row
-            icon={<ShieldCheck size={14} strokeWidth={1.75} color="#3c3832" />}
+            icon={ICONS.shield}
             label="Keep call recordings"
             description="Store audio after the call ends"
-            trailing={
-              <Switch checked={keepRecordings} onCheckedChange={setKeepRecordings} />
-            }
+            switchChecked={keepRecordings}
+            onSwitchChange={setKeepRecordings}
           />
           <Row
-            icon={<ShieldCheck size={14} strokeWidth={1.75} color="#3c3832" />}
+            icon={ICONS.shield}
             label="Share diagnostics"
             description="Send crash and usage data to improve the app"
-            trailing={
-              <Switch checked={shareDiagnostics} onCheckedChange={setShareDiagnostics} />
-            }
+            switchChecked={shareDiagnostics}
+            onSwitchChange={setShareDiagnostics}
             last
           />
         </Card>
@@ -179,27 +198,10 @@ export default function SettingsScreen() {
         {/* Support */}
         <SectionLabel>Support</SectionLabel>
         <Card className="mx-5 mt-2.5 overflow-hidden">
-          <Row
-            icon={<CircleHelp size={14} strokeWidth={1.75} color="#3c3832" />}
-            label="Help center"
-            onPress={() => {}}
-          />
-          <Row
-            icon={<Headphones size={14} strokeWidth={1.75} color="#3c3832" />}
-            label="Contact support"
-            onPress={() => {}}
-          />
-          <Row
-            icon={<FileText size={14} strokeWidth={1.75} color="#3c3832" />}
-            label="Terms of service"
-            onPress={() => {}}
-          />
-          <Row
-            icon={<FileText size={14} strokeWidth={1.75} color="#3c3832" />}
-            label="Privacy policy"
-            onPress={() => {}}
-            last
-          />
+          <Row icon={ICONS.help} label="Help center" onPress={noop} />
+          <Row icon={ICONS.headset} label="Contact support" onPress={noop} />
+          <Row icon={ICONS.doc} label="Terms of service" onPress={noop} />
+          <Row icon={ICONS.doc} label="Privacy policy" onPress={noop} last />
         </Card>
 
         {/* About */}
