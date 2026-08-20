@@ -1,0 +1,64 @@
+name: mobile-android-build
+
+on:
+  workflow_dispatch: {}
+  pull_request: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: mobile
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Gates every run behind manual approval — including your own PRs, which
+    # the built-in "require approval for fork PRs" repo setting does NOT do
+    # (that only applies to outside contributors). Requires a one-time setup
+    # step: Settings → Environments → New environment → name it
+    # "mobile-build-approval" → add required reviewers (yourself). Scoped to
+    # just this job/workflow; nothing else in the repo is affected.
+    environment: mobile-build-approval
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Licenses are accepted by default (accept-android-sdk-licenses: yes).
+      - uses: android-actions/setup-android@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Generates the android/ project from app.json (expo-router,
+      # expo-dev-client, @config-plugins/react-native-webrtc) — this repo
+      # is a managed Expo project, so android/ doesn't exist until this runs.
+      - name: Prebuild native Android project
+        run: npx expo prebuild --platform android --non-interactive
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Build debug APK
+        working-directory: mobile/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rivervoice-mobile-debug-apk
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
