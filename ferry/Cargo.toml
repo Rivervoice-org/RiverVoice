@@ -12,7 +12,6 @@ axum = { version = "0.8.9", features = ["ws"] }
 dotenvy = "0.15"
 futures-util = "0.3"
 jsonwebtoken = "9"
-nnnoiseless = "0.5"
 ort = { version = "2.0.0-rc.13", default-features = false, features = ["download-binaries", "tls-rustls"] }
 percent-encoding = "2"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
@@ -69,6 +68,10 @@ diesel-async = { version = "0.5", features = ["postgres", "deadpool"] }
 # 2.x releases predate diesel 2.2 support) — worth knowing it's pre-1.0,
 # same as flagging Cornucopia's maintenance history mattered earlier.
 diesel-derive-enum = { version = "3.0.0-beta.1", features = ["postgres"] }
+audiopus = { version = "0.2.0", default-features = false, features = ["encoder", "decoder"] }
+audiopus_sys = { version = "0.2.2", default-features = false, features = ["static"] }
+rtc = "0.20.3"
+rand = "0.8"
 
 [profile.dev]
 debug = 1
