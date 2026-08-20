@@ -1,3 +1,4 @@
+import InCallManager from "react-native-incall-manager";
 import {
   MediaStream,
   RTCPeerConnection,
@@ -71,6 +72,14 @@ export class FerryCall {
     this.aborted = false;
     this.setStatus(CallStatus.Connecting);
 
+    // Activates the platform call-audio session (AudioManager on Android,
+    // AVAudioSession on iOS) — without this, react-native-webrtc's audio
+    // tracks can negotiate and even report packets flowing while producing
+    // no audible output at all. Must happen before media starts flowing.
+    // Best-effort: a failure here (native module hiccup) shouldn't take the
+    // whole call down — worst case, audio routing just isn't guaranteed.
+    startInCallManager();
+
     try {
       const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
       if (this.aborted) {
@@ -100,24 +109,31 @@ export class FerryCall {
         };
         streams: unknown[];
       }) => {
-        console.log(
-          "[ferry] ontrack fired:",
-          event.track.kind,
-          event.track.id,
-          "streams:",
-          event.streams.length,
-          "muted:",
-          event.track.muted
-        );
-        // A remote track starts muted and fires `unmute` the instant the
-        // first real RTP packet arrives — negotiation succeeding (ontrack
-        // firing) doesn't mean any audio packets actually showed up.
-        event.track.addEventListener("unmute", () => {
-          console.log("[ferry] remote track unmuted — audio packets are arriving:", event.track.id);
-        });
-        event.track.addEventListener("mute", () => {
-          console.log("[ferry] remote track muted — audio packets stopped:", event.track.id);
-        });
+        try {
+          console.log(
+            "[ferry] ontrack fired:",
+            event.track.kind,
+            event.track.id,
+            "streams:",
+            event.streams.length,
+            "muted:",
+            event.track.muted
+          );
+          // A remote track starts muted and fires `unmute` the instant the
+          // first real RTP packet arrives — negotiation succeeding (ontrack
+          // firing) doesn't mean any audio packets actually showed up.
+          event.track.addEventListener("unmute", () => {
+            console.log(
+              "[ferry] remote track unmuted — audio packets are arriving:",
+              event.track.id
+            );
+          });
+          event.track.addEventListener("mute", () => {
+            console.log("[ferry] remote track muted — audio packets stopped:", event.track.id);
+          });
+        } catch (e) {
+          console.warn("[ferry] ontrack handler failed:", e);
+        }
       };
 
       pc.onconnectionstatechange = () => {
@@ -132,11 +148,19 @@ export class FerryCall {
       const dc = pc.createDataChannel("ferry");
       dc.binaryType = "arraybuffer";
       dc.onmessage = (event: { data: ArrayBuffer }) => {
-        const message = decodeWireMessage(event.data);
-        if (message.kind === WireMessageKind.Transcript) {
-          this.events.onTranscript(message.transcript);
-        } else if (message.kind === WireMessageKind.Translation) {
-          this.events.onTranslation(message.translation);
+        // Guarded: this fires from a native event dispatch, same as
+        // ontrack — an uncaught throw here (malformed JSON, unexpected
+        // shape) would propagate straight out of that dispatch, not just
+        // fail this one message.
+        try {
+          const message = decodeWireMessage(event.data);
+          if (message.kind === WireMessageKind.Transcript) {
+            this.events.onTranscript(message.transcript);
+          } else if (message.kind === WireMessageKind.Translation) {
+            this.events.onTranslation(message.translation);
+          }
+        } catch (e) {
+          console.warn("[ferry] failed to decode data-channel message:", e);
         }
       };
       this.dataChannel = dc;
@@ -190,6 +214,15 @@ export class FerryCall {
     });
   }
 
+  /** Routes call audio to the loudspeaker (true) or the earpiece (false). */
+  setSpeakerOn(enabled: boolean): void {
+    try {
+      InCallManager.setForceSpeakerphoneOn(enabled);
+    } catch (e) {
+      console.warn("[ferry] InCallManager.setForceSpeakerphoneOn failed:", e);
+    }
+  }
+
   end(): void {
     this.aborted = true;
     this.teardown();
@@ -202,12 +235,32 @@ export class FerryCall {
   }
 
   private teardown(): void {
+    // Guarded and ordered first so a native-module hiccup here can never
+    // block the rest of cleanup (closing the data channel/peer connection,
+    // stopping mic tracks) — those matter more than audio-session teardown.
+    try {
+      InCallManager.stop();
+    } catch (e) {
+      console.warn("[ferry] InCallManager.stop failed:", e);
+    }
     this.dataChannel?.close();
     this.dataChannel = null;
     this.pc?.close();
     this.pc = null;
     this.localStream?.getTracks().forEach((track) => track.stop());
     this.localStream = null;
+  }
+}
+
+function startInCallManager(): void {
+  try {
+    InCallManager.start({ media: "audio" });
+    // Default to loudspeaker rather than earpiece — this is a translation
+    // agent you talk *through*, not a private phone call, and earpiece
+    // routing is exactly what made audio inaudible before this was added.
+    InCallManager.setForceSpeakerphoneOn(true);
+  } catch (e) {
+    console.warn("[ferry] InCallManager.start failed:", e);
   }
 }
 

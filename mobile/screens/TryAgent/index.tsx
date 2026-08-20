@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { View, Pressable, ScrollView, Animated, Easing } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
-import { X, PhoneOff, Mic, MicOff, Globe } from "lucide-react-native";
+import { X, PhoneOff, Mic, MicOff, Globe, Volume2, VolumeX } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { TranscriptPhase } from "@/components/Transcript";
 import { Text } from "@/components/ui/text";
@@ -143,8 +143,18 @@ export default function TryAgentScreen() {
   const insets = useSafeAreaInsets();
   const agentName = params.name || "Your agent";
 
-  const { status, conversation, interimCaption, error, isMuted, start, end, toggleMute } =
-    useFerryCall();
+  const {
+    status,
+    conversation,
+    interimCaption,
+    error,
+    isMuted,
+    isSpeakerOn,
+    start,
+    end,
+    toggleMute,
+    toggleSpeaker,
+  } = useFerryCall();
   const phase = callStatusToPhase(status);
 
   const [duration, setDuration] = useState(0);
@@ -250,6 +260,21 @@ export default function TryAgentScreen() {
             <MicOff size={18} strokeWidth={2} color="#fcfbf9" />
           ) : (
             <Mic size={18} strokeWidth={2} color="#2e2a25" />
+          )}
+        </Pressable>
+
+        <Pressable
+          onPress={toggleSpeaker}
+          disabled={status !== CallStatus.Connected}
+          className={`h-12 w-12 items-center justify-center rounded-full border border-border active:opacity-80 ${
+            isSpeakerOn ? "bg-foreground" : "bg-secondary"
+          }`}
+          hitSlop={8}
+        >
+          {isSpeakerOn ? (
+            <Volume2 size={18} strokeWidth={2} color="#fcfbf9" />
+          ) : (
+            <VolumeX size={18} strokeWidth={2} color="#2e2a25" />
           )}
         </Pressable>
 

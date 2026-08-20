@@ -26,6 +26,7 @@ export function useFerryCall() {
   const [interimCaption, setInterimCaption] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
 
   const callRef = useRef<FerryCall | null>(null);
 
@@ -44,6 +45,7 @@ export function useFerryCall() {
     setInterimCaption("");
     setError(null);
     setIsMuted(false);
+    setIsSpeakerOn(true);
 
     const call = new FerryCall({
       onStatusChange: setStatus,
@@ -80,5 +82,24 @@ export function useFerryCall() {
     });
   }, []);
 
-  return { status, conversation, interimCaption, error, isMuted, start, end, toggleMute };
+  const toggleSpeaker = useCallback(() => {
+    setIsSpeakerOn((prev) => {
+      const next = !prev;
+      callRef.current?.setSpeakerOn(next);
+      return next;
+    });
+  }, []);
+
+  return {
+    status,
+    conversation,
+    interimCaption,
+    error,
+    isMuted,
+    isSpeakerOn,
+    start,
+    end,
+    toggleMute,
+    toggleSpeaker,
+  };
 }
