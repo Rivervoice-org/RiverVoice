@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
+import { useThemeColors } from "@/lib/theme";
 
 const COUNTRY_CODE = "+91";
 
@@ -16,6 +17,7 @@ function formatPhone(raw: string) {
 }
 
 export default function SignInScreen() {
+  const colors = useThemeColors();
   const { signIn } = useAuth();
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -53,11 +55,11 @@ export default function SignInScreen() {
             hitSlop={8}
             accessibilityLabel="Go back"
           >
-            <ChevronLeft size={22} strokeWidth={1.75} color="#2e2a25" />
+            <ChevronLeft size={22} strokeWidth={1.75} color={colors.ink} />
           </Pressable>
           <View className="flex-row items-center gap-2">
             <View className="h-6 w-6 items-center justify-center rounded-md border border-border">
-              <Waves size={14} strokeWidth={2} color="#3c3832" />
+              <Waves size={14} strokeWidth={2} color={colors.ink} />
             </View>
             <Text className="text-sm font-medium">Rivervoice</Text>
           </View>
@@ -76,7 +78,7 @@ export default function SignInScreen() {
             <Input
               className="h-12 flex-1 border-0 bg-transparent px-0 text-[15px]"
               placeholder="98765 43210"
-              placeholderTextColor="#b0ada7"
+              placeholderTextColor={colors.faint}
               value={phone}
               onChangeText={(text) => {
                 setPhone(formatPhone(text));

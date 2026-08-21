@@ -4,14 +4,16 @@ import { Waves } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
+import { useThemeColors } from "@/lib/theme";
 
 export default function WelcomeScreen() {
+  const colors = useThemeColors();
   return (
     <View className="flex-1 bg-canvas px-6 pt-16 pb-10">
       {/* Top section - Logo and branding */}
       <View className="items-center">
         <View className="h-12 w-12 items-center justify-center rounded-2xl border border-border bg-card shadow-float">
-          <Waves size={24} strokeWidth={2} color="#3c3832" />
+          <Waves size={24} strokeWidth={2} color={colors.ink} />
         </View>
         <Text className="mt-4 text-[17px] font-semibold tracking-[-0.02em]">
           Rivervoice

@@ -12,8 +12,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
+import { useThemeColors } from "@/lib/theme";
 
 export default function SignUpScreen() {
+  const colors = useThemeColors();
   const { signUp } = useAuth();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -55,7 +57,7 @@ export default function SignUpScreen() {
           {/* Logo */}
           <View className="flex-row items-center gap-2">
             <View className="h-6 w-6 items-center justify-center rounded-md border border-border">
-              <Waves size={14} strokeWidth={2} color="#3c3832" />
+              <Waves size={14} strokeWidth={2} color={colors.ink} />
             </View>
             <Text className="text-sm font-medium">Rivervoice</Text>
           </View>
