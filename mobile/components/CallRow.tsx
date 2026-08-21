@@ -5,10 +5,12 @@ import {
   PhoneOutgoing,
   PhoneIncoming,
   PhoneMissed,
+  ChevronRight,
 } from "lucide-react-native";
 import { Mascot } from "./Mascot";
 import { Text } from "./ui/text";
 import { cn } from "@/lib/utils";
+import { useThemeColors } from "@/lib/theme";
 
 export enum CallOutcome {
   Resolved = "resolved",
@@ -40,29 +42,30 @@ type CallRowProps = {
 };
 
 export function CallOutcomeAvatar({ outcome }: { outcome: CallOutcome }) {
+  const colors = useThemeColors();
   switch (outcome) {
     case CallOutcome.Resolved:
       return (
         <View className="h-8 w-8 items-center justify-center rounded-lg bg-secondary">
-          <PhoneIncoming size={14} strokeWidth={1.75} color="#2a8c4d" />
+          <PhoneIncoming size={14} strokeWidth={1.75} color={colors.green} />
         </View>
       );
     case CallOutcome.Transferred:
       return (
         <View className="h-8 w-8 items-center justify-center rounded-lg bg-secondary">
-          <PhoneOutgoing size={14} strokeWidth={1.75} color="#3b5dab" />
+          <PhoneOutgoing size={14} strokeWidth={1.75} color={colors.river} />
         </View>
       );
     case CallOutcome.Missed:
       return (
         <View className="h-8 w-8 items-center justify-center rounded-lg bg-secondary">
-          <PhoneMissed size={14} strokeWidth={1.75} color="#c43030" />
+          <PhoneMissed size={14} strokeWidth={1.75} color={colors.destructive} />
         </View>
       );
     default:
       return (
         <View className="h-8 w-8 items-center justify-center rounded-lg bg-secondary">
-          <Phone size={14} strokeWidth={1.75} color="#8f8c87" />
+          <Phone size={14} strokeWidth={1.75} color={colors.muted} />
         </View>
       );
   }
@@ -77,6 +80,9 @@ export function CallListItem({
   showDivider?: boolean;
   onPress?: () => void;
 }) {
+  const colors = useThemeColors();
+  // the row itself is inert; the chevron is the only tap target
+  const meta = `${call.name ? "" : `${call.number} · `}${call.agent ? `${call.agent} · ` : ""}${call.language}`;
   return (
     <CallRow
       avatar={
@@ -87,19 +93,40 @@ export function CallListItem({
         )
       }
       title={call.name}
-      subtitle={`${call.name ? "" : `${call.number} · `}${call.agent ? `${call.agent} · ` : ""}${call.language}`}
-      trailing={
-        <View className="items-end">
-          <Text font="mono" variant="muted" className="text-[11px] tabular-nums">
-            {call.duration}
+      subtitle={
+        <View className="flex-row items-center gap-1">
+          <Text variant="muted" className="text-[11px]" numberOfLines={1}>
+            {meta}
           </Text>
-          <Text variant="muted" className="text-[11px]">
-            {call.time}
+          <Text
+            font="mono"
+            variant="muted"
+            className="text-[11px] tabular-nums"
+          >
+            · {call.duration}
           </Text>
         </View>
       }
+      trailing={
+        <View className="flex-row items-center gap-1.5">
+          <Text variant="muted" className="text-[11px]">
+            {call.time}
+          </Text>
+          {onPress && (
+            <Pressable
+              hitSlop={8}
+              onPress={(event) => {
+                event.stopPropagation();
+                onPress();
+              }}
+              className="items-center justify-center rounded-full p-1 active:opacity-70"
+            >
+              <ChevronRight size={14} strokeWidth={1.75} color={colors.muted} />
+            </Pressable>
+          )}
+        </View>
+      }
       showDivider={showDivider}
-      onPress={onPress}
     />
   );
 }
@@ -126,7 +153,10 @@ export function CallRow({
       <View className="flex-1 min-w-0">
         <View className="flex-row items-center gap-1.5">
           {typeof title === "string" ? (
-            <Text className={cn("text-sm font-medium", mono && "font-mono")}>
+            <Text
+              numberOfLines={1}
+              className={cn("min-w-0 flex-1 text-sm font-medium", mono && "font-mono")}
+            >
               {title}
             </Text>
           ) : (

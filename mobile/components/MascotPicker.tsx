@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
+import { useThemeColors } from "@/lib/theme";
 import {
   MASCOT_STYLE_IDS,
   SEEDS,
@@ -47,6 +48,7 @@ interface MascotPickerProps {
  * background and every open after the first is instant.
  */
 export function MascotPicker({ value, onSelect, size = 96 }: MascotPickerProps) {
+  const colors = useThemeColors();
   const [open, setOpen] = useState(false);
   const [style, setStyle] = useState<MascotStyleId>("notionists");
 
@@ -81,7 +83,7 @@ export function MascotPicker({ value, onSelect, size = 96 }: MascotPickerProps) 
         >
           <Mascot ref={value ?? mascotRef("notionists", DEFAULT_SEED)} size={size} />
           <View className="absolute right-0 bottom-0 h-8 w-8 items-center justify-center rounded-full border-2 border-canvas bg-foreground">
-            <Pencil size={13} strokeWidth={2} color="#fafaf9" />
+            <Pencil size={13} strokeWidth={2} color={colors.onInk} />
           </View>
         </Pressable>
       </DialogTrigger>

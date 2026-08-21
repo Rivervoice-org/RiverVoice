@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Pressable } from "react-native";
 import { Keyboard } from "lucide-react-native";
 import { DialPadSheet } from "@/components/DialPadSheet";
+import { useThemeColors } from "@/lib/theme";
 
 /**
  * The floating dial-pad trigger, self-contained. Its open/close state used to
@@ -11,6 +12,7 @@ import { DialPadSheet } from "@/components/DialPadSheet";
  * small subtree, not the list.
  */
 export function DialFab() {
+  const colors = useThemeColors();
   const [open, setOpen] = useState(false);
 
   return (
@@ -19,7 +21,7 @@ export function DialFab() {
         onPress={() => setOpen(true)}
         className="absolute bottom-6 right-5 h-14 w-14 items-center justify-center rounded-full bg-foreground shadow-lift active:opacity-80"
       >
-        <Keyboard size={22} strokeWidth={1.75} color="#fcfbf9" />
+        <Keyboard size={22} strokeWidth={1.75} color={colors.onInk} />
       </Pressable>
 
       <DialPadSheet visible={open} onClose={() => setOpen(false)} />

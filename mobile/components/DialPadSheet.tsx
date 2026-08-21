@@ -10,6 +10,7 @@ import {
 import { Phone } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
+import { useThemeColors } from "@/lib/theme";
 
 const KEYS: { digit: string; letters?: string }[] = [
   { digit: "1" },
@@ -65,6 +66,7 @@ function Key({
  * battle-tested implementation instead of ours to debug.
  */
 export function DialPadSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
   const [digits, setDigits] = useState("");
@@ -107,8 +109,8 @@ export function DialPadSheet({ visible, onClose }: { visible: boolean; onClose: 
       enableDynamicSizing
       onDismiss={onClose}
       backdropComponent={renderBackdrop}
-      backgroundStyle={{ backgroundColor: "#f5f5f5" }}
-      handleIndicatorStyle={{ backgroundColor: "#ebe9e6" }}
+      backgroundStyle={{ backgroundColor: colors.canvas }}
+      handleIndicatorStyle={{ backgroundColor: colors.border }}
     >
       <BottomSheetView style={{ paddingBottom: insets.bottom + 14 }} className="px-5 pt-1">
         {/* Keypad */}
@@ -130,7 +132,7 @@ export function DialPadSheet({ visible, onClose }: { visible: boolean; onClose: 
         {/* Call button */}
         <View className="mt-4">
           <Button size="lg" disabled={!digits} onPress={call}>
-            <Phone size={16} strokeWidth={1.75} color="#fcfbf9" />
+            <Phone size={16} strokeWidth={1.75} color={colors.onInk} />
             <Text className="text-sm font-medium text-primary-foreground">Call</Text>
           </Button>
         </View>

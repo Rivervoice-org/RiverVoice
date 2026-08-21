@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { Waves } from "lucide-react-native";
 import { Text } from "@/components/ui/text";
+import { useThemeColors } from "@/lib/theme";
 
 const OVERSHOOT = Easing.bezier(0.34, 1.4, 0.5, 1);
 const SETTLE = Easing.bezier(0.22, 1, 0.36, 1);
@@ -21,6 +22,7 @@ const TOTAL_DURATION = HOLD_UNTIL + CLEAR_DURATION;
  * once, over the first screen, then removes itself — see RootLayout.
  */
 export function Splash({ onDone }: { onDone?: () => void }) {
+  const colors = useThemeColors();
   const markScale = useRef(new Animated.Value(0.4)).current;
   const markRotate = useRef(new Animated.Value(-12)).current;
   const markOpacity = useRef(new Animated.Value(0)).current;
@@ -114,7 +116,11 @@ export function Splash({ onDone }: { onDone?: () => void }) {
   return (
     <Animated.View
       pointerEvents="none"
-      style={[StyleSheet.absoluteFill, styles.overlay, { opacity: overlayOpacity }]}
+      style={[
+        StyleSheet.absoluteFill,
+        styles.overlay,
+        { backgroundColor: colors.canvas, opacity: overlayOpacity },
+      ]}
     >
       <Animated.View
         style={{
@@ -129,7 +135,7 @@ export function Splash({ onDone }: { onDone?: () => void }) {
               height: 36,
               width: 36,
               borderRadius: 12,
-              backgroundColor: "#3c3832",
+              backgroundColor: colors.ink,
               alignItems: "center",
               justifyContent: "center",
               opacity: markOpacity,
@@ -144,7 +150,7 @@ export function Splash({ onDone }: { onDone?: () => void }) {
               ],
             }}
           >
-            <Waves size={20} strokeWidth={2} color="#fcfbf9" />
+            <Waves size={20} strokeWidth={2} color={colors.onInk} />
           </Animated.View>
 
           <Animated.View
@@ -180,6 +186,5 @@ const styles = StyleSheet.create({
     zIndex: 50,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f5f5f5",
   },
 });

@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from "react";
 import { Animated, Image, PixelRatio, type StyleProp, type ViewStyle } from "react-native";
 import { avatarUrl, mascotRef, parseMascot } from "@/lib/mascots";
+import { useThemeColors } from "@/lib/theme";
 
 export type MascotStyle = "notionists" | "lorelei";
 
@@ -29,6 +30,7 @@ export const Mascot = memo(function Mascot({
   className,
   containerStyle,
 }: MascotProps) {
+  const colors = useThemeColors();
   const [loaded, setLoaded] = useState(false);
   const [opacity] = useState(() => new Animated.Value(0));
 
@@ -58,7 +60,7 @@ export const Mascot = memo(function Mascot({
           height: size,
           borderRadius: borderRadius ?? size / 2,
           overflow: "hidden",
-          backgroundColor: "#f5f4f3",
+          backgroundColor: colors.mutedBg,
           opacity,
         },
         containerStyle,

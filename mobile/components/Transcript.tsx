@@ -2,6 +2,7 @@ import { memo } from "react";
 import { View } from "react-native";
 import { Globe, Mic } from "lucide-react-native";
 import { Text } from "@/components/ui/text";
+import { useThemeColors } from "@/lib/theme";
 
 export type TranscriptLine = {
   speaker: "caller" | "agent";
@@ -34,6 +35,7 @@ export const Transcript = memo(function Transcript({
   revealed?: number;
   phase?: TranscriptPhase;
 }) {
+  const colors = useThemeColors();
   const callerSpeaking =
     phase === TranscriptPhase.Live && revealed > 0 && lines[revealed - 1]?.speaker === "caller";
 
@@ -52,7 +54,7 @@ export const Transcript = memo(function Transcript({
               }`}
             >
               <View className="flex-row items-center gap-1.5">
-                <Mic size={10} strokeWidth={2} color="#8f8c87" />
+                <Mic size={10} strokeWidth={2} color={colors.muted} />
                 <Text
                   className={`text-[10px] font-semibold uppercase tracking-[0.08em] ${
                     isAgent ? "text-muted-foreground" : "text-foreground"
@@ -68,7 +70,7 @@ export const Transcript = memo(function Transcript({
                 {isActive && (
                   <View
                     className={`h-1.5 w-1.5 rounded-full ${
-                      isAgent ? "bg-foreground/60" : "bg-[#2a8c4d]"
+                      isAgent ? "bg-foreground/60" : "bg-green"
                     }`}
                   />
                 )}
@@ -81,7 +83,7 @@ export const Transcript = memo(function Transcript({
               {entry.translated && (
                 <View className="mt-1.5 border-t border-border/60 pt-1.5">
                   <View className="flex-row items-center gap-1">
-                    <Globe size={10} strokeWidth={2} color="#3b5dab" />
+                    <Globe size={10} strokeWidth={2} color={colors.river} />
                     <Text className="text-[10px] font-medium uppercase tracking-[0.08em] text-river">
                       Translated
                     </Text>
