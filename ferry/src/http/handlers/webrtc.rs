@@ -35,8 +35,6 @@ use uuid::Uuid;
 const SAMPLE_RATE: u32 = 16_000;
 const NUM_CHANNELS: u16 = 1;
 
-const SYSTEM_PROMPT: &str = "You are a translation model. Translate the user's speech into the english language. Just return the translated text, nothing else.";
-
 #[derive(Deserialize)]
 pub struct WebrtcOfferRequest {
     pub offer_sdp: String,

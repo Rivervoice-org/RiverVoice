@@ -34,7 +34,6 @@ enum TwilioInEvent {
 #[serde(rename_all = "lowercase")]
 enum TwilioOutEvent {
     Media,
-    Clear,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -67,13 +66,6 @@ struct TwilioOutbound<'a> {
 #[derive(Serialize)]
 struct MediaOutbound<'a> {
     payload: &'a str,
-}
-
-#[derive(Serialize)]
-struct TwilioClear<'a> {
-    event: TwilioOutEvent,
-    #[serde(rename = "streamSid")]
-    stream_sid: &'a str,
 }
 
 pub struct TwilioSerializer {

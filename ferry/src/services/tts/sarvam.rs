@@ -221,7 +221,7 @@ pub(crate) enum ClientMessage {
 }
 
 #[derive(Serialize, Clone)]
-struct ConfigData {
+pub(crate) struct ConfigData {
     language_code: &'static str,
     speaker: String,
     speech_sample_rate: u32,
