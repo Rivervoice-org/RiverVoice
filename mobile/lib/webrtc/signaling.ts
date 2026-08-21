@@ -5,17 +5,8 @@
  * same as the server does on its side (ferry/src/transport/webrtc/transport.rs).
  */
 
-const DEFAULT_FERRY_URL = "http://127.0.0.1:8085";
-
-function ferryBaseUrl(): string {
-  return process.env["EXPO_PUBLIC_FERRY_URL"] ?? DEFAULT_FERRY_URL;
-}
-
-type ApiResponse<T> = {
-  statusCode: number;
-  data?: T;
-  error?: { message: string };
-};
+import type { ApiResponse } from "@/lib/api-types";
+import { ferryBaseUrl } from "@/lib/ferry";
 
 const SIGNALING_TIMEOUT_MS = 15_000;
 

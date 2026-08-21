@@ -18,7 +18,6 @@ use super::state::AppState;
 use crate::call::CallRegistry;
 use crate::config;
 use crate::services::twilio::TwilioClient;
-// use crate::auth::middleware::require_session;
 
 const ALLOWED_ORIGINS: &[&str] = &["http://localhost:3000"];
 
@@ -39,11 +38,6 @@ fn cors_layer() -> CorsLayer {
         .allow_credentials(true)
 }
 
-/// Every route gets a short `req_id` on this span for free — CRUD endpoints
-/// added later need no logging code of their own to get one. Long-running
-/// work a handler spawns (the call/pipeline tasks) outlives this span, since
-/// a spawned task doesn't inherit the caller's span automatically; those get
-/// their own longer-lived `call_id` span instead (see `handlers::call`).
 async fn log_request(req: Request, next: Next) -> Response {
     let req_id = uuid::Uuid::new_v4().simple().to_string()[..8].to_string();
     let span = tracing::info_span!("request", req_id = %req_id);
@@ -63,13 +57,16 @@ fn call_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/try-agent/offer", post(handlers::webrtc_offer))
         .route("/v1/call/start", post(handlers::start_call))
-    // .route_layer(middleware::from_fn(require_session))
 }
 
 fn twilio_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/twilio/ws/{call_id}", get(handlers::twilio_ws))
         .route("/v1/twilio/status/{call_id}", post(handlers::twilio_status))
+}
+
+fn user_routes() -> Router<AppState> {
+    Router::new().route("/v1/users", post(handlers::create_user))
 }
 
 pub async fn start_server() -> anyhow::Result<()> {
@@ -86,6 +83,7 @@ pub async fn start_server() -> anyhow::Result<()> {
     let router = http_routes()
         .merge(call_routes())
         .merge(twilio_routes())
+        .merge(user_routes())
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn(log_request))
         .layer(cors_layer())

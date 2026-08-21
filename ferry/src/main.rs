@@ -1,4 +1,4 @@
-use ferry::{config, http, logging};
+use ferry::{config, db, http, logging};
 
 #[tokio::main]
 async fn main() {
@@ -6,6 +6,7 @@ async fn main() {
 
     logging::init();
     config::init();
+    db::init().await;
 
     if let Err(e) = http::router::start_server().await {
         tracing::error!("server error: {e:?}");

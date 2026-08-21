@@ -10,6 +10,7 @@ use validator::Validate;
 
 pub struct Config {
     pub jwt_secret: Vec<u8>,
+    pub database_url: String,
     pub deepgram_stt_api_key: String,
     pub openrouter_api_key: String,
     pub sarvam_tts_api_key: String,
@@ -38,6 +39,8 @@ pub fn environment() -> Environment {
 struct RawConfig {
     #[validate(length(min = 32, message = "JWT_SECRET must be at least 32 bytes"))]
     jwt_secret: String,
+    #[validate(length(min = 1, message = "DATABASE_URL is not set"))]
+    database_url: String,
     #[validate(length(min = 1, message = "DEEPGRAM_STT_API_KEY is not set"))]
     deepgram_stt_api_key: String,
     #[validate(length(min = 1, message = "OPENROUTER_API_KEY is not set"))]
@@ -83,6 +86,7 @@ impl Config {
     fn load() -> Result<Self, ConfigError> {
         let raw = RawConfig {
             jwt_secret: std::env::var("JWT_SECRET").unwrap_or_default(),
+            database_url: std::env::var("DATABASE_URL").unwrap_or_default(),
             deepgram_stt_api_key: std::env::var("DEEPGRAM_STT_API_KEY").unwrap_or_default(),
             openrouter_api_key: std::env::var("OPENROUTER_API_KEY").unwrap_or_default(),
             sarvam_tts_api_key: std::env::var("SARVAM_TTS_API_KEY").unwrap_or_default(),
@@ -100,6 +104,7 @@ impl Config {
 
         Ok(Config {
             jwt_secret: raw.jwt_secret.into_bytes(),
+            database_url: raw.database_url,
             deepgram_stt_api_key: raw.deepgram_stt_api_key,
             openrouter_api_key: raw.openrouter_api_key,
             sarvam_tts_api_key: raw.sarvam_tts_api_key,
