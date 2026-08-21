@@ -6,13 +6,12 @@
  * one yet. The actual WebRTC transport lives in ./webrtc/rtc-connection.ts,
  * shared with browser-voice.ts.
  *
- * NOTE: there is currently no signal from ferry distinguishing "leg A
- * connected to ferry" from "leg B (the phone) actually answered" — the
- * status here goes Live as soon as the browser's own WebRTC connection to
- * ferry is up, which can be well before Twilio's dial resolves. Ferry would
- * need to push a control message over the data channel once its internal
- * `CallStatus` flips to `Connected` for this to reflect the real PSTN
- * pickup — not done here since it requires a ferry change.
+ * `BrowserVoiceStatus.Live` reflects only the browser's own WebRTC
+ * connection to ferry, which comes up well before Twilio's dial resolves —
+ * it is not "leg B (the phone) actually answered". For that, use
+ * `onRinging` (fires when ferry's internal `CallStatus` flips to `Ringing`)
+ * and `onPeerConnected` (fires once leg B actually picks up), both sent by
+ * ferry as data-channel control bytes and decoded in ./webrtc/wire.ts.
  */
 
 import {
