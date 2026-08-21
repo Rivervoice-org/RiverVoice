@@ -28,10 +28,28 @@ export function mascotStyle(id: MascotStyleId): { label: string; meta: { title: 
 /**
  * DiceBear's API URL for a face. The URL is deterministic — same ref, same
  * size, same image — so the app can prefetch and Image's cache serves the rest.
+ *
+ * `extraParams` passes through style-specific DiceBear options (e.g.
+ * notionists' `glassesProbability`) for the rare call site that needs a
+ * specific trait rather than whatever the seed's hash happens to produce.
  */
-export function avatarUrl(ref: string, size: number) {
+export function avatarUrl(
+  ref: string,
+  size: number,
+  extraParams?: Record<string, string | number>
+) {
   const { style, seed } = parseMascot(ref);
-  return `https://api.dicebear.com/9.x/${style}/png?seed=${encodeURIComponent(seed)}&size=${size}&radius=50&scale=130&translateY=6`;
+  const params = new URLSearchParams({
+    seed,
+    size: String(size),
+    radius: "50",
+    scale: "130",
+    translateY: "6",
+  });
+  for (const [key, value] of Object.entries(extraParams ?? {})) {
+    params.set(key, String(value));
+  }
+  return `https://api.dicebear.com/9.x/${style}/png?${params.toString()}`;
 }
 
 /** The set of faces a picker shows: one per offered name, in one style. */

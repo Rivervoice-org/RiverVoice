@@ -14,6 +14,10 @@ export interface MascotProps {
   borderRadius?: number;
   className?: string;
   containerStyle?: StyleProp<ViewStyle>;
+  /** Style-specific DiceBear options (e.g. notionists' `glassesProbability`)
+   * for the rare call site that needs a specific trait forced rather than
+   * left to the seed's hash. */
+  params?: Record<string, string | number>;
 }
 
 /**
@@ -29,6 +33,7 @@ export const Mascot = memo(function Mascot({
   borderRadius,
   className,
   containerStyle,
+  params,
 }: MascotProps) {
   const colors = useThemeColors();
   const [loaded, setLoaded] = useState(false);
@@ -49,7 +54,7 @@ export const Mascot = memo(function Mascot({
   const { seed: refSeed } = parseMascot(ref);
   // Request at physical-pixel resolution — DiceBear renders the PNG at
   // exactly the size asked for, so a logical-px request blurs on 2x/3x screens.
-  const uri = avatarUrl(ref, Math.round(size * PixelRatio.get()));
+  const uri = avatarUrl(ref, Math.round(size * PixelRatio.get()), params);
 
   return (
     <Animated.View

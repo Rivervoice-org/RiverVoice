@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
-import { View, SectionList, Linking, type SectionListRenderItem } from "react-native";
+import { View, SectionList, RefreshControl, type SectionListRenderItem } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Phone, Users } from "lucide-react-native";
-import * as Contacts from "expo-contacts";
 import { Mascot } from "@/components/Mascot";
 import { SearchInput } from "@/components/SearchInput";
 import { CallRow } from "@/components/CallRow";
@@ -11,12 +10,8 @@ import { Rise } from "@/components/ui/rise";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
-
-type Contact = {
-  id: string;
-  name: string;
-  phone: string;
-};
+import { startCallWith } from "@/lib/start-call";
+import { useContacts, type Contact } from "@/state/contacts";
 
 type Section = {
   title: string;
@@ -66,7 +61,7 @@ const ContactRow = memo(function ContactRow({
           </View>
         }
         showDivider={showDivider}
-        onPress={() => Linking.openURL(`tel:${contact.phone}`)}
+        onPress={() => startCallWith(contact)}
       />
     </View>
   );
@@ -86,33 +81,8 @@ export default function CallScreen() {
   const colors = useThemeColors();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const loadContacts = useCallback(async () => {
-    setLoading(true);
-    const { status } = await Contacts.requestPermissionsAsync();
-    if (status === Contacts.PermissionStatus.GRANTED) {
-      const { data } = await Contacts.getContactsAsync({
-        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Name],
-        pageSize: 1000,
-      });
-      const mapped: Contact[] = data
-        .filter((c) => c.phoneNumbers && c.phoneNumbers.length > 0 && c.name)
-        .map((c) => ({
-          id: c.id,
-          name: c.name!,
-          phone: c.phoneNumbers?.[0]?.number || "",
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      setContacts(mapped);
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    loadContacts();
-  }, [loadContacts]);
+  const { contacts, status, refreshing, refresh } = useContacts();
+  const loading = status === "loading";
 
   // Debounced so typing doesn't re-filter/re-sort hundreds of contacts on
   // every keystroke — only once input settles.
@@ -184,7 +154,11 @@ export default function CallScreen() {
             <Users size={22} strokeWidth={1.75} color={colors.faint} />
           </View>
           <Text variant="muted" className="mt-3 text-sm">
-            {search ? "No contacts found" : "No contacts on this device"}
+            {search
+              ? "No contacts found"
+              : status === "denied"
+                ? "Contacts permission denied"
+                : "No contacts on this device"}
           </Text>
         </View>
       ) : (
@@ -201,6 +175,9 @@ export default function CallScreen() {
           updateCellsBatchingPeriod={50}
           windowSize={7}
           removeClippedSubviews
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.muted} />
+          }
         />
       )}
 
