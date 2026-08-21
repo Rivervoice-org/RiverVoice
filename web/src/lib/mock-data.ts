@@ -1,4 +1,4 @@
-/** Stand-ins for what harbor used to serve, now that the API is gone. */
+/** Stand-ins for persisted data, now that the API is gone. */
 
 import type { Me } from "@/lib/auth/types";
 import type { Agent, AgentSummary, AgentTemplate } from "@/lib/agents/types";

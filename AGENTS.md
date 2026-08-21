@@ -11,14 +11,11 @@ it alone; committing it alongside your work keeps the tree clean.
 
 ## The short version
 
-- **Never edit `harbor/internal/dbgen/`.** It says DO NOT EDIT and means it.
-  Change the `.sql`, run `sqlc generate`.
 - **Server components fetch; client components react.** Page-load data comes
   down as props. React Query is for what happens after load.
 - **The session gate lives on the server**, in a layout, before anything renders.
 - **A list keeps its state in the url**, not in component state.
-- Verify with `npx tsc --noEmit` and `npx eslint src` in `web/`, `go build ./...`
-  in `harbor/`. All three are expected to be silent.
+- Verify with `npx tsc --noEmit` and `npx eslint src` in `web/`. Both are expected to be silent.
 
 ---
 
@@ -44,7 +41,7 @@ unless a server parent handed it the data.
 by the time it hydrates, and showing stale-but-confident data reads as a bug.
 Server-render the frame; let the live parts connect on their own.
 
-### Reading harbor
+### API clients
 
 Two clients, and the difference matters:
 
@@ -52,14 +49,14 @@ Two clients, and the difference matters:
   the browser attaches the session cookie itself.
 - [`lib/api-server.ts`](web/src/lib/api-server.ts) — the Next server. There is no
   cookie jar in node, so it reads `cookie` off the incoming request and re-sends
-  it, along with `x-forwarded-for` and friends so harbor sees the caller rather
+  it, along with `x-forwarded-for` and friends so the backend sees the caller rather
   than this machine.
 
 Using `api.ts` from a server component fails **silently** — no build error, no
 cookie, a 401. In a server component, always `serverGet`.
 
 Wrap server fetchers in React's `cache()` so several components asking cost
-harbor one call. See [`lib/agents/server.ts`](web/src/lib/agents/server.ts).
+the backend one call. See [`lib/agents/server.ts`](web/src/lib/agents/server.ts).
 
 ### Auth
 
@@ -80,8 +77,8 @@ prefetched pages in memory, and the next session starts on the last one's data.
 
 Two things the gate cannot do, so they live elsewhere: catching a session that
 expires while a tab is open (needs a 401 interceptor in `api.ts`), and working at
-all in production if harbor's cookie is host-scoped to a different domain than
-web — it must share a parent domain, or harbor must be proxied through Next.
+all in production if the session cookie is host-scoped to a different domain than
+web — it must share a parent domain, or the backend must be proxied through Next.
 
 ### Lists
 
@@ -112,50 +109,6 @@ error is one you can miss.
 
 Report where the person is looking: a failure inside an open dialog belongs in
 the dialog, not in a corner.
-
----
-
-## harbor
-
-### sqlc
-
-`db/queries/*.sql` is the source. `internal/dbgen/` is output. Add the query,
-run `sqlc generate`, then write the Go. Hand-editing the generated file works
-right up until the next `generate` silently reverts it.
-
-### The shape of a handler
-
-Every one of them:
-
-1. `auth.SessionFrom(ctx)` — 401 if absent.
-2. Build a request struct from `types.go` and `validate.Struct` it. Bounds live
-   in the tags, so a bad request never reaches Postgres.
-3. `db.AsUser(...)` — a transaction with `app.user_id` set and `set local role
-   app_user`, so RLS filters to the caller's org. The pool connects as a role
-   with `BYPASSRLS`; skipping this reads every tenant's rows.
-4. Return `httpx.Ok` / `httpx.Fail`.
-
-Read agents through the **`my_agents` view**, never the `agents` table — the read
-policy lets templates through on purpose, and the table would put the shared
-roster on everyone's board.
-
-An id that is not a uuid and an id in another org are the same answer: 404.
-Anything else confirms the row exists. `isNotFound` and `asNameTaken` in
-[`store.go`](harbor/internal/agent/store.go) do that mapping.
-
-### Paging
-
-`limit`/`offset` query params, with the total as a window function in the same
-statement:
-
-```sql
-count(*) over () as total
-```
-
-Windows are computed before the `limit`, so it counts the whole match, and it
-cannot disagree with the rows it came back with the way a second `count(*)`
-query can. The count rides on every row, so read it off the first and default to
-zero when the page is empty.
 
 ---
 

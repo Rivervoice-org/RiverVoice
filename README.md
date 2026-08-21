@@ -12,9 +12,9 @@ Three services, two languages:
 | **ferry**  | the live call: WebRTC, Twilio, speech, translation, audio   | Rust, axum, tokio     |
 | **mobile** | the calling client — one of two things that talk to ferry   | Expo, React Native    |
 
-There used to be a fourth service, **harbor** (Go, Postgres) — accounts, agents,
+There used to be a fourth service (Go, Postgres) — accounts, agents,
 tools, everything that persisted. It's gone. web now runs on mock data
-(`web/src/lib/mock-data.ts`) standing in for what harbor used to serve, so the
+(`web/src/lib/mock-data.ts`) standing in for what the backend used to serve, so the
 builder UI works with no backend behind it. There is currently no service that
 persists an agent's settings — ferry's call handlers take the call
 configuration as request input, not a lookup by agent id. Rebuilding that is
@@ -85,8 +85,8 @@ cd mobile  && npm install && npx expo run:android   # or run:ios — needs a dev
 ```
 
 > The root `.env.example` still has leftover `POSTGRES_*`/`DATABASE_URL`/
-> `JWT_SECRET`-for-sessions/`WEB_ORIGIN` entries from the harbor days that
-> nothing reads anymore. **[ferry/.env.example](ferry/.env.example)** is the
+> `JWT_SECRET`-for-sessions/`WEB_ORIGIN` entries that nothing reads anymore.
+> **[ferry/.env.example](ferry/.env.example)** is the
 > accurate list: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
 > `TWILIO_TWIML_APP_SID`, `TWILIO_FROM_NUMBER`, `TWILIO_TO_NUMBER`,
 > `PUBLIC_BASE_URL` (a public tunnel URL Twilio can reach — e.g. a Cloudflare
@@ -118,7 +118,7 @@ src/
     builder/         settings, tools, variables, assistant
     ui/              Base UI wrappers — button, dialog, data-table
   lib/
-    mock-data.ts     stand-ins for what harbor used to serve
+    mock-data.ts     stand-ins for persisted data
     agents/          queries and schemas per resource, reading mock-data
     auth/, pricing/, tools/    same pattern — mocked, not fetched
     webrtc/          the try-agent WebRTC demo client, talks to ferry directly
@@ -127,8 +127,8 @@ src/
 ```
 
 **There is no live API call for agents, auth, or pricing.** `lib/api.ts` is
-now just an `ApiError` type — the fetch wrapper it used to hold is gone along
-with harbor. `lib/agents/server.ts` and friends resolve against
+now just an `ApiError` type — the fetch wrapper it used to hold is gone.
+`lib/agents/server.ts` and friends resolve against
 `lib/mock-data.ts` through the same async function shapes a real fetch would
 have, so swapping in a real backend later is a matter of replacing the
 function bodies, not the call sites or the TanStack Query hooks around them:

@@ -24,7 +24,7 @@ export default async function AgentsPage({
   const params = toSearchParams(await searchParams);
 
   const search = (params.get("q") ?? "").trim();
-  // Capped at harbor's own ceiling, so a url asking for ten thousand rows gets
+  // Capped at the backend's own ceiling, so a url asking for ten thousand rows gets
   // a page rather than a 400.
   const size = readPositive(params.get("size"), DEFAULT_SIZE, 100);
 
@@ -34,7 +34,7 @@ export default async function AgentsPage({
   let templates: AgentTemplate[] = [];
   let failed = false;
 
-  // Neither is worth failing the page over: a harbor that is down leaves the
+  // Neither is worth failing the page over: a backend that is down leaves the
   // sections empty and says so.
   const [agentsResult, templatesResult] = await Promise.allSettled([
     getAgents({ search, limit: size, offset: (page - 1) * size }),
@@ -56,10 +56,10 @@ export default async function AgentsPage({
   }
 
   // Deleting the last agent on the last page leaves the url pointing past the
-  // end: harbor answers with no rows while the total still says there are some,
+  // end: the backend answers with no rows while the total still says there are some,
   // and the board would claim it is empty while the pager counts "21–20 of 20".
   //
-  // Not while harbor is unreachable, though — a total of zero is then a failure
+  // Not while the backend is unreachable, though — a total of zero is then a failure
   // to count rather than an answer, and rewriting the url over a blip is worse
   // than the wrong page number.
   const lastPage = Math.max(1, Math.ceil(board.total / size));

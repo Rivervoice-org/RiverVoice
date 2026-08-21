@@ -1,6 +1,6 @@
 /**
  * Base fetch plumbing for talking to ferry directly (mobile calls ferry
- * directly, no web/harbor intermediary — see lib/webrtc/signaling.ts for
+ * directly, no web intermediary — see lib/webrtc/signaling.ts for
  * the same pattern applied to the WebRTC offer/answer exchange).
  */
 
