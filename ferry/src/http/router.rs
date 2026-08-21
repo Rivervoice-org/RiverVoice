@@ -69,6 +69,10 @@ fn user_routes() -> Router<AppState> {
     Router::new().route("/v1/users", post(handlers::create_user))
 }
 
+fn auth_routes() -> Router<AppState> {
+    Router::new().route("/v1/auth/refresh", post(handlers::refresh))
+}
+
 pub async fn start_server() -> anyhow::Result<()> {
     let config = config::get().map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -84,6 +88,7 @@ pub async fn start_server() -> anyhow::Result<()> {
         .merge(call_routes())
         .merge(twilio_routes())
         .merge(user_routes())
+        .merge(auth_routes())
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn(log_request))
         .layer(cors_layer())

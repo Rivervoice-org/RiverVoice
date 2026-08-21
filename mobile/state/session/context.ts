@@ -8,8 +8,7 @@ export interface SessionUser {
 export interface SessionContextValue {
   isAuthenticated: boolean;
   user: SessionUser | null;
-  signIn: (phone: string) => Promise<void>;
-  signUp: (data: { name: string; phone: string }) => Promise<void>;
+  continueWithNumber: (phone: string) => Promise<void>;
   signOut: () => void;
 }
 

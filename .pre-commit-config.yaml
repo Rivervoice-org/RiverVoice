@@ -14,12 +14,6 @@ repos:
         language: system
         files: ^ferry/.*\.rs$
 
-      - id: gofmt
-        name: gofmt (harbor)
-        entry: gofmt -l -w
-        language: system
-        files: ^harbor/.*\.go$
-
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

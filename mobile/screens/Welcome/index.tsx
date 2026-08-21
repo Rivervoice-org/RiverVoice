@@ -48,9 +48,9 @@ export default function WelcomeScreen() {
         <Button
           size="lg"
           variant="outline"
-          onPress={() => router.push("/(auth)/sign-in")}
+          onPress={() => router.push("/(auth)/continue-with-number")}
         >
-          Login with number
+          Continue with number
         </Button>
       </View>
     </View>

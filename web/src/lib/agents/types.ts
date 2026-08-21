@@ -1,5 +1,5 @@
 /**
- * Mirrors harbor's generated rows. The one seam sqlc cannot close: change a
+ * Mirrors the backend's generated rows. The one seam sqlc cannot close: change a
  * column and this has to follow, or the browser reads undefined.
  */
 
@@ -8,7 +8,7 @@ export type VersionState = "draft" | "committed";
 export type ToolKind = "api" | "validator" | "mock";
 export type ToolTrigger = "start" | "during" | "end";
 
-/** A card on the roster. Mirrors harbor's ListAgentTemplatesRow. */
+/** A card on the roster. Mirrors the backend's ListAgentTemplatesRow. */
 export type AgentTemplate = {
   id: string;
   name: string;

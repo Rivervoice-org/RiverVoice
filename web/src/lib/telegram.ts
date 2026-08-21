@@ -1,4 +1,4 @@
-// Called straight from the browser while harbor owns none of this yet:
+// Called straight from the browser (no backend proxy yet):
 // api.telegram.org allows cross-origin, and getUpdates works until a webhook is set.
 
 const API = "https://api.telegram.org";

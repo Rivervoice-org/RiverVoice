@@ -109,7 +109,7 @@ export function BuilderTools({ agent }: { agent: Agent }) {
     setBuilding(tool);
   };
 
-  // Held in memory until harbor has a tools endpoint.
+  // Held in memory until a tools endpoint exists.
   const save = (values: SavedTool) => setTools((current) => [...current, values]);
 
   return (

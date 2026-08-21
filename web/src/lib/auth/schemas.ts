@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Mirrors harbor's rules, so the browser catches what the server would reject.
+// Mirrors server validation rules, so the browser catches what the server would reject.
 export const signUpSchema = z
   .object({
     organizationName: z.string().trim().min(2, "Company name is too short").max(100),

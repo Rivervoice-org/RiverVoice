@@ -4,7 +4,7 @@ use axum::body::to_bytes;
 use axum::extract::Request;
 use axum::http::StatusCode;
 use regex::Regex;
-use sea_orm::{ActiveModelTrait, Set, SqlErr};
+use sea_orm::{ActiveModelTrait, Set, SqlErr, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -65,6 +65,17 @@ pub async fn create_user(req: Request) -> Result<ApiResponse<CreateUserResponse>
     let mobile_number = canonicalize_mobile_number(&payload.mobile_number)
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, e))?;
 
+    // The user row and its first refresh token either both land or neither
+    // does — otherwise a failure between the two (e.g. the second insert
+    // erroring) leaves a user that exists but can never log in, silently
+    // squatting on that mobile_number for every future attempt. If any
+    // `?` below returns early, `txn` is dropped without a commit and
+    // sea-orm issues a ROLLBACK for us — no manual rollback call needed.
+    let txn = db::get().begin().await.map_err(|e| {
+        tracing::error!("create_user: failed to start transaction: {e}");
+        ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+    })?;
+
     let active = users::ActiveModel {
         id: Set(Uuid::new_v4()),
         mobile_number: Set(mobile_number),
@@ -72,18 +83,27 @@ pub async fn create_user(req: Request) -> Result<ApiResponse<CreateUserResponse>
         mascot: Set(payload.mascot.unwrap_or_else(|| DEFAULT_MASCOT.to_string())),
     };
 
-    let model = active
-        .insert(db::get())
+    let model = active.insert(&txn).await.map_err(|e| match e.sql_err() {
+        Some(SqlErr::UniqueConstraintViolation(_)) => {
+            ApiResponse::fail(StatusCode::CONFLICT, "mobile_number is already in use")
+        }
+        _ => {
+            tracing::error!("create_user: failed to insert user: {e}");
+            ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+        }
+    })?;
+
+    let refresh = refresh_token::create_refresh_token(&txn, model.id, None)
         .await
-        .map_err(|e| match e.sql_err() {
-            Some(SqlErr::UniqueConstraintViolation(_)) => {
-                ApiResponse::fail(StatusCode::CONFLICT, "mobile_number is already in use")
-            }
-            _ => {
-                tracing::error!("create_user: failed to insert user: {e}");
-                ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
-            }
+        .map_err(|e| {
+            tracing::error!("create_user: failed to issue refresh token: {e}");
+            ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
         })?;
+
+    txn.commit().await.map_err(|e| {
+        tracing::error!("create_user: failed to commit transaction: {e}");
+        ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+    })?;
 
     let secret = &config::get()
         .map_err(|e| {
@@ -96,13 +116,6 @@ pub async fn create_user(req: Request) -> Result<ApiResponse<CreateUserResponse>
         tracing::error!("create_user: failed to issue access token: {e}");
         ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
     })?;
-
-    let refresh = refresh_token::create_refresh_token(model.id, None)
-        .await
-        .map_err(|e| {
-            tracing::error!("create_user: failed to issue refresh token: {e}");
-            ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
-        })?;
 
     Ok(ApiResponse::ok(
         StatusCode::CREATED,
