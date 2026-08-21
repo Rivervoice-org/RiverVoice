@@ -82,20 +82,10 @@ impl FrameProcessor for SttStage {
                     };
 
 
-                    let is_user_speaking = match &event {
-                        SttEvent::UserStartedSpeaking => {
-                            io.cancel_ttfb_metrics();
-                            io.start_ttfb_metrics();
-                            true
-                        }
-                        SttEvent::UserStoppedSpeaking => false,
-                        SttEvent::Transcript(t) if t.is_final => {
-                            io.stop_ttfb_metrics().await;
-                            false
-                        }
-                        SttEvent::Transcript(_) => true,
-                    };
-
+                    if let SttEvent::UserStartedSpeaking = &event {
+                        io.cancel_ttfb_metrics();
+                        io.start_ttfb_metrics();
+                    }
 
                     if let SttEvent::Transcript(t) = &event {
                         if !io
@@ -112,32 +102,37 @@ impl FrameProcessor for SttStage {
                         }
                     }
 
-                    if is_user_speaking {
-                        if let SttEvent::Transcript(t) = &event {
+                    // Deepgram finalizes text in chunks as you talk — a single
+                    // sentence can produce several interim→final cycles before
+                    // you're actually done speaking. Only `UserStoppedSpeaking`
+                    // marks the real turn boundary; treating each final chunk
+                    // as end-of-turn was flushing (and translating) partial
+                    // sentences early, and losing the chunk's own text
+                    // entirely when nothing had accumulated yet.
+                    match &event {
+                        SttEvent::Transcript(t) if t.is_final => {
+                            io.stop_ttfb_metrics().await;
                             buffer.push_str(&t.text);
                         }
-                    } else {
-                        if !buffer.is_empty() {
-                        let text = std::mem::take(&mut buffer);
+                        SttEvent::UserStoppedSpeaking => {
+                            if !buffer.is_empty() {
+                                let text = std::mem::take(&mut buffer);
                                 tracing::info!(target: "ferry::transcript", text = %text);
-                        if !io
-                            .push(Frame::new(FrameKind::UserTurnAggregation(
-                                crate::frames::frames::UserTurnAggregationFrame { text },
-                            )))
-                            .await
-                        {
-                            tracing::info!("{}: downstream closed", io.name());
-                            break;
+                                if !io
+                                    .push(Frame::new(FrameKind::UserTurnAggregation(
+                                        crate::frames::frames::UserTurnAggregationFrame { text },
+                                    )))
+                                    .await
+                                {
+                                    tracing::info!("{}: downstream closed", io.name());
+                                    break;
+                                }
+                            } else {
+                                tracing::debug!("User stopped speaking. No buffer to send.");
+                            }
                         }
-                        else {
-                        tracing::debug!("User stopped speaking. No buffer to send.");
-
-                        }
+                        _ => {}
                     }
-                    }
-
-
-
 
                     if matches!(&event, SttEvent::Transcript(t) if t.is_final)
                         && unreported_audio_seconds > 0.0

@@ -99,9 +99,18 @@ pub struct WebRtcClient<S: FrameSerializer<Message = bytes::Bytes>> {
     output_payload_type: u8,
     opus_encoder: OpusEncoder,
     /// Accumulates PCM across `TtsAudio` frames (which arrive in
-    /// provider-chosen chunk sizes, not 20ms-aligned) until a full Opus
-    /// frame's worth is available.
+    /// provider-chosen chunk sizes, not 20ms-aligned) — also doubles as the
+    /// send queue: `run`'s pacing branch drains one `FRAME_BYTES` chunk off
+    /// the front every `FRAME_DURATION_MS`. `write_sample` has no pacing of
+    /// its own, so without this a long TTS response gets dumped onto the
+    /// wire in a burst far faster than real playback speed — the client's
+    /// jitter buffer can't hold that much lookahead and drops the excess,
+    /// which is why long responses were cutting off after a few words.
     pcm_buffer: Vec<u8>,
+    /// When the next frame is allowed to go out.
+    next_frame_at: Option<tokio::time::Instant>,
+    /// Running count across the whole call, purely for the debug log.
+    frames_sent: u32,
 }
 
 /// Bridges `webrtc`'s callback-based peer connection events into the signals
@@ -274,52 +283,84 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                 output_payload_type,
                 opus_encoder,
                 pcm_buffer: Vec::new(),
+                next_frame_at: None,
+                frames_sent: 0,
             },
             answer_sdp,
         ))
     }
 
-    /// Encodes and sends as many complete 20ms Opus frames as `pcm_buffer`
-    /// now holds, leaving any partial trailing frame buffered for next time.
-    async fn flush_outbound_audio(&mut self) {
-        let mut frames_sent = 0u32;
-        while self.pcm_buffer.len() >= FRAME_BYTES {
-            let chunk: Vec<u8> = self.pcm_buffer.drain(..FRAME_BYTES).collect();
-            let samples: Vec<i16> = chunk
-                .chunks_exact(2)
-                .map(|b| i16::from_le_bytes([b[0], b[1]]))
-                .collect();
+    /// When the pacing branch in `run`'s `select!` should next fire, or
+    /// `None` while `pcm_buffer` doesn't even hold one full frame — the
+    /// branch's `if` guard skips polling this case entirely, rather than
+    /// spinning a timer with nothing to send.
+    fn next_send_deadline(&self) -> Option<tokio::time::Instant> {
+        if self.pcm_buffer.len() < FRAME_BYTES {
+            return None;
+        }
+        Some(self.pacing_target())
+    }
 
-            let opus_bytes = match self.opus_encoder.encode(&samples) {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    tracing::warn!("webrtc: opus encode failed: {e}");
-                    continue;
-                }
-            };
-            let opus_len = opus_bytes.len();
+    /// If we've fallen more than a frame behind (e.g. a gap between TTS
+    /// responses left the buffer briefly empty), catching up by bursting
+    /// the backlog would just recreate the bug this pacing exists to fix —
+    /// restart pacing from now instead of chasing a stale deadline.
+    fn pacing_target(&self) -> tokio::time::Instant {
+        let frame_duration = std::time::Duration::from_millis(FRAME_DURATION_MS);
+        let now = tokio::time::Instant::now();
+        match self.next_frame_at {
+            Some(t) if t > now.checked_sub(frame_duration).unwrap_or(now) => t,
+            _ => now,
+        }
+    }
 
-            let sample = Sample {
-                data: opus_bytes.into(),
-                duration: std::time::Duration::from_millis(FRAME_DURATION_MS),
-                ..Default::default()
-            };
-            match self
-                .output_track
-                .write_sample(self.output_ssrc, self.output_payload_type, &sample, &[])
-                .await
-            {
-                Ok(()) => {
-                    frames_sent += 1;
-                    tracing::debug!(
-                        "webrtc: wrote opus frame #{frames_sent}, {opus_len} bytes, ssrc={}, payload_type={}",
-                        self.output_ssrc,
-                        self.output_payload_type
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!("webrtc: write_sample failed: {e}");
-                }
+    /// Encodes and sends the one frame's worth of PCM at the front of
+    /// `pcm_buffer`, advancing the pacing deadline for the next call.
+    /// No-op if less than a full frame is buffered.
+    async fn send_paced_frame(&mut self) {
+        if self.pcm_buffer.len() < FRAME_BYTES {
+            return;
+        }
+        let chunk: Vec<u8> = self.pcm_buffer.drain(..FRAME_BYTES).collect();
+        let samples: Vec<i16> = chunk
+            .chunks_exact(2)
+            .map(|b| i16::from_le_bytes([b[0], b[1]]))
+            .collect();
+
+        let opus_bytes = match self.opus_encoder.encode(&samples) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                tracing::warn!("webrtc: opus encode failed: {e}");
+                return;
+            }
+        };
+        let opus_len = opus_bytes.len();
+
+        let sample = Sample {
+            data: opus_bytes.into(),
+            duration: std::time::Duration::from_millis(FRAME_DURATION_MS),
+            ..Default::default()
+        };
+
+        let frame_duration = std::time::Duration::from_millis(FRAME_DURATION_MS);
+        self.next_frame_at = Some(self.pacing_target() + frame_duration);
+
+        match self
+            .output_track
+            .write_sample(self.output_ssrc, self.output_payload_type, &sample, &[])
+            .await
+        {
+            Ok(()) => {
+                self.frames_sent += 1;
+                tracing::debug!(
+                    "webrtc: wrote opus frame #{}, {opus_len} bytes, ssrc={}, payload_type={}",
+                    self.frames_sent,
+                    self.output_ssrc,
+                    self.output_payload_type
+                );
+            }
+            Err(e) => {
+                tracing::warn!("webrtc: write_sample failed: {e}");
             }
         }
     }
@@ -336,7 +377,18 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
         };
 
         loop {
+            // `select!` needs a concrete future for every branch up front,
+            // even ones that won't fire this iteration — `sleep_until` on a
+            // dummy far-future instant when nothing's queued, gated off by
+            // the `if` guard so it's never actually polled in that case.
+            let pace_deadline = self.next_send_deadline().unwrap_or_else(|| {
+                tokio::time::Instant::now() + std::time::Duration::from_secs(3600)
+            });
+
             tokio::select! {
+                _ = tokio::time::sleep_until(pace_deadline), if self.next_send_deadline().is_some() => {
+                    self.send_paced_frame().await;
+                }
                 event = data_channel.poll() => {
                     match event {
                         Some(DataChannelEvent::OnMessage(msg)) => {
@@ -363,7 +415,6 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                                 self.pcm_buffer.len() + audio.audio.len()
                             );
                             self.pcm_buffer.extend_from_slice(&audio.audio);
-                            self.flush_outbound_audio().await;
                         }
                         other => {
                             if let Ok(msg) = self.base.serialize(Frame::new(other))
