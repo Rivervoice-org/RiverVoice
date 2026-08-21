@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
+import { useThemeColors } from "@/lib/theme";
 import { AGENTS } from "@/screens/Agents/mock";
 
 const LANGUAGES = [
@@ -131,6 +132,7 @@ function ModeList({
   value: string | null;
   onChange: (value: string | null) => void;
 }) {
+  const colors = useThemeColors();
   return (
     <View className="gap-2">
       {MODES.map((mode) => {
@@ -150,7 +152,7 @@ function ModeList({
                 {mode.description}
               </Text>
             </View>
-            {selected && <Check size={16} strokeWidth={2} color="#3c3832" />}
+            {selected && <Check size={16} strokeWidth={2} color={colors.ink} />}
           </Pressable>
         );
       })}
@@ -160,6 +162,7 @@ function ModeList({
 
 export default function AgentNewScreen() {
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const editingAgent = id ? AGENTS.find((a) => a.id === id) : undefined;
   const isEditing = !!editingAgent;
@@ -203,7 +206,7 @@ export default function AgentNewScreen() {
           className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
           hitSlop={8}
         >
-          <ChevronLeft size={22} strokeWidth={1.75} color="#2e2a25" />
+          <ChevronLeft size={22} strokeWidth={1.75} color={colors.ink} />
         </Pressable>
         <Text className="flex-1 text-center text-[17px] font-semibold">
           {isEditing ? "Edit agent" : "New agent"}
@@ -228,10 +231,9 @@ export default function AgentNewScreen() {
               onSelect={(ref) => form.setFieldValue("mascot", ref)}
             />
             <Input
-              className="mt-4 h-12 w-full border-0 bg-transparent px-0 text-center text-[22px] font-semibold"
-              style={{ textAlign: "center" }}
+              className="mt-4 h-12 min-w-[140px] max-w-full border-0 bg-transparent px-0 text-[22px] font-semibold"
               placeholder="Untitled agent"
-              placeholderTextColor="#b0ada7"
+              placeholderTextColor={colors.faint}
               value={values.name}
               onChangeText={(text) => form.setFieldValue("name", text)}
               autoCapitalize="words"
@@ -297,7 +299,7 @@ export default function AgentNewScreen() {
               })
             }
           >
-            <PhoneCall size={16} strokeWidth={1.75} color="#2e2a25" />
+            <PhoneCall size={16} strokeWidth={1.75} color={colors.ink} />
             <Text className="text-sm font-medium text-foreground">
               Try agent
             </Text>

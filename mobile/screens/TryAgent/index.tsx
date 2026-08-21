@@ -6,6 +6,7 @@ import { X, PhoneOff, Mic, MicOff, Globe, Volume2, VolumeX } from "lucide-react-
 import { Mascot } from "@/components/Mascot";
 import { TranscriptPhase } from "@/components/Transcript";
 import { Text } from "@/components/ui/text";
+import { useThemeColors } from "@/lib/theme";
 import { CallStatus } from "@/lib/webrtc/ferry-call";
 import { Speaker, useFerryCall, type ConversationLine } from "@/hooks/use-ferry-call";
 
@@ -83,6 +84,7 @@ const Transcript = memo(function Transcript({
   phase: TranscriptPhase;
   agentName: string;
 }) {
+  const colors = useThemeColors();
   return (
     <View className="gap-3">
       {conversation.map((line, index) => {
@@ -98,9 +100,9 @@ const Transcript = memo(function Transcript({
             >
               <View className="flex-row items-center gap-1.5">
                 {isAgent ? (
-                  <Globe size={10} strokeWidth={2} color="#3b5dab" />
+                  <Globe size={10} strokeWidth={2} color={colors.river} />
                 ) : (
-                  <Mic size={10} strokeWidth={2} color="#8f8c87" />
+                  <Mic size={10} strokeWidth={2} color={colors.muted} />
                 )}
                 <Text
                   className={`text-[10px] font-semibold uppercase tracking-[0.08em] ${
@@ -120,11 +122,11 @@ const Transcript = memo(function Transcript({
         <View className="items-start">
           <View className="max-w-[85%] rounded-2xl rounded-tl-md border border-border bg-secondary px-3.5 py-2.5">
             <View className="flex-row items-center gap-1.5">
-              <Mic size={10} strokeWidth={2} color="#8f8c87" />
+              <Mic size={10} strokeWidth={2} color={colors.muted} />
               <Text className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground">
                 You
               </Text>
-              <View className="h-1.5 w-1.5 rounded-full bg-[#2a8c4d]" />
+              <View className="h-1.5 w-1.5 rounded-full bg-green" />
             </View>
             <Text className="mt-1 text-sm leading-snug text-muted-foreground">{interim}</Text>
           </View>
@@ -141,6 +143,7 @@ export default function TryAgentScreen() {
   }>();
 
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const agentName = params.name || "Your agent";
 
   const {
@@ -190,7 +193,7 @@ export default function TryAgentScreen() {
           className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
           hitSlop={8}
         >
-          <X size={20} strokeWidth={1.75} color="#2e2a25" />
+          <X size={20} strokeWidth={1.75} color={colors.ink} />
         </Pressable>
         <Text className="flex-1 text-center text-[17px] font-semibold">
           Try agent
@@ -213,8 +216,8 @@ export default function TryAgentScreen() {
             <Text variant="muted" className="text-[13px]">Connecting…</Text>
           ) : status === CallStatus.Connected ? (
             <>
-              <View className="h-1.5 w-1.5 rounded-full bg-[#2a8c4d]" />
-              <Text className="text-[13px] font-medium text-[#2a8c4d]">Live</Text>
+              <View className="h-1.5 w-1.5 rounded-full bg-green" />
+              <Text className="text-[13px] font-medium text-green">Live</Text>
               <View className="h-1 w-1 rounded-full bg-border" />
               <Text font="mono" variant="muted" className="text-[13px]">
                 {formatDuration(duration)}
@@ -257,9 +260,9 @@ export default function TryAgentScreen() {
           hitSlop={8}
         >
           {isMuted ? (
-            <MicOff size={18} strokeWidth={2} color="#fcfbf9" />
+            <MicOff size={18} strokeWidth={2} color={colors.onInk} />
           ) : (
-            <Mic size={18} strokeWidth={2} color="#2e2a25" />
+            <Mic size={18} strokeWidth={2} color={colors.ink} />
           )}
         </Pressable>
 
@@ -272,9 +275,9 @@ export default function TryAgentScreen() {
           hitSlop={8}
         >
           {isSpeakerOn ? (
-            <Volume2 size={18} strokeWidth={2} color="#fcfbf9" />
+            <Volume2 size={18} strokeWidth={2} color={colors.onInk} />
           ) : (
-            <VolumeX size={18} strokeWidth={2} color="#2e2a25" />
+            <VolumeX size={18} strokeWidth={2} color={colors.ink} />
           )}
         </Pressable>
 
@@ -284,7 +287,7 @@ export default function TryAgentScreen() {
             className="h-14 w-14 items-center justify-center rounded-full bg-destructive active:opacity-80"
             hitSlop={8}
           >
-            <PhoneOff size={22} strokeWidth={2} color="#fcfbf9" />
+            <PhoneOff size={22} strokeWidth={2} color={colors.onInk} />
           </Pressable>
           <Text variant="muted" className="mt-2 text-xs">
             {phase === TranscriptPhase.Ended ? "Ended" : "End call"}

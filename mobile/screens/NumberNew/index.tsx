@@ -6,6 +6,7 @@ import { ChevronLeft, Phone } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
+import { useThemeColors } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { NUMBERS } from "@/screens/Phonebook/mock";
 
@@ -83,6 +84,7 @@ function ChipGroup<T extends string>({
 
 export default function NumberNewScreen() {
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const editingNumber = id ? NUMBERS.find((n) => n.id === id) : undefined;
   const isEditing = !!editingNumber;
@@ -123,7 +125,7 @@ export default function NumberNewScreen() {
           className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
           hitSlop={8}
         >
-          <ChevronLeft size={22} strokeWidth={1.75} color="#2e2a25" />
+          <ChevronLeft size={22} strokeWidth={1.75} color={colors.ink} />
         </Pressable>
         <Text className="flex-1 text-center text-[17px] font-semibold">
           {isEditing ? "Edit number" : "New number"}
@@ -144,12 +146,12 @@ export default function NumberNewScreen() {
           {/* Icon + number block, mirrors the AgentNew profile block */}
           <View className="items-center pt-4 pb-8">
             <View className="h-16 w-16 items-center justify-center rounded-full bg-secondary">
-              <Phone size={26} strokeWidth={1.75} color="#3c3832" />
+              <Phone size={26} strokeWidth={1.75} color={colors.ink} />
             </View>
             <Input
               className="mt-4 h-12 border-0 bg-transparent px-0 text-center font-mono text-[22px] font-semibold"
               placeholder="+1 415 555 0100"
-              placeholderTextColor="#b0ada7"
+              placeholderTextColor={colors.faint}
               value={values.number}
               onChangeText={(text) => form.setFieldValue("number", text)}
               keyboardType="phone-pad"

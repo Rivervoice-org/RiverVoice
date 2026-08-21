@@ -23,32 +23,31 @@ import { CallListItem } from "@/components/CallRow";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Rise, rowDelay } from "@/components/ui/rise";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { Equalizer } from "@/motion/equalizer";
-import { PulseRing } from "@/motion/pulse-ring";
-import { Rise } from "@/motion/rise";
+import { useThemeColors, type ThemeColors } from "@/lib/theme";
 import { TRANSCRIPT } from "@/screens/Transcript/mock";
 import { CALL_HISTORY, WAVEFORM } from "./mock";
 
 const OUTCOME_CONFIG = {
   resolved: {
     label: "Resolved",
-    color: "#2a8c4d",
-    bg: "#eaf8ef",
     icon: PhoneIncoming,
+    colorKey: "green" as keyof ThemeColors,
+    bgClassName: "bg-green-tint",
   },
   transferred: {
     label: "Transferred",
-    color: "#3b5dab",
-    bg: "#eef2fc",
     icon: PhoneOutgoing,
+    colorKey: "river" as keyof ThemeColors,
+    bgClassName: "bg-river-tint",
   },
   missed: {
     label: "Missed",
-    color: "#c4384c",
-    bg: "#fdf0f0",
     icon: PhoneMissed,
+    colorKey: "destructive" as keyof ThemeColors,
+    bgClassName: "bg-destructive/10",
   },
 } as const;
 
@@ -71,10 +70,11 @@ function StatCard({
   caption: string;
   className?: string;
 }) {
+  const colors = useThemeColors();
   return (
     <Card className={cn("p-3", className)}>
       <View className="h-7 w-7 items-center justify-center rounded-lg bg-secondary">
-        <Icon size={13} strokeWidth={1.75} color="#3c3832" />
+        <Icon size={13} strokeWidth={1.75} color={colors.ink} />
       </View>
       <Text variant="muted" className="mt-2.5 text-[11px] font-medium uppercase tracking-[0.12em]">
         {label}
@@ -90,6 +90,7 @@ function StatCard({
 }
 
 export default function CallDetailScreen() {
+  const colors = useThemeColors();
   const params = useLocalSearchParams<{
     name: string;
     number: string;
@@ -106,6 +107,7 @@ export default function CallDetailScreen() {
 
   const outcome = OUTCOME_CONFIG[params.outcome as keyof typeof OUTCOME_CONFIG] ?? OUTCOME_CONFIG.resolved;
   const OutcomeIcon = outcome.icon;
+  const outcomeColor = colors[outcome.colorKey];
 
   const [minutes, seconds] = params.duration.split(":").map(Number);
   const totalSeconds = (minutes || 0) * 60 + (seconds || 0);
@@ -125,7 +127,7 @@ export default function CallDetailScreen() {
           className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
           hitSlop={8}
         >
-          <ChevronLeft size={22} strokeWidth={1.75} color="#2e2a25" />
+          <ChevronLeft size={22} strokeWidth={1.75} color={colors.ink} />
         </Pressable>
         <Text className="flex-1 text-center text-[17px] font-semibold">
           Call details
@@ -139,61 +141,56 @@ export default function CallDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Hero card */}
-        <Rise>
+        <Rise index={0}>
           <Card className="mx-5 items-center p-6">
             {params.name || params.agent ? (
-              <PulseRing size={64} duration={2400}>
-                <View className="h-16 w-16 overflow-hidden rounded-full bg-secondary">
-                  <Mascot seed={params.name || params.agent} size={64} />
-                </View>
-              </PulseRing>
+              <View className="h-16 w-16 overflow-hidden rounded-full bg-secondary">
+                <Mascot seed={params.name || params.agent} size={64} />
+              </View>
             ) : (
-            <View className="h-16 w-16 items-center justify-center rounded-full bg-secondary">
-              <Phone size={24} strokeWidth={1.75} color="#8f8c87" />
-            </View>
-          )}
+              <View className="h-16 w-16 items-center justify-center rounded-full bg-secondary">
+                <Phone size={24} strokeWidth={1.75} color={colors.muted} />
+              </View>
+            )}
 
-          <Text className="mt-3 text-[20px] font-semibold">
-            {params.name || params.agent || "Direct call"}
-          </Text>
-          <Text font="mono" variant="muted" className="mt-1 text-sm">
-            {params.number}
-          </Text>
+            <Text className="mt-3 text-[20px] font-semibold">
+              {params.name || params.agent || "Direct call"}
+            </Text>
+            <Text font="mono" variant="muted" className="mt-1 text-sm">
+              {params.number}
+            </Text>
 
-          {params.agent ? (
-            <View className="mt-2.5 flex-row items-center gap-1.5">
-              <Mascot seed={params.agent} size={16} />
-              <Text variant="muted" className="text-xs">
-                Handled by{" "}
-                <Text className="text-xs font-medium text-foreground">
-                  {params.agent}
+            {params.agent ? (
+              <View className="mt-2.5 flex-row items-center gap-1.5">
+                <Mascot seed={params.agent} size={16} />
+                <Text variant="muted" className="text-xs">
+                  Handled by{" "}
+                  <Text className="text-xs font-medium text-foreground">
+                    {params.agent}
+                  </Text>
                 </Text>
+              </View>
+            ) : (
+              <Text variant="muted" className="mt-2.5 text-xs">
+                Direct call
               </Text>
-            </View>
-          ) : (
-            <Text variant="muted" className="mt-2.5 text-xs">
-              Direct call
-            </Text>
-          )}
+            )}
 
-          <Badge
-            className="mt-4 px-3 py-1"
-            style={{ backgroundColor: outcome.bg }}
-          >
-            <OutcomeIcon size={13} strokeWidth={1.75} color={outcome.color} />
-            <Text style={{ color: outcome.color }} className="text-xs font-medium">
-              {outcome.label}
-            </Text>
-          </Badge>
+            <Badge className={cn("mt-4 px-3 py-1", outcome.bgClassName)}>
+              <OutcomeIcon size={13} strokeWidth={1.75} color={outcomeColor} />
+              <Text style={{ color: outcomeColor }} className="text-xs font-medium">
+                {outcome.label}
+              </Text>
+            </Badge>
 
-          <View className="mt-4 flex-row items-center gap-4">
+            <View className="mt-4 flex-row items-center gap-4">
               <View className="flex-row items-center gap-1.5">
-                <CalendarDays size={12} strokeWidth={1.75} color="#8f8c87" />
+                <CalendarDays size={12} strokeWidth={1.75} color={colors.muted} />
                 <Text variant="muted" className="text-xs">{params.time}</Text>
               </View>
               <View className="h-3 w-px bg-border" />
               <View className="flex-row items-center gap-1.5">
-                <Clock size={12} strokeWidth={1.75} color="#8f8c87" />
+                <Clock size={12} strokeWidth={1.75} color={colors.muted} />
                 <Text font="mono" variant="muted" className="text-xs">{params.duration}</Text>
               </View>
             </View>
@@ -201,67 +198,64 @@ export default function CallDetailScreen() {
         </Rise>
 
         {/* Stats */}
-        <Rise delay={70}>
+        <Rise index={1}>
           <View className="mx-5 mt-4 flex-row flex-wrap gap-3">
-          <StatCard
-            className="w-[47.5%]"
-            icon={Clock}
-            label="Duration"
-            value={params.duration}
-            caption="Total call time"
-          />
-          <StatCard
-            className="w-[47.5%]"
-            icon={AudioLines}
-            label="Minutes"
-            value={String(usedMinutes)}
-            caption="Billed minutes"
-          />
-          <StatCard
-            className="w-[47.5%]"
-            icon={Globe}
-            label="Language"
-            value={(params.language.split("→")[0] ?? params.language).trim()}
-            caption={params.language}
-          />
-          <StatCard
-            className="w-[47.5%]"
-            icon={Phone}
-            label="Called from"
-            value={params.fromNumber}
-caption="Your number"
+            <StatCard
+              className="w-[47.5%]"
+              icon={Clock}
+              label="Duration"
+              value={params.duration}
+              caption="Total call time"
+            />
+            <StatCard
+              className="w-[47.5%]"
+              icon={AudioLines}
+              label="Minutes"
+              value={String(usedMinutes)}
+              caption="Billed minutes"
+            />
+            <StatCard
+              className="w-[47.5%]"
+              icon={Globe}
+              label="Language"
+              value={(params.language.split("→")[0] ?? params.language).trim()}
+              caption={params.language}
+            />
+            <StatCard
+              className="w-[47.5%]"
+              icon={Phone}
+              label="Called from"
+              value={params.fromNumber}
+              caption="Your number"
             />
           </View>
         </Rise>
 
         {/* Recording */}
-        <Rise delay={140}>
+        <Rise index={2}>
           <Card className="mx-5 mt-6 p-4">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center gap-2">
-              <AudioLines size={15} strokeWidth={1.75} color="#3c3832" />
-              <Text className="text-[13px] font-semibold">Recording</Text>
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center gap-2">
+                <AudioLines size={15} strokeWidth={1.75} color={colors.ink} />
+                <Text className="text-[13px] font-semibold">Recording</Text>
+              </View>
+              <Text font="mono" variant="muted" className="text-xs">{params.duration}</Text>
             </View>
-            <Text font="mono" variant="muted" className="text-xs">{params.duration}</Text>
-          </View>
 
-          <View className="mt-4 flex-row items-center gap-4">
-            <Pressable
-              onPress={togglePlay}
-              className="h-11 w-11 items-center justify-center rounded-full bg-foreground active:opacity-80"
-              hitSlop={8}
-            >
-              {playing ? (
-                <Pause size={16} strokeWidth={2} color="#fcfbf9" fill="#fcfbf9" />
-              ) : (
-                <Play size={16} strokeWidth={2} color="#fcfbf9" fill="#fcfbf9" style={{ marginLeft: 2 }} />
-              )}
-            </Pressable>
+            <View className="mt-4 flex-row items-center gap-4">
+              <Pressable
+                onPress={togglePlay}
+                className="h-11 w-11 items-center justify-center rounded-full bg-foreground active:opacity-80"
+                hitSlop={8}
+              >
+                {playing ? (
+                  <Pause size={16} strokeWidth={2} color={colors.onInk} fill={colors.onInk} />
+                ) : (
+                  <Play size={16} strokeWidth={2} color={colors.onInk} fill={colors.onInk} style={{ marginLeft: 2 }} />
+                )}
+              </Pressable>
 
-            <View className="flex-1">
-              {playing ? (
-                <Equalizer bars={WAVEFORM.length} height={32} color="#3c3832" />
-              ) : (
+              <View className="flex-1">
                 <View className="h-10 flex-row items-center justify-between gap-[2px]">
                   {WAVEFORM.map((height, index) => {
                     const reached = index / WAVEFORM.length <= progress / 100;
@@ -274,100 +268,106 @@ caption="Your number"
                     );
                   })}
                 </View>
-              )}
-              <View className="mt-1.5 flex-row items-center justify-between">
-                <Text font="mono" variant="muted" className="text-[11px]">
-                  {formatTime(Math.floor((progress / 100) * totalSeconds))}
-                </Text>
-                <Text font="mono" variant="muted" className="text-[11px]">{params.duration}</Text>
+                <View className="mt-1.5 flex-row items-center justify-between">
+                  <Text font="mono" variant="muted" className="text-[11px]">
+                    {formatTime(Math.floor((progress / 100) * totalSeconds))}
+                  </Text>
+                  <Text font="mono" variant="muted" className="text-[11px]">{params.duration}</Text>
+                </View>
               </View>
             </View>
-          </View>
 
-          <View className="mt-4 flex-row gap-2.5">
-            <Button variant="outline" className="flex-1 py-2.5">
-              <Download size={13} strokeWidth={1.75} color="#3c3832" />
-              <Text className="text-xs font-medium">Download</Text>
-            </Button>
-            <Button variant="outline" className="flex-1 py-2.5">
-              <Phone size={13} strokeWidth={1.75} color="#3c3832" />
-              <Text className="text-xs font-medium">Share</Text>
-            </Button>
-          </View>
+            <View className="mt-4 flex-row gap-2.5">
+              <Button variant="outline" className="flex-1 py-2.5">
+                <Download size={13} strokeWidth={1.75} color={colors.ink} />
+                <Text className="text-xs font-medium">Download</Text>
+              </Button>
+              <Button variant="outline" className="flex-1 py-2.5">
+                <Phone size={13} strokeWidth={1.75} color={colors.ink} />
+                <Text className="text-xs font-medium">Share</Text>
+              </Button>
+            </View>
           </Card>
         </Rise>
 
         {/* Transcription */}
-        <Pressable
-          onPress={() =>
-            router.push({
-              pathname: "/transcript",
-              params: {
-                name: params.name,
-                number: params.number,
-                agent: params.agent,
-              },
-            })
-          }
-          className="mx-5 mt-6 flex-row items-center justify-between rounded-xl border border-border bg-card px-4 py-3.5 shadow-float active:bg-secondary"
-        >
-          <View className="flex-row items-center gap-2">
-            <MessageSquareText size={15} strokeWidth={1.75} color="#3c3832" />
-            <Text className="text-[13px] font-semibold">View transcription</Text>
-          </View>
-          <View className="flex-row items-center gap-2">
-            <Text variant="muted" className="text-[11px] font-medium">
-              {TRANSCRIPT.length} lines
-            </Text>
-            <ChevronRight size={16} strokeWidth={1.75} color="#8f8c87" />
-          </View>
-        </Pressable>
+        <Rise index={3}>
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: "/transcript",
+                params: {
+                  name: params.name,
+                  number: params.number,
+                  agent: params.agent,
+                },
+              })
+            }
+            className="mx-5 mt-6 flex-row items-center justify-between rounded-xl border border-border bg-card px-4 py-3.5 shadow-float active:bg-secondary"
+          >
+            <View className="flex-row items-center gap-2">
+              <MessageSquareText size={15} strokeWidth={1.75} color={colors.ink} />
+              <Text className="text-[13px] font-semibold">View transcription</Text>
+            </View>
+            <View className="flex-row items-center gap-2">
+              <Text variant="muted" className="text-[11px] font-medium">
+                {TRANSCRIPT.length} lines
+              </Text>
+              <ChevronRight size={16} strokeWidth={1.75} color={colors.muted} />
+            </View>
+          </Pressable>
+        </Rise>
 
         {/* History */}
         <View className="mt-8">
-          <View className="flex-row items-center justify-between px-5">
-            <Text variant="muted" className="text-[11px] font-medium uppercase tracking-[0.14em]">
-              History
-            </Text>
-            <Pressable className="flex-row items-center gap-1">
-              <Text className="text-xs font-medium">See all</Text>
-              <ChevronRight size={14} strokeWidth={1.75} color="#3c3832" />
-            </Pressable>
-          </View>
+          <Rise index={4}>
+            <View className="flex-row items-center justify-between px-5">
+              <Text variant="muted" className="text-[11px] font-medium uppercase tracking-[0.14em]">
+                History
+              </Text>
+              <Pressable className="flex-row items-center gap-1">
+                <Text className="text-xs font-medium">See all</Text>
+                <ChevronRight size={14} strokeWidth={1.75} color={colors.ink} />
+              </Pressable>
+            </View>
+          </Rise>
 
           <Card className="mx-5 mt-3 overflow-hidden">
             {CALL_HISTORY.map((call, index) => (
-              <CallListItem
-                key={call.id}
-                call={call}
-                showDivider={index < CALL_HISTORY.length - 1}
-                onPress={() =>
-                  router.push({
-                    pathname: "/call-detail",
-                    params: {
-                      name: call.name,
-                      number: call.number,
-                      fromNumber: call.fromNumber,
-                      agent: call.agent || "",
-                      language: call.language,
-                      duration: call.duration,
-                      outcome: call.outcome,
-                      time: call.time,
-                    },
-                  })
-                }
-              />
+              <Rise key={call.id} delay={rowDelay(4, index)}>
+                <CallListItem
+                  call={call}
+                  showDivider={index < CALL_HISTORY.length - 1}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/call-detail",
+                      params: {
+                        name: call.name,
+                        number: call.number,
+                        fromNumber: call.fromNumber,
+                        agent: call.agent || "",
+                        language: call.language,
+                        duration: call.duration,
+                        outcome: call.outcome,
+                        time: call.time,
+                      },
+                    })
+                  }
+                />
+              </Rise>
             ))}
           </Card>
         </View>
 
         {/* Actions */}
-        <View className="mx-5 mt-8">
-          <Button size="lg">
-            <Phone size={16} strokeWidth={2} color="#fcfbf9" />
-            <Text className="text-sm font-medium text-primary-foreground">Call</Text>
-          </Button>
-        </View>
+        <Rise index={5}>
+          <View className="mx-5 mt-8">
+            <Button size="lg">
+              <Phone size={16} strokeWidth={2} color={colors.onInk} />
+              <Text className="text-sm font-medium text-primary-foreground">Call</Text>
+            </Button>
+          </View>
+        </Rise>
       </ScrollView>
     </SafeAreaView>
   );

@@ -2,11 +2,13 @@ import { ScrollView, View, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { ChevronLeft, Globe, Mic, User } from "lucide-react-native";
+import { Rise } from "@/components/ui/rise";
 import { Text } from "@/components/ui/text";
-import { Rise } from "@/motion/rise";
+import { useThemeColors } from "@/lib/theme";
 import { TRANSCRIPT, type TranscriptEntry } from "./mock";
 
 function TranscriptBubble({ entry }: { entry: TranscriptEntry }) {
+  const colors = useThemeColors();
   const isAgent = entry.speaker === "agent";
 
   return (
@@ -20,9 +22,9 @@ function TranscriptBubble({ entry }: { entry: TranscriptEntry }) {
       >
         <View className="flex-row items-center gap-1.5">
           {isAgent ? (
-            <Mic size={10} strokeWidth={2} color="#fcfbf9" />
+            <Mic size={10} strokeWidth={2} color={colors.onInk} />
           ) : (
-            <User size={10} strokeWidth={2} color="#8f8c87" />
+            <User size={10} strokeWidth={2} color={colors.muted} />
           )}
           <Text
             className={`text-[10px] font-semibold uppercase tracking-[0.08em] ${
@@ -52,7 +54,7 @@ function TranscriptBubble({ entry }: { entry: TranscriptEntry }) {
         {entry.translated && (
           <View className="mt-1.5 border-t border-border/60 pt-1.5">
             <View className="flex-row items-center gap-1">
-              <Globe size={10} strokeWidth={2} color="#3b5dab" />
+              <Globe size={10} strokeWidth={2} color={colors.river} />
               <Text className="text-[10px] font-medium uppercase tracking-[0.08em] text-river">
                 Translated
               </Text>
@@ -66,6 +68,7 @@ function TranscriptBubble({ entry }: { entry: TranscriptEntry }) {
 }
 
 export default function TranscriptScreen() {
+  const colors = useThemeColors();
   const params = useLocalSearchParams<{
     name: string;
     number: string;
@@ -75,29 +78,33 @@ export default function TranscriptScreen() {
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
       {/* Header */}
-      <View className="flex-row items-center px-4 py-3">
-        <Pressable
-          onPress={() => router.back()}
-          className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
-          hitSlop={8}
-        >
-          <ChevronLeft size={22} strokeWidth={1.75} color="#2e2a25" />
-        </Pressable>
-        <Text className="flex-1 text-center text-[17px] font-semibold">
-          Transcription
-        </Text>
-        <View className="w-9" />
-      </View>
+      <Rise index={0}>
+        <View className="flex-row items-center px-4 py-3">
+          <Pressable
+            onPress={() => router.back()}
+            className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
+            hitSlop={8}
+          >
+            <ChevronLeft size={22} strokeWidth={1.75} color={colors.ink} />
+          </Pressable>
+          <Text className="flex-1 text-center text-[17px] font-semibold">
+            Transcription
+          </Text>
+          <View className="w-9" />
+        </View>
+      </Rise>
 
       {/* Caller info */}
-      <View className="px-5 pb-3">
-        <Text className="text-[15px] font-semibold">
-          {params.name || params.number}
-        </Text>
-        <Text variant="muted" className="text-xs">
-          {params.agent ? `Handled by ${params.agent}` : "Direct call"}
-        </Text>
-      </View>
+      <Rise index={1}>
+        <View className="px-5 pb-3">
+          <Text className="text-[15px] font-semibold">
+            {params.name || params.number}
+          </Text>
+          <Text variant="muted" className="text-xs">
+            {params.agent ? `Handled by ${params.agent}` : "Direct call"}
+          </Text>
+        </View>
+      </Rise>
 
       <ScrollView
         className="flex-1"
@@ -106,9 +113,7 @@ export default function TranscriptScreen() {
       >
         <View className="gap-3">
           {TRANSCRIPT.map((entry, index) => (
-            <Rise key={index} delay={index * 60}>
-              <TranscriptBubble entry={entry} />
-            </Rise>
+            <TranscriptBubble key={index} entry={entry} />
           ))}
         </View>
       </ScrollView>
