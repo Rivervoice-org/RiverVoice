@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
-use crate::frames::frames::{Frame, FrameKind};
-use crate::processor::processor::{FrameIo, FrameProcessor};
+use crate::frames::{Frame, FrameKind};
+use crate::processor::{FrameIo, FrameProcessor};
 use crate::services::mt::provider::MtProvider;
 
 pub struct MtStage {

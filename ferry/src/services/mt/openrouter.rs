@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::frames::frames::{MtTextFrame, MtUsageFrame};
+use crate::frames::{MtTextFrame, MtUsageFrame};
 use crate::services::mt::provider::{MtError, MtProvider};
 
 const ENDPOINT: &str = "https://openrouter.ai/api/v1/chat/completions";

@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 
-use crate::frames::frames::Frame;
-use crate::observer::observer::FrameObserver;
-use crate::processor::processor::{FrameIo, FrameProcessor};
+use crate::frames::Frame;
+use crate::observer::frame_observer::FrameObserver;
+use crate::processor::{FrameIo, FrameProcessor};
 
 const STAGE_QUEUE_SIZE: usize = 64;
 

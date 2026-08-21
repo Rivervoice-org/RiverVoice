@@ -1,5 +1,5 @@
-use crate::frames::frames::{Frame, FrameKind};
-use crate::observer::observer::FrameObserver;
+use crate::frames::{Frame, FrameKind};
+use crate::observer::frame_observer::FrameObserver;
 
 pub struct MetricsLogObserver;
 

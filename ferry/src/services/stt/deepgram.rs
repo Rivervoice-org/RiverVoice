@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use axum::http::HeaderName;
@@ -7,12 +8,8 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 
-use super::percent_encode;
-use crate::frames::frames::{Frame, FrameKind, RawAudioFrame};
-use crate::serializer::serializer::FrameSerializer;
-use crate::services::stt::deepgram::{
-    EVENT_CHANNEL_CAPACITY, KEEPALIVE_INTERVAL, MAX_RECONNECT_ATTEMPTS, RECONNECT_DELAY,
-};
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::{Frame, FrameKind, RawAudioFrame};
 use crate::services::stt::provider::{
     SttConfig, SttConfigKind, SttError, SttEvent, SttProvider, SttSession, Transcript,
     WsOutboundClient,
@@ -21,6 +18,17 @@ use crate::services::stt::provider::{
 const ENDPOINT: &str = "wss://api.deepgram.com/v1/listen";
 
 const AUDIO_ENCODING: &str = "linear16";
+
+const MAX_RECONNECT_ATTEMPTS: u32 = 5;
+const RECONNECT_DELAY: Duration = Duration::from_millis(750);
+
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
+
+const EVENT_CHANNEL_CAPACITY: usize = 32;
+
+fn percent_encode(s: &str) -> String {
+    percent_encoding::utf8_percent_encode(s, percent_encoding::NON_ALPHANUMERIC).to_string()
+}
 
 pub struct DeepgramSttProvider {
     api_key: String,

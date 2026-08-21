@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::frames::frames::{MtTextFrame, MtUsageFrame};
+use crate::frames::{MtTextFrame, MtUsageFrame};
 use crate::services::mt::provider::{MtError, MtProvider};
 use crate::services::stt::language::Language;
 
@@ -42,6 +42,10 @@ impl MtProvider for SarvamMtProvider {
                 source_language_code: self.source_language.code().to_string(),
                 target_language_code: self.target_language.code().to_string(),
                 model: Some("sarvam-translate:v1".to_string()),
+                speaker_gender: None,
+                mode: None,
+                output_script: None,
+                numerals_format: None,
             })
             .send()
             .await
@@ -73,6 +77,14 @@ struct TranslateRequest {
     source_language_code: String,
     target_language_code: String,
     model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speaker_gender: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output_script: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    numerals_format: Option<String>,
 }
 
 #[derive(Deserialize)]

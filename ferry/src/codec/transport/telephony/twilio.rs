@@ -4,8 +4,8 @@ use axum::extract::ws::Message;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 
-use crate::frames::frames::{Frame, FrameKind, RawAudioFrame};
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::{Frame, FrameKind, RawAudioFrame};
 
 const TWILIO_SAMPLE_RATE: u32 = 8_000;
 const PIPELINE_SAMPLE_RATE: u32 = 16_000;

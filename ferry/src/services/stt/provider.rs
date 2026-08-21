@@ -6,8 +6,8 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::frames::frames::{Frame, RawAudioFrame};
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::{Frame, RawAudioFrame};
 use crate::services::stt::language::Language;
 use crate::services::ws_client;
 

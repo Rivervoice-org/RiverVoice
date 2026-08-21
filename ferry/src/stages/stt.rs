@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::frames::frames::{Frame, FrameKind, SttUsageFrame};
-use crate::processor::processor::{FrameIo, FrameProcessor};
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::{Frame, FrameKind, SttUsageFrame};
+use crate::processor::{FrameIo, FrameProcessor};
 use crate::services::stt::provider::{SttConfig, SttEvent, SttProvider};
 
 pub struct SttStage {
@@ -90,7 +90,7 @@ impl FrameProcessor for SttStage {
                     if let SttEvent::Transcript(t) = &event {
                         if !io
                             .push(Frame::new(FrameKind::Transcription(
-                                crate::frames::frames::TranscriptionFrame {
+                                crate::frames::TranscriptionFrame {
                                     text: t.text.clone(),
                                     is_final: t.is_final,
                                 },
@@ -120,7 +120,7 @@ impl FrameProcessor for SttStage {
                                 tracing::info!(target: "ferry::transcript", text = %text);
                                 if !io
                                     .push(Frame::new(FrameKind::UserTurnAggregation(
-                                        crate::frames::frames::UserTurnAggregationFrame { text },
+                                        crate::frames::UserTurnAggregationFrame { text },
                                     )))
                                     .await
                                 {

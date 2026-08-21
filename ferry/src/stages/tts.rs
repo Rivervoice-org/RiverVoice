@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::frames::frames::{Frame, FrameKind, MtTextFrame, TtsAudioFrame, TtsUsageFrame};
-use crate::processor::processor::{FrameIo, FrameProcessor};
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::{Frame, FrameKind, MtTextFrame, TtsAudioFrame, TtsUsageFrame};
+use crate::processor::{FrameIo, FrameProcessor};
 use crate::services::tts::provider::{TtsConfig, TtsEvent, TtsProvider};
 
 pub struct TtsStage {

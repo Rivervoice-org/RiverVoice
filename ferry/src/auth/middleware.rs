@@ -33,7 +33,7 @@ pub async fn require_session(mut req: Request, next: Next) -> Result<Response, A
 
     req.extensions_mut().insert(AppState {
         session,
-        pool: db::db::get().clone(),
+        pool: db::pool::get().clone(),
     });
 
     Ok(next.run(req).await)

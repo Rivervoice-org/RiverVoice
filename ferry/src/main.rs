@@ -7,12 +7,12 @@ async fn main() {
     logging::init();
     config::init();
 
-    // if let Err(e) = db::db::init().await {
+    // if let Err(e) = db::pool::init().await {
     //     tracing::error!("failed to connect to database: {e:?}");
     //     std::process::exit(1);
     // }
 
-    if let Err(e) = http::http::start_server().await {
+    if let Err(e) = http::router::start_server().await {
         tracing::error!("server error: {e:?}");
         std::process::exit(1);
     }

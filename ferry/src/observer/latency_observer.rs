@@ -1,8 +1,8 @@
 use std::sync::Mutex;
 use std::time::Instant;
 
-use crate::frames::frames::{Frame, FrameKind};
-use crate::observer::observer::FrameObserver;
+use crate::frames::{Frame, FrameKind};
+use crate::observer::frame_observer::FrameObserver;
 
 pub struct LatencyObserver {
     waiting_since: Mutex<Option<Instant>>,

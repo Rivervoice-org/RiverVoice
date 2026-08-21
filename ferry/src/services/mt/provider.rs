@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::frames::frames::{MtTextFrame, MtUsageFrame};
+use crate::frames::{MtTextFrame, MtUsageFrame};
 
 #[derive(Debug)]
 pub enum MtError {

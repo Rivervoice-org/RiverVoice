@@ -1,6 +1,6 @@
-use crate::frames::frames::Frame;
-use crate::processor::processor::FrameIo;
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::Frame;
+use crate::processor::FrameIo;
 
 pub struct BaseTransport<S: FrameSerializer> {
     io: FrameIo,

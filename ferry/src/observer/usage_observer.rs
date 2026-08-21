@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
-use crate::frames::frames::{Frame, FrameKind, MtUsageFrame, SttUsageFrame, TtsUsageFrame};
-use crate::observer::observer::FrameObserver;
+use crate::frames::{Frame, FrameKind, MtUsageFrame, SttUsageFrame, TtsUsageFrame};
+use crate::observer::frame_observer::FrameObserver;
 
 pub struct UsageObserver {
     stt: Mutex<SttUsageFrame>,

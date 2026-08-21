@@ -1,5 +1,6 @@
 pub mod audio;
 pub mod auth;
+pub mod codec;
 pub mod config;
 pub mod db;
 pub mod frames;
@@ -9,7 +10,6 @@ pub mod observer;
 pub mod pipeline;
 pub mod pricing;
 pub mod processor;
-pub mod serializer;
 pub mod services;
 pub mod stages;
 pub mod transport;

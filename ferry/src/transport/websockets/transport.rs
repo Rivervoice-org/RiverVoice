@@ -4,7 +4,7 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
 use crate::transport::base::BaseTransport;
 
 pub struct WebSocketClient<S: FrameSerializer<Message = Message>> {
