@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { ScrollView, View, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Constants from "expo-constants";
@@ -9,16 +9,21 @@ import {
   FileText,
   Headphones,
   LogOut,
+  Monitor,
   MessageSquareText,
+  Moon,
   ShieldCheck,
+  Sun,
 } from "lucide-react-native";
 import { useAuth } from "@/hooks/use-auth";
 import { MascotPicker } from "@/components/MascotPicker";
 import { Card } from "@/components/ui/card";
+import { Rise } from "@/components/ui/rise";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
+import { useTheme, useThemeColors, type ThemePreference } from "@/lib/theme";
 
 function SectionLabel({ children }: { children: string }) {
   return (
@@ -34,17 +39,19 @@ function SectionLabel({ children }: { children: string }) {
 const noop = () => {};
 
 /**
- * Module-level so their identity never changes — a memoized Row has to see
- * the same icon node across renders or it re-renders anyway.
+ * Built once per scheme (not per render) so a memoized Row still only sees
+ * a new icon node when the theme actually changes.
  */
-const ICONS = {
-  transcript: <MessageSquareText size={14} strokeWidth={1.75} color="#3c3832" />,
-  bell: <Bell size={14} strokeWidth={1.75} color="#3c3832" />,
-  shield: <ShieldCheck size={14} strokeWidth={1.75} color="#3c3832" />,
-  help: <CircleHelp size={14} strokeWidth={1.75} color="#3c3832" />,
-  headset: <Headphones size={14} strokeWidth={1.75} color="#3c3832" />,
-  doc: <FileText size={14} strokeWidth={1.75} color="#3c3832" />,
-};
+function buildIcons(ink: string) {
+  return {
+    transcript: <MessageSquareText size={14} strokeWidth={1.75} color={ink} />,
+    bell: <Bell size={14} strokeWidth={1.75} color={ink} />,
+    shield: <ShieldCheck size={14} strokeWidth={1.75} color={ink} />,
+    help: <CircleHelp size={14} strokeWidth={1.75} color={ink} />,
+    headset: <Headphones size={14} strokeWidth={1.75} color={ink} />,
+    doc: <FileText size={14} strokeWidth={1.75} color={ink} />,
+  };
+}
 
 /**
  * Every row shares one shape — icon chip, label (+ optional description),
@@ -76,6 +83,7 @@ const Row = memo(function Row({
   onPress?: () => void;
   last?: boolean;
 }) {
+  const colors = useThemeColors();
   const control =
     switchChecked !== undefined && onSwitchChange ? (
       <Switch checked={switchChecked} onCheckedChange={onSwitchChange} />
@@ -110,14 +118,55 @@ const Row = memo(function Row({
       ) : null}
       {control}
       {onPress && !control ? (
-        <ChevronRight size={16} strokeWidth={1.75} color="#8f8c87" />
+        <ChevronRight size={16} strokeWidth={1.75} color={colors.muted} />
       ) : null}
     </Pressable>
   );
 });
 
+const APPEARANCE_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
+];
+
+function AppearancePicker() {
+  const { preference, setPreference } = useTheme();
+  const colors = useThemeColors();
+
+  return (
+    <View className="flex-row gap-2 px-4 py-3">
+      {APPEARANCE_OPTIONS.map(({ value, label, icon: Icon }) => {
+        const active = preference === value;
+        return (
+          <Pressable
+            key={value}
+            onPress={() => setPreference(value)}
+            className={cn(
+              "flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border py-2",
+              active ? "border-foreground bg-foreground" : "border-border bg-transparent"
+            )}
+          >
+            <Icon size={14} strokeWidth={1.75} color={active ? colors.onInk : colors.muted} />
+            <Text
+              className={cn(
+                "text-[13px] font-medium",
+                active ? "text-primary-foreground" : "text-muted-foreground"
+              )}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const { signOut, user } = useAuth();
+  const colors = useThemeColors();
+  const ICONS = useMemo(() => buildIcons(colors.ink), [colors.ink]);
   const [mascot, setMascot] = useState<string | undefined>(undefined);
   const [transcribeVoicemails, setTranscribeVoicemails] = useState(true);
   const [missedCallAlerts, setMissedCallAlerts] = useState(true);
@@ -127,14 +176,16 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
       {/* Header — matches the other tab roots (Agents, My numbers) */}
-      <View className="px-5 pt-3 pb-1">
-        <Text className="text-[28px] font-semibold tracking-[-0.02em]">
-          Settings
-        </Text>
-        <Text variant="muted" className="mt-1 text-sm">
-          Your account and app preferences
-        </Text>
-      </View>
+      <Rise index={0}>
+        <View className="px-5 pt-3 pb-1">
+          <Text className="text-[28px] font-semibold tracking-[-0.02em]">
+            Settings
+          </Text>
+          <Text variant="muted" className="mt-1 text-sm">
+            Your account and app preferences
+          </Text>
+        </View>
+      </Rise>
 
       <ScrollView
         className="flex-1"
@@ -142,82 +193,100 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Profile */}
-        <View className="items-center px-6 pt-6 pb-8">
-          <MascotPicker value={mascot} onSelect={setMascot} />
-          <Text className="mt-3 text-[20px] font-semibold">{user?.name || "You"}</Text>
-          {user?.phone ? (
-            <Text variant="muted" className="mt-0.5 text-[13px]">
-              +{user.phone}
+        <Rise index={1}>
+          <View className="items-center px-6 pt-6 pb-8">
+            <MascotPicker value={mascot} onSelect={setMascot} />
+            <Text className="mt-3 text-[20px] font-semibold">{user?.name || "You"}</Text>
+            {user?.phone ? (
+              <Text variant="muted" className="mt-0.5 text-[13px]">
+                +{user.phone}
+              </Text>
+            ) : null}
+            <Text variant="muted" className="mt-1 text-[12px]">
+              Tap the face to change your mascot
             </Text>
-          ) : null}
-          <Text variant="muted" className="mt-1 text-[12px]">
-            Tap the face to change your mascot
-          </Text>
-        </View>
+          </View>
+        </Rise>
+
+        {/* Appearance */}
+        <Rise index={2}>
+          <SectionLabel>Appearance</SectionLabel>
+          <Card className="mx-5 mt-2.5 overflow-hidden">
+            <AppearancePicker />
+          </Card>
+        </Rise>
 
         {/* Calls */}
-        <SectionLabel>Calls</SectionLabel>
-        <Card className="mx-5 mt-2.5 overflow-hidden">
-          <Row
-            icon={ICONS.transcript}
-            label="Voicemail transcripts"
-            description="Text you a transcript of every voicemail"
-            switchChecked={transcribeVoicemails}
-            onSwitchChange={setTranscribeVoicemails}
-          />
-          <Row
-            icon={ICONS.bell}
-            label="Missed call alerts"
-            description="Notify me when a call goes unanswered"
-            switchChecked={missedCallAlerts}
-            onSwitchChange={setMissedCallAlerts}
-            last
-          />
-        </Card>
+        <Rise index={3}>
+          <SectionLabel>Calls</SectionLabel>
+          <Card className="mx-5 mt-2.5 overflow-hidden">
+            <Row
+              icon={ICONS.transcript}
+              label="Voicemail transcripts"
+              description="Text you a transcript of every voicemail"
+              switchChecked={transcribeVoicemails}
+              onSwitchChange={setTranscribeVoicemails}
+            />
+            <Row
+              icon={ICONS.bell}
+              label="Missed call alerts"
+              description="Notify me when a call goes unanswered"
+              switchChecked={missedCallAlerts}
+              onSwitchChange={setMissedCallAlerts}
+              last
+            />
+          </Card>
+        </Rise>
 
         {/* Privacy */}
-        <SectionLabel>Privacy</SectionLabel>
-        <Card className="mx-5 mt-2.5 overflow-hidden">
-          <Row
-            icon={ICONS.shield}
-            label="Keep call recordings"
-            description="Store audio after the call ends"
-            switchChecked={keepRecordings}
-            onSwitchChange={setKeepRecordings}
-          />
-          <Row
-            icon={ICONS.shield}
-            label="Share diagnostics"
-            description="Send crash and usage data to improve the app"
-            switchChecked={shareDiagnostics}
-            onSwitchChange={setShareDiagnostics}
-            last
-          />
-        </Card>
+        <Rise index={4}>
+          <SectionLabel>Privacy</SectionLabel>
+          <Card className="mx-5 mt-2.5 overflow-hidden">
+            <Row
+              icon={ICONS.shield}
+              label="Keep call recordings"
+              description="Store audio after the call ends"
+              switchChecked={keepRecordings}
+              onSwitchChange={setKeepRecordings}
+            />
+            <Row
+              icon={ICONS.shield}
+              label="Share diagnostics"
+              description="Send crash and usage data to improve the app"
+              switchChecked={shareDiagnostics}
+              onSwitchChange={setShareDiagnostics}
+              last
+            />
+          </Card>
+        </Rise>
 
         {/* Support */}
-        <SectionLabel>Support</SectionLabel>
-        <Card className="mx-5 mt-2.5 overflow-hidden">
-          <Row icon={ICONS.help} label="Help center" onPress={noop} />
-          <Row icon={ICONS.headset} label="Contact support" onPress={noop} />
-          <Row icon={ICONS.doc} label="Terms of service" onPress={noop} />
-          <Row icon={ICONS.doc} label="Privacy policy" onPress={noop} last />
-        </Card>
+        <Rise index={5}>
+          <SectionLabel>Support</SectionLabel>
+          <Card className="mx-5 mt-2.5 overflow-hidden">
+            <Row icon={ICONS.help} label="Help center" onPress={noop} />
+            <Row icon={ICONS.headset} label="Contact support" onPress={noop} />
+            <Row icon={ICONS.doc} label="Terms of service" onPress={noop} />
+            <Row icon={ICONS.doc} label="Privacy policy" onPress={noop} last />
+          </Card>
+        </Rise>
 
         {/* About */}
-        <SectionLabel>About</SectionLabel>
-        <Card className="mx-5 mt-2.5 overflow-hidden">
-          <Row label="Version" value={Constants.expoConfig?.version ?? "1.0.0"} last />
-        </Card>
+        <Rise index={6}>
+          <SectionLabel>About</SectionLabel>
+          <Card className="mx-5 mt-2.5 overflow-hidden">
+            <Row label="Version" value={Constants.expoConfig?.version ?? "1.0.0"} last />
+          </Card>
 
-        <View className="items-center pt-8">
-          <Button variant="outline" onPress={signOut} className="px-5">
-            <LogOut size={16} strokeWidth={1.75} color="#c4384c" />
-            <Text variant="destructive" className="text-sm font-medium">
-              Sign out
-            </Text>
-          </Button>
-        </View>
+          <View className="items-center pt-8">
+            <Button variant="outline" onPress={signOut} className="px-5">
+              <LogOut size={16} strokeWidth={1.75} color={colors.destructive} />
+              <Text variant="destructive" className="text-sm font-medium">
+                Sign out
+              </Text>
+            </Button>
+          </View>
+        </Rise>
       </ScrollView>
     </SafeAreaView>
   );

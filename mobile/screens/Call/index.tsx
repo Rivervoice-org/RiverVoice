@@ -7,8 +7,10 @@ import { Mascot } from "@/components/Mascot";
 import { SearchInput } from "@/components/SearchInput";
 import { CallRow } from "@/components/CallRow";
 import { DialFab } from "@/components/DialFab";
+import { Rise } from "@/components/ui/rise";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
+import { useThemeColors } from "@/lib/theme";
 
 type Contact = {
   id: string;
@@ -47,6 +49,7 @@ const ContactRow = memo(function ContactRow({
   contact: Contact;
   showDivider: boolean;
 }) {
+  const colors = useThemeColors();
   return (
     <View className="px-5">
       <CallRow
@@ -59,7 +62,7 @@ const ContactRow = memo(function ContactRow({
         }
         trailing={
           <View className="h-8 w-8 items-center justify-center rounded-full bg-river-tint">
-            <Phone size={14} strokeWidth={1.75} color="#3b5dab" />
+            <Phone size={14} strokeWidth={1.75} color={colors.river} />
           </View>
         }
         showDivider={showDivider}
@@ -80,6 +83,7 @@ function SectionHeader({ title }: { title: string }) {
 }
 
 export default function CallScreen() {
+  const colors = useThemeColors();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -150,21 +154,25 @@ export default function CallScreen() {
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
       {/* Header — matches the other tab roots (Agents, My numbers) */}
-      <View className="px-5 pt-3 pb-1">
-        <Text className="text-[28px] font-semibold tracking-[-0.02em]">
-          Call
-        </Text>
-        {!loading && (
-          <Text variant="muted" className="mt-1 text-sm">
-            {contacts.length} contact{contacts.length === 1 ? "" : "s"}
+      <Rise index={0}>
+        <View className="px-5 pt-3 pb-1">
+          <Text className="text-[28px] font-semibold tracking-[-0.02em]">
+            Call
           </Text>
-        )}
-      </View>
+          {!loading && (
+            <Text variant="muted" className="mt-1 text-sm">
+              {contacts.length} contact{contacts.length === 1 ? "" : "s"}
+            </Text>
+          )}
+        </View>
+      </Rise>
 
       {/* Search */}
-      <View className="px-5 pt-2 pb-2">
-        <SearchInput value={search} onChangeText={handleSearchChange} placeholder="Search" />
-      </View>
+      <Rise index={1}>
+        <View className="px-5 pt-2 pb-2">
+          <SearchInput value={search} onChangeText={handleSearchChange} placeholder="Search" />
+        </View>
+      </Rise>
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
@@ -173,7 +181,7 @@ export default function CallScreen() {
       ) : filtered.length === 0 ? (
         <View className="flex-1 items-center justify-center">
           <View className="h-12 w-12 items-center justify-center rounded-full bg-border">
-            <Users size={22} strokeWidth={1.75} color="#b0ada7" />
+            <Users size={22} strokeWidth={1.75} color={colors.faint} />
           </View>
           <Text variant="muted" className="mt-3 text-sm">
             {search ? "No contacts found" : "No contacts on this device"}
