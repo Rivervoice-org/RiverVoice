@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use crate::frames::frames::Frame;
-use crate::observer::observer::FrameObserver;
+use crate::frames::Frame;
+use crate::observer::frame_observer::FrameObserver;
 
 pub struct StageLatencyObserver {
     last_take_at: Mutex<HashMap<String, Instant>>,

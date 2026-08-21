@@ -3,8 +3,11 @@ use std::sync::Arc;
 use axum::{Json, http::StatusCode};
 use serde::{Deserialize, Serialize};
 
+use crate::codec::stt::deepgram::DeepgramSerializer;
+use crate::codec::transport::webrtc_dc::WebRtcSerializer;
+use crate::codec::tts::sarvam::SarvamSerializer;
 use crate::config::{self, Config};
-use crate::frames::frames::{Frame, FrameKind, UserTurnAggregationFrame};
+use crate::frames::{Frame, FrameKind, UserTurnAggregationFrame};
 use crate::http::response::ApiResponse;
 use crate::observer::latency_observer::LatencyObserver;
 use crate::observer::log_observer::LogObserver;
@@ -12,10 +15,7 @@ use crate::observer::metrics_log_observer::MetricsLogObserver;
 use crate::observer::stage_latency_observer::StageLatencyObserver;
 use crate::observer::transcript_log_observer::TranscriptLogObserver;
 use crate::observer::usage_observer::UsageObserver;
-use crate::pipeline::pipeline::Pipeline;
-use crate::serializer::stt::deepgram::DeepgramSerializer;
-use crate::serializer::transport::webrtc_dc::WebRtcSerializer;
-use crate::serializer::tts::sarvam::SarvamSerializer;
+use crate::pipeline::Pipeline;
 use crate::services::mt::openrouter::{DeepSeekModel, MtModel};
 use crate::services::mt::sarvam::SarvamMtProvider;
 use crate::services::stt::deepgram::{DeepgramSttConfig, DeepgramSttProvider};
@@ -104,14 +104,14 @@ pub async fn test_mt() -> Result<ApiResponse<&'static str>, ApiResponse<()>> {
     ))
 }
 
-fn build_pipeline(config: &Config) -> crate::processor::processor::FrameIo {
+fn build_pipeline(config: &Config) -> crate::processor::FrameIo {
     let stt_serializer: Arc<
-        dyn crate::serializer::serializer::FrameSerializer<
+        dyn crate::codec::frame_serializer::FrameSerializer<
                 Message = tokio_tungstenite::tungstenite::Message,
             >,
     > = Arc::new(DeepgramSerializer::new(SAMPLE_RATE));
     let tts_serializer: Arc<
-        dyn crate::serializer::serializer::FrameSerializer<
+        dyn crate::codec::frame_serializer::FrameSerializer<
                 Message = tokio_tungstenite::tungstenite::Message,
             >,
     > = Arc::new(SarvamSerializer::new(SAMPLE_RATE));
@@ -138,7 +138,7 @@ fn build_pipeline(config: &Config) -> crate::processor::processor::FrameIo {
         TtsConfigKind::SarvamTtsConfig(SarvamTtsConfig::new()),
     );
 
-    let stages: Vec<Box<dyn crate::processor::processor::FrameProcessor>> = vec![
+    let stages: Vec<Box<dyn crate::processor::FrameProcessor>> = vec![
         Box::new(SttStage::new(
             Box::new(stt_provider),
             stt_config,
@@ -154,7 +154,7 @@ fn build_pipeline(config: &Config) -> crate::processor::processor::FrameIo {
 
     let usage_observer = Arc::new(UsageObserver::new());
 
-    let observers: Vec<Arc<dyn crate::observer::observer::FrameObserver>> = vec![
+    let observers: Vec<Arc<dyn crate::observer::frame_observer::FrameObserver>> = vec![
         usage_observer,
         Arc::new(LogObserver),
         Arc::new(LatencyObserver::new()),

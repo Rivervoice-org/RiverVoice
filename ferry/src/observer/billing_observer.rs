@@ -7,8 +7,8 @@ use uuid::Uuid;
 
 use crate::db::enums::UsageUnit;
 use crate::db::mutations;
-use crate::frames::frames::{Frame, FrameKind};
-use crate::observer::observer::FrameObserver;
+use crate::frames::{Frame, FrameKind};
+use crate::observer::frame_observer::FrameObserver;
 use crate::pricing::{self, Per10KCost, PerMillionCost, PerMinuteCost};
 
 pub struct BillingObserver {

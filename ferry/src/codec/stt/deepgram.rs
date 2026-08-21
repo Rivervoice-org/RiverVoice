@@ -4,8 +4,8 @@ use serde::Deserialize;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::audio::resampler::SampleRateAdapter;
-use crate::frames::frames::{Frame, FrameKind, TranscriptionFrame};
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::{Frame, FrameKind, TranscriptionFrame};
 
 pub struct DeepgramSerializer {
     target_sample_rate: u32,

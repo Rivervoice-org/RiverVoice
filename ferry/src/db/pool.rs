@@ -20,11 +20,12 @@ pub async fn init() -> anyhow::Result<()> {
     pool.get().await?;
 
     POOL.set(pool)
-        .map_err(|_| anyhow::anyhow!("db::init called more than once"))?;
+        .map_err(|_| anyhow::anyhow!("db::pool::init called more than once"))?;
 
     Ok(())
 }
 
 pub fn get() -> &'static Pool<AsyncPgConnection> {
-    POOL.get().expect("db::get() called before db::init()")
+    POOL.get()
+        .expect("db::pool::get() called before db::pool::init()")
 }

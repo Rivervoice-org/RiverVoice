@@ -21,8 +21,8 @@ use webrtc::peer_connection::{
 use webrtc::runtime::default_runtime;
 
 use crate::audio::opus::{OpusDecoder, OpusEncoder, SAMPLE_RATE};
-use crate::frames::frames::{Frame, FrameKind, RawAudioFrame};
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::{Frame, FrameKind, RawAudioFrame};
 use crate::transport::base::BaseTransport;
 
 /// RTP payload type we assign Opus in our own SDP — arbitrary but fixed, since

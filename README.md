@@ -3,13 +3,14 @@
 Voice agents that answer the phone in Indian languages. You describe an agent in
 a browser, give it a voice and a few tools, and it takes calls.
 
-Three services, three languages, one Postgres:
+Four services, three languages, one Postgres:
 
 |            | what it does                                       | stack               |
 | ---------- | -------------------------------------------------- | ------------------- |
 | **web**    | the builder and dashboard                          | Next.js, TypeScript |
 | **harbor** | accounts, agents, tools — everything that persists | Go, pgx             |
-| **ferry**  | the live call: telephony, speech, audio            | Rust, axum, tokio   |
+| **ferry**  | the live call: WebRTC, speech, translation, audio  | Rust, axum, tokio   |
+| **mobile** | the calling client — the only thing that talks to ferry | Expo, React Native |
 
 The split is by _shape of work_, not by fashion. harbor answers HTTP requests and
 writes rows. ferry holds thousands of open sockets and moves audio frames with a
@@ -24,6 +25,7 @@ latency budget measured in milliseconds. Those want different runtimes.
 - [web](#web)
 - [harbor](#harbor)
 - [ferry](#ferry)
+- [mobile](#mobile)
 - [The database](#the-database)
 - [Multi-tenancy, in depth](#multi-tenancy-in-depth)
 - [Migrations](#migrations)
@@ -53,28 +55,33 @@ latency budget measured in milliseconds. Those want different runtimes.
                     └───────────────▲──────────────┘
                                     │
                     ┌───────────────┴──────────────┐
-   phone ──Twilio──▶│  ferry      :3000            │
-                    │  Rust — telephony, STT, audio│
+   mobile ──WebRTC─▶│  ferry      :8085            │
+                    │  Rust — STT, MT, TTS, audio  │
                     └──────────────────────────────┘
 ```
 
 **web never talks to Postgres.** **ferry never talks to harbor.** Both read the
-same database, which is the only thing they share.
+same database, which is the only thing they share. **mobile is the only client
+that talks to ferry** — it opens the WebRTC connection directly, the same way it
+uses harbor's API for everything that isn't a live call.
 
 A call, end to end:
 
 ```
-caller dials
+mobile places a call
    │
-   ▼
-Twilio ──webhook──▶ ferry /dial          returns TwiML with <Stream>
-   │
-   └──websocket──▶ ferry /audioStream    μ-law frames, both directions
-                        │
-                        ├──▶ STT provider   (Sarvam)  → partial, final, language
-                        ├──▶ LLM                       → what to say
-                        └──▶ TTS                       → audio back to the caller
+   └──POST /v1/webrtc/offer──▶ ferry     SDP offer in, SDP answer out
+                                   │
+                                   └──WebRTC media──▶ ferry pipeline, per audio frame:
+                                            │
+                                            ├──▶ STT   (Deepgram)      → transcript, partial + final
+                                            ├──▶ MT    (Sarvam / OpenRouter) → translated text
+                                            └──▶ TTS   (Sarvam)        → audio back over the same connection
 ```
+
+Telephony (dial-in over Twilio, μ-law over a websocket) is still in the codebase
+under `ferry/src/codec/transport/telephony/` but isn't wired into a route right
+now — the live path is WebRTC from the mobile app.
 
 ---
 
@@ -86,19 +93,21 @@ You need Docker, Go 1.25+, Node 20+, and Rust (only for ferry).
 cp .env.example .env          # fill in the passwords
 docker compose up -d db       # Postgres, port 5432
 
-cd harbor && go run .         # migrates, then listens on :8080
-cd web    && npm run dev      # :3000
-cd ferry  && cargo run        # :3000, needs PUBLIC_BASE_URL
+cd harbor  && go run .        # migrates, then listens on :8080
+cd web     && npm run dev     # :3000
+cd ferry   && cargo run       # :8085
+cd mobile  && npx expo run:android   # or run:ios — needs a dev client, see mobile
 ```
 
 harbor runs migrations at startup, so a fresh database needs no extra step.
 
-ferry needs a public HTTPS URL Twilio can reach — `cloudflared tunnel --url
-http://localhost:3000` and put the result in `PUBLIC_BASE_URL`.
+mobile needs `EXPO_PUBLIC_FERRY_URL` pointing at ferry — `http://127.0.0.1:8085`
+works from an emulator on the same machine; a physical device needs ferry's LAN
+IP, and `WEBRTC_BIND_IP` set to that same address so the media actually connects.
 
-> ferry hardcodes `127.0.0.1:3000`, which is also web's default port. Run one or
-> the other, or change [ferry/src/http/http.rs](ferry/src/http/http.rs) — it
-> should read a `PORT` env var the way harbor does.
+> Telephony (`TWILIO_*` env vars, `PUBLIC_BASE_URL`) is still read by
+> [ferry/src/config.rs](ferry/src/config.rs) but the Twilio route isn't mounted —
+> see [ferry](#ferry).
 
 ### Environment
 
@@ -265,95 +274,164 @@ DELETE /v1/agents/{id}/tools/{toolID}
 
 ## ferry
 
-Rust, axum, tokio. Holds the call for its whole duration.
+Rust, axum, tokio. Holds a call's sockets open for its whole duration and runs
+the pipeline that turns what the caller says into translated speech, frame by
+frame, in real time.
 
 ```
 ferry/src/
   main.rs
-  config.rs        PUBLIC_BASE_URL and the URLs derived from it
+  config.rs           env vars: API keys, PUBLIC_BASE_URL, WEBRTC_BIND_IP
+  logging.rs
+  pricing.rs           per-vendor cost tables, for the billing/usage observers
+  auth/                session token verification, for authenticated routes
   http/
-    http.rs        the router
-    handlers.rs    dial, audio_stream, twilio_status
-    types.rs
-  services/
-    mod.rs
-    stt/           speech-to-text providers and language detection
-      provider.rs  SttProvider trait, Transcript, SttEvent
-      language.rs  Language enum for multilingual support
-      deepgram/    Deepgram STT implementation
-    tts/           text-to-speech providers
-      provider.rs
-    llm/           language model providers
-      provider.rs
-    ws_client.rs   shared websocket client utilities
-  telephony/
-    provider.rs    the trait every carrier implements
-    twilio/        the one that exists
-  audio/           audio frame handling and processing
-  processor/       the call pipeline
-  pipeline/        orchestration of services
+    router.rs           axum Router, CORS, middleware wiring
+    handlers.rs          POST /v1/webrtc/offer, GET /v1/test/mt
+    response.rs          ApiResponse envelope
+    state.rs
+  frames.rs            Frame / FrameKind — the value every stage passes on
+  processor.rs         FrameProcessor / FrameIo — the contract a stage implements
+  pipeline.rs          Pipeline::spawn — chains stages + observers into one call
+  stages/              one file per pipeline stage
+    stt.rs                audio in  → transcript
+    mt.rs                 transcript → translated text
+    tts.rs                translated text → audio out
+  services/            outbound clients that call vendor APIs
+    stt/                  provider.rs (SttProvider trait), language.rs, deepgram.rs
+    mt/                   provider.rs (MtProvider trait), sarvam.rs, openrouter.rs
+    tts/                  provider.rs (TtsProvider trait), sarvam.rs
+    ws_client.rs           reconnecting websocket client shared by STT/TTS
+  codec/                FrameSerializer impls — Frame ⇄ wire bytes, one per protocol
+    frame_serializer.rs    the FrameSerializer trait
+    transport/              browser.rs, webrtc_dc.rs, telephony/twilio.rs
+    stt/deepgram.rs          Deepgram's own websocket JSON framing
+    tts/sarvam.rs            Sarvam's TTS stream framing
+  transport/            holds a call's sockets open
+    base.rs               BaseTransport<S: FrameSerializer>
+    webrtc/                WebRtcClient — SDP offer/answer, media track
+    websockets/
+  observer/             read-only taps on the frame stream
+    frame_observer.rs     the FrameObserver trait
+    billing_observer.rs, usage_observer.rs     cost + usage per call
+    latency_observer.rs, stage_latency_observer.rs
+    log_observer.rs, transcript_log_observer.rs, metrics_log_observer.rs
+  audio/                opus, resampling, VAD
+  db/                   Postgres — usage and call records
 ```
 
 ```
-POST /dial            place an outbound call
-GET  /audioStream     the websocket Twilio connects after <Stream>
-POST /twilio/status   call lifecycle callbacks
+POST /v1/webrtc/offer   SDP offer in, SDP answer out — starts a call
+GET  /v1/test/mt        smoke-tests the MT provider directly
+GET  /health
 ```
 
-### Providers are traits
+### The frame pipeline
 
-`services/stt/provider.rs`, `services/tts/provider.rs`, `services/llm/provider.rs`,
-and `telephony/provider.rs` define what each service must implement. Handlers know
-the traits but not the implementations. The provider pattern enables:
-
-- Swapping STT from Deepgram to Sarvam without touching handlers
-- Multiple LLM backends (OpenAI, Groq, local)
-- Language-aware processing through the `Language` enum
-- Unified `SttEvent` stream from providers that detect turns themselves
-
-`SttEvent` is the vocabulary the STT layer uses to communicate with the rest of
-the system:
+Every stage — STT, MT, TTS — implements `FrameProcessor` and gets a `FrameIo`: an
+inbound channel, an outbound channel, and the observer list. `Pipeline::spawn`
+chains the stages' channels into one queue, audio in one end, translated audio
+out the other:
 
 ```rust
-pub enum SttEvent {
-    Transcript(Transcript),           // partial or final transcription
-    UserStartedSpeaking,              // provider's own turn detection
-    UserStoppedSpeaking,              // provider's own turn detection
-}
-
-pub struct Transcript {
-    pub text: String,
-    pub language: Option<Language>,   // language per phrase, for code-switching
-    pub is_final: bool,
+pub trait FrameProcessor {
+    fn name(&self) -> &'static str;
+    async fn run(self: Box<Self>, io: FrameIo);
 }
 ```
 
-Language comes back because Indian callers code-switch mid-sentence, and the
-agent has to follow. Providers that detect turns themselves emit `UserStartedSpeaking`
-and `UserStoppedSpeaking` on the same stream, allowing turn-aware providers to
-manage call flow directly.
+`FrameKind` is one enum covering every frame type any stage might produce, so a
+stage pattern-matches only the variants it acts on and forwards the rest
+downstream unchanged — MT doesn't need to know TTS exists to pass its frames
+through.
 
-### Services as pluggable providers
+### Observers watch, they don't participate
 
-The three critical services — STT, TTS, LLM — are defined as traits in
-`services/{stt,tts,llm}/provider.rs`. Each provider announces:
+`FrameObserver` gets a read-only look at every frame crossing a stage boundary.
+Billing (`billing_observer.rs`), latency percentiles
+(`stage_latency_observer.rs`), and transcript logging all happen this way,
+without any stage knowing they exist — a new observer is a new file, not a
+change to `stages/`.
 
-- Its name and capabilities
-- Recommended behavior (e.g., turn detection strategy for STT)
-- The events or outputs it produces
+### Providers are traits, codec is the wire format — two different jobs
 
-This abstraction decouples handlers from implementations, so adding a new STT
-vendor means a new module under `services/stt/`, not changes to the call loop.
+`services/{stt,mt,tts}/provider.rs` define what a vendor integration must
+implement. Swapping the MT vendor from Sarvam to an OpenRouter model, or adding
+a new STT provider, is a new file under `services/`, not a change to `stages/`.
+
+`codec/` is a separate concern: it implements `FrameSerializer`, converting a
+`Frame` to and from whatever bytes a specific transport or vendor protocol
+expects — a browser's binary frames, a WebRTC data channel, Deepgram's own
+websocket JSON, Sarvam's TTS byte stream. `services/stt/deepgram.rs` calls
+Deepgram; `codec/stt/deepgram.rs` speaks Deepgram's wire format on that call —
+same vendor, different job, which is why they live in separate trees even
+though both are named `deepgram`.
 
 ### Why Rust
 
-A call is a websocket held open for minutes, carrying 8 kHz μ-law frames in both
-directions, with a second socket to the STT provider and a third for TTS. Per
-call. The work is IO-bound with hard latency limits and no room for a GC pause
-during someone's sentence.
+A call is a WebRTC connection held open for minutes, with a second socket to the
+STT provider and a third to TTS, per call. The work is IO-bound with hard
+latency limits and no room for a GC pause during someone's sentence.
 
-Providers drop idle sockets — Deepgram closes on inactivity — so the STT loop
-sends a keepalive frame periodically and handles reconnection gracefully.
+Providers drop idle sockets — Deepgram closes on inactivity — so the STT client
+sends a keepalive frame periodically and reconnects with backoff
+(`services/ws_client.rs`) rather than dropping the call.
+
+---
+
+## mobile
+
+Expo (React Native), TypeScript, NativeWind. The calling client — the only one
+of the four that talks to ferry.
+
+```
+mobile/
+  app/                    expo-router routes
+    (auth)/                  sign-in, sign-up
+    (tabs)/                  agents, call, phonebook, settings
+    agent-detail.tsx, call-detail.tsx, transcript.tsx, try-agent.tsx, ...
+  screens/                 the screen implementations, one folder per screen
+  components/
+    ui/                      rn-primitives wrappers — button, dialog, select, toast
+  lib/
+    webrtc/
+      signaling.ts            POSTs the SDP offer to ferry, gets the answer back
+      ferry-call.ts            RTCPeerConnection lifecycle for one call
+      wire.ts                  the mobile-side frame wire format
+    mascots/                 shared with web's avatar system, kept in sync by hand
+    theme.tsx
+  providers/, state/session/  auth session — mirrors web's session handling
+```
+
+**mobile calls ferry directly** — web and harbor never do. `lib/webrtc/signaling.ts`
+posts to `${EXPO_PUBLIC_FERRY_URL}/v1/webrtc/offer`, gets back an SDP answer, and
+`ferry-call.ts` drives the `RTCPeerConnection` from there:
+
+```ts
+const DEFAULT_FERRY_URL = "http://127.0.0.1:8085";
+process.env["EXPO_PUBLIC_FERRY_URL"] ?? DEFAULT_FERRY_URL;
+```
+
+The default only works from an emulator on the same machine as ferry. A physical
+device needs `EXPO_PUBLIC_FERRY_URL` set to ferry's LAN address, and ferry's own
+`WEBRTC_BIND_IP` set to that same address — otherwise the SDP negotiates fine and
+no audio ever arrives.
+
+**`components/ui/` and `lib/mascots/` mirror web's**, by hand. There's no shared
+package between the two clients yet, so a design system change in one needs the
+same edit made again in the other.
+
+Everything that isn't a live call — agents, phonebook, auth — talks to harbor the
+same way web does.
+
+```bash
+cd mobile && npm install
+npx expo run:android   # or run:ios
+```
+
+Native modules (`react-native-webrtc`, `react-native-incall-manager`) mean Expo
+Go can't run this app — use `run:android`/`run:ios` to build a dev client, or
+`expo-dev-client` if one's already installed on the device.
 
 ---
 

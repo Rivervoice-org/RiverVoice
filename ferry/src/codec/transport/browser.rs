@@ -1,8 +1,8 @@
 use axum::extract::ws::Message;
 use serde::Serialize;
 
-use crate::frames::frames::{Frame, FrameKind, RawAudioFrame};
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::{Frame, FrameKind, RawAudioFrame};
 
 pub struct BrowserSerializer {
     sample_rate: u32,

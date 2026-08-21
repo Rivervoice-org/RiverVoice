@@ -13,8 +13,8 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderName;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
-use crate::frames::frames::Frame;
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::Frame;
 
 pub type WsWrite = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 pub type WsRead = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;

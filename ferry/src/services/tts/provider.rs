@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
 
-use crate::frames::frames::{Frame, MtTextFrame};
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::{Frame, MtTextFrame};
 use crate::services::stt::language::Language;
 use crate::services::ws_client::{self, WsOutboundClient, WsRead};
 

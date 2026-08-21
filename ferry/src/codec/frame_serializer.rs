@@ -1,4 +1,4 @@
-use crate::frames::frames::Frame;
+use crate::frames::Frame;
 
 pub trait FrameSerializer: Send + Sync {
     type Message;

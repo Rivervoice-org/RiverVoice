@@ -2,8 +2,8 @@ use base64::Engine;
 use serde::Deserialize;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::frames::frames::{Frame, FrameKind, TtsAudioFrame};
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::{Frame, FrameKind, TtsAudioFrame};
 use crate::services::tts::sarvam::{ClientMessage, TextData};
 
 pub struct SarvamSerializer {

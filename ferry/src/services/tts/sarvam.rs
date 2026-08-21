@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::frames::frames::{Frame, FrameKind, MtTextFrame};
-use crate::serializer::serializer::FrameSerializer;
+use crate::codec::frame_serializer::FrameSerializer;
+use crate::frames::{Frame, FrameKind, MtTextFrame};
 use crate::services::tts::provider::{
     TtsConfig, TtsConfigKind, TtsError, TtsEvent, TtsProvider, TtsSession,
 };

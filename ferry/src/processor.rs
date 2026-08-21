@@ -4,8 +4,8 @@ use std::time::Instant;
 use async_trait::async_trait;
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::frames::frames::{Frame, FrameKind, MetricsFrame};
-use crate::observer::observer::FrameObserver;
+use crate::frames::{Frame, FrameKind, MetricsFrame};
+use crate::observer::frame_observer::FrameObserver;
 
 pub struct FrameIo {
     name: String,
