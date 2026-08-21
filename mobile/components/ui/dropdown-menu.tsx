@@ -3,6 +3,7 @@ import { Text as RNText } from "react-native";
 import * as DropdownMenuPrimitive from "@rn-primitives/dropdown-menu";
 import { Check, ChevronRight, Circle } from "lucide-react-native";
 import { cn } from "@/lib/utils";
+import { useThemeColors } from "@/lib/theme";
 
 const DropdownMenu = DropdownMenuPrimitive.Root;
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
@@ -23,6 +24,7 @@ function DropdownMenuSubTrigger({
   ref?: React.Ref<React.ElementRef<typeof DropdownMenuPrimitive.SubTrigger>>;
 }) {
   const { open } = DropdownMenuPrimitive.useSubContext();
+  const colors = useThemeColors();
   return (
     <DropdownMenuPrimitive.SubTrigger
       ref={ref}
@@ -41,7 +43,7 @@ function DropdownMenuSubTrigger({
       <ChevronRight
         size={16}
         strokeWidth={1.75}
-        color="#8f8c87"
+        color={colors.muted}
         style={{ transform: [{ rotate: open ? "90deg" : "0deg" }], marginLeft: "auto" }}
       />
     </DropdownMenuPrimitive.SubTrigger>
@@ -153,6 +155,7 @@ function DropdownMenuCheckboxItem({
   children?: React.ReactNode;
   ref?: React.Ref<React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>>;
 }) {
+  const colors = useThemeColors();
   return (
     <DropdownMenuPrimitive.CheckboxItem
       ref={ref}
@@ -164,7 +167,7 @@ function DropdownMenuCheckboxItem({
       {...props}
     >
       <DropdownMenuPrimitive.ItemIndicator>
-        <Check size={14} strokeWidth={2} color="#3c3832" />
+        <Check size={14} strokeWidth={2} color={colors.ink} />
       </DropdownMenuPrimitive.ItemIndicator>
       {typeof children === "string" ? (
         <RNText className="text-sm text-foreground">{children}</RNText>
@@ -185,6 +188,7 @@ function DropdownMenuRadioItem({
   children?: React.ReactNode;
   ref?: React.Ref<React.ElementRef<typeof DropdownMenuPrimitive.RadioItem>>;
 }) {
+  const colors = useThemeColors();
   return (
     <DropdownMenuPrimitive.RadioItem
       ref={ref}
@@ -196,7 +200,7 @@ function DropdownMenuRadioItem({
       {...props}
     >
       <DropdownMenuPrimitive.ItemIndicator>
-        <Circle size={10} strokeWidth={2} color="#3c3832" fill="#3c3832" />
+        <Circle size={10} strokeWidth={2} color={colors.ink} fill={colors.ink} />
       </DropdownMenuPrimitive.ItemIndicator>
       {typeof children === "string" ? (
         <RNText className="text-sm text-foreground">{children}</RNText>

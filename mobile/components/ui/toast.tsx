@@ -2,6 +2,7 @@ import * as React from "react";
 import { X } from "lucide-react-native";
 import * as ToastPrimitive from "@rn-primitives/toast";
 import { cn } from "@/lib/utils";
+import { useThemeColors } from "@/lib/theme";
 import { Text } from "./text";
 
 function Toast({
@@ -30,6 +31,7 @@ function ToastClose({
 }: React.ComponentProps<typeof ToastPrimitive.Close> & {
   ref?: React.Ref<React.ElementRef<typeof ToastPrimitive.Close>>;
 }) {
+  const colors = useThemeColors();
   return (
     <ToastPrimitive.Close
       ref={ref}
@@ -40,7 +42,7 @@ function ToastClose({
       hitSlop={8}
       {...props}
     >
-      <X size={14} strokeWidth={1.75} color="#8f8c87" />
+      <X size={14} strokeWidth={1.75} color={colors.muted} />
     </ToastPrimitive.Close>
   );
 }

@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { X } from "lucide-react-native";
 import * as DialogPrimitive from "@rn-primitives/dialog";
 import { cn } from "@/lib/utils";
+import { useThemeColors } from "@/lib/theme";
 import { Text } from "./text";
 
 const Dialog = DialogPrimitive.Root;
@@ -34,6 +35,7 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   ref?: React.Ref<React.ElementRef<typeof DialogPrimitive.Content>>;
 }) {
+  const colors = useThemeColors();
   return (
     <DialogPortal>
       <View className="absolute inset-0 justify-center px-6" pointerEvents="box-none">
@@ -51,7 +53,7 @@ function DialogContent({
             className="absolute right-4 top-4 h-6 w-6 items-center justify-center rounded-md active:bg-secondary"
             hitSlop={8}
           >
-            <X size={16} strokeWidth={1.75} color="#8f8c87" />
+            <X size={16} strokeWidth={1.75} color={colors.muted} />
           </DialogPrimitive.Close>
         </DialogPrimitive.Content>
       </View>

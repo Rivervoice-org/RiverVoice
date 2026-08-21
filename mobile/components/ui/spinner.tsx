@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Animated, Easing } from "react-native";
+import { useThemeColors } from "@/lib/theme";
 
 /**
  * A quiet rotating ring — the Notion-style loading affordance: one thin
@@ -9,13 +10,16 @@ import { Animated, Easing } from "react-native";
  */
 function Spinner({
   size = 20,
-  color = "#3c3832",
-  trackColor = "#ebe9e6",
+  color,
+  trackColor,
 }: {
   size?: number;
   color?: string;
   trackColor?: string;
 }) {
+  const themeColors = useThemeColors();
+  const resolvedColor = color ?? themeColors.ink;
+  const resolvedTrackColor = trackColor ?? themeColors.border;
   const rotation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -43,8 +47,8 @@ function Spinner({
         height: size,
         borderRadius: size / 2,
         borderWidth: Math.max(2, Math.round(size / 9)),
-        borderColor: trackColor,
-        borderTopColor: color,
+        borderColor: resolvedTrackColor,
+        borderTopColor: resolvedColor,
         transform: [{ rotate: spin }],
       }}
     />

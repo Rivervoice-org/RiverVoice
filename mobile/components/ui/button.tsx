@@ -6,6 +6,7 @@ import {
 } from "react-native";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { useThemeColors } from "@/lib/theme";
 import { Text } from "./text";
 
 const buttonVariants = cva(
@@ -56,6 +57,7 @@ function Button({
   ref,
   ...props
 }: ButtonProps) {
+  const colors = useThemeColors();
   return (
     <Pressable
       ref={ref}
@@ -68,8 +70,8 @@ function Button({
           size="small"
           color={
             variant === "default" || variant === "destructive"
-              ? "#fcfbf9"
-              : "#3c3832"
+              ? colors.onInk
+              : colors.ink
           }
         />
       ) : typeof children === "string" ? (
