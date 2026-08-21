@@ -17,7 +17,7 @@ export function useRequireAuth() {
           { text: "Not now", style: "cancel" },
           {
             text: "Sign in",
-            onPress: () => router.push("/(auth)/sign-in"),
+            onPress: () => router.push("/(auth)/continue-with-number"),
           },
         ]
       );

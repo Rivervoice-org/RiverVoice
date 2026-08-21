@@ -13,12 +13,14 @@ const COUNTRY_CODE = "+91";
 /** "9876543210" → "98765 43210" as it is typed. */
 function formatPhone(raw: string) {
   const digits = raw.replace(/\D/g, "").slice(0, 10);
-  return digits.length > 5 ? `${digits.slice(0, 5)} ${digits.slice(5)}` : digits;
+  return digits.length > 5
+    ? `${digits.slice(0, 5)} ${digits.slice(5)}`
+    : digits;
 }
 
-export default function SignInScreen() {
+export default function ContinueWithNumberScreen() {
   const colors = useThemeColors();
-  const { signIn } = useAuth();
+  const { continueWithNumber } = useAuth();
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -32,8 +34,7 @@ export default function SignInScreen() {
     setError("");
     setLoading(true);
     try {
-      await signIn(digits);
-      // The (auth) layout redirects into the app once the session lands.
+      await continueWithNumber(digits);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -47,8 +48,8 @@ export default function SignInScreen() {
       className="flex-1 bg-canvas"
     >
       <View className="flex-1 px-6">
-        {/* Back + logo, top-left — like Notion's corner wordmark */}
-        <View className="flex-row items-center gap-3 pt-12">
+        {/* Back button, top-left */}
+        <View className="pt-12">
           <Pressable
             onPress={() => router.back()}
             className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
@@ -57,17 +58,21 @@ export default function SignInScreen() {
           >
             <ChevronLeft size={22} strokeWidth={1.75} color={colors.ink} />
           </Pressable>
-          <View className="flex-row items-center gap-2">
-            <View className="h-6 w-6 items-center justify-center rounded-md border border-border">
-              <Waves size={14} strokeWidth={2} color={colors.ink} />
-            </View>
-            <Text className="text-sm font-medium">Rivervoice</Text>
-          </View>
         </View>
 
-        {/* One centered column with the form — no hero art */}
+        <View className="mt-4 items-center">
+          <View className="h-12 w-12 items-center justify-center rounded-2xl border border-border bg-card shadow-float">
+            <Waves size={24} strokeWidth={2} color={colors.ink} />
+          </View>
+          <Text className="mt-4 text-[17px] font-semibold tracking-[-0.02em]">
+            Rivervoice
+          </Text>
+        </View>
+
         <View className="w-full max-w-sm flex-1 self-center justify-center">
-          <Text className="text-[24px] font-semibold tracking-tight">Login with number</Text>
+          <Text className="text-[24px] font-semibold tracking-tight">
+            Continue with number
+          </Text>
           <Text variant="muted" className="mt-1.5 text-sm">
             No passwords to remember — just your phone.
           </Text>
@@ -96,7 +101,7 @@ export default function SignInScreen() {
           ) : null}
 
           <Button onPress={handleSubmit} loading={loading} className="mt-3">
-            Login with number
+            Continue with number
           </Button>
         </View>
 
