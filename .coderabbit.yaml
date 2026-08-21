@@ -1,0 +1,62 @@
+language: en-US
+
+reviews:
+  profile: chill
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!**/*.lock"
+    - "!**/dist/**"
+    - "!**/node_modules/**"
+    - "!**/target/**"
+  path_instructions:
+    - path: "ferry/src/transport/**/*.rs"
+      instructions: >
+        This is the real-time audio transport layer (WebRTC, WebSocket, Twilio
+        media streams, jitter/pacing). Review for: race conditions and deadlocks
+        in async tasks; correct handling of connection drop/reconnect and
+        partial writes; buffer/backpressure logic that could cause audio
+        glitches or unbounded memory growth; unwrap()/expect() on anything
+        driven by network input (treat as a bug, not a style nit).
+    - path: "ferry/src/codec/**/*.rs"
+      instructions: >
+        Audio framing and codec/serialization code. Review for correctness of
+        frame boundaries, sample-rate/format assumptions, and integer
+        overflow/underflow in size or offset math. Flag silent data corruption
+        risks over panics.
+    - path: "ferry/src/services/twilio/**/*.rs"
+      instructions: >
+        Twilio API client. Review for: proper error propagation from HTTP
+        calls (no swallowed errors), correct auth/signature handling, timeout
+        and retry behavior, and secrets never logged or included in error
+        messages.
+    - path: "ferry/src/http/handlers/**/*.rs"
+      instructions: >
+        HTTP/webhook entry points. Review for input validation on
+        externally-controlled data (especially Twilio webhook payloads),
+        correct status codes on error paths, and no untrusted input reaching
+        logs or downstream calls unsanitized.
+    - path: "web/src/lib/webrtc/**/*.ts"
+      instructions: >
+        Browser-side WebRTC signaling/wire protocol. Review for: proper
+        cleanup of RTCPeerConnection/tracks on unmount or call end (resource
+        leaks), race conditions between signaling messages and connection
+        state, and unhandled promise rejections in async setup/teardown.
+    - path: "web/src/lib/*.ts"
+      instructions: >
+        Call/voice UI logic. Review for type safety, unhandled promise
+        rejections, and React hook dependency correctness where applicable.
+
+  abort_on_close: true
+  tone_instructions: >
+    This is Ferry, a real-time voice/telephony backend (Rust) paired with a
+    web client (TypeScript), currently mid-refactor to add Twilio phone call
+    integration alongside existing WebRTC support. Prioritize: correctness
+    bugs in concurrent/async code, resource leaks (connections, tasks,
+    buffers) on error or disconnect paths, and security issues in
+    webhook/external-input handling. Do not flag pure style preferences
+    already covered by the project's linter/formatter.
+
+chat:
+  auto_reply: true

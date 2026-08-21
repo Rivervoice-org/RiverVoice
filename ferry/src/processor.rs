@@ -76,6 +76,17 @@ impl FrameIo {
     pub fn cancel_ttfb_metrics(&mut self) {
         self.ttfb_start = None;
     }
+
+    /// Breaks a pipeline's `FrameIo` into its raw halves — the entrance
+    /// sender (push a frame in, it enters the first stage) and exit receiver
+    /// (take a frame out, it left the last stage). Used to cross-wire two
+    /// participants' pipelines: a transport's `FrameIo` is rebuilt from one
+    /// call's exit `Receiver` and the *other* call's entrance `Sender`, so
+    /// each side's translated speech comes out the other side's transport
+    /// instead of looping back to itself.
+    pub fn into_parts(self) -> (Receiver<Frame>, Sender<Frame>) {
+        (self.upstream, self.downstream)
+    }
 }
 
 #[async_trait]

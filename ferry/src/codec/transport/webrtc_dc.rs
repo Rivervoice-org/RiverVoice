@@ -11,11 +11,25 @@ pub struct WebRtcSerializer {
 
 const AUDIO_TAG: u8 = 0x00;
 
-const INTERRUPT_TAG: u8 = 0x01;
-
 const TRANSCRIPT_TAG: u8 = 0x02;
 
 const TRANSLATION_TAG: u8 = 0x03;
+
+/// Sent (with no payload) the moment the call's other leg actually connects
+/// — e.g. Twilio's leg answering in the two-leg call flow. Not produced via
+/// `FrameSerializer::serialize` since it isn't a pipeline `Frame` at all,
+/// just a bare control byte `WebRtcClient::run` writes directly to the data
+/// channel when it sees the call's `CallStatus` flip to `Connected`.
+pub const PEER_CONNECTED_TAG: u8 = 0x04;
+
+/// Sent (with no payload) when Twilio reports the other leg's phone is
+/// ringing. Same bare-control-byte treatment as `PEER_CONNECTED_TAG` — there
+/// is no `CALL_DIALING_TAG` alongside it: `CallStatus::Dialing` is only ever
+/// the registry entry's *initial* value, never re-sent via `set_status`, so
+/// a freshly-subscribed `watch::Receiver` never observes it as a "change" —
+/// and the client already knows it just started dialing on its own, with no
+/// server round-trip needed for that one.
+pub const CALL_RINGING_TAG: u8 = 0x05;
 
 #[derive(Serialize)]
 struct TranscriptPayload<'a> {

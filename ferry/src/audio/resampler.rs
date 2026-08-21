@@ -24,7 +24,7 @@ fn sinc_params() -> SincInterpolationParameters {
         .interpolation(SincInterpolationType::Quadratic)
 }
 
-struct ChunkedResampler {
+pub(crate) struct ChunkedResampler {
     resampler: Async<f32>,
     pending_in: Vec<f32>,
     scratch_out: Vec<f32>,
@@ -100,7 +100,7 @@ impl Downsampler {
     }
 }
 
-pub enum SampleRateAdapter {
+pub(crate) enum SampleRateAdapter {
     Identity,
     Resample(ChunkedResampler),
 }

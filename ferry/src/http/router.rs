@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{
     Router,
     extract::Request,
@@ -9,8 +11,13 @@ use axum::{
 };
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
+use tracing::Instrument;
 
 use super::handlers;
+use super::state::AppState;
+use crate::call::CallRegistry;
+use crate::config;
+use crate::services::twilio::TwilioClient;
 // use crate::auth::middleware::require_session;
 
 const ALLOWED_ORIGINS: &[&str] = &["http://localhost:3000"];
@@ -32,38 +39,57 @@ fn cors_layer() -> CorsLayer {
         .allow_credentials(true)
 }
 
+/// Every route gets a short `req_id` on this span for free — CRUD endpoints
+/// added later need no logging code of their own to get one. Long-running
+/// work a handler spawns (the call/pipeline tasks) outlives this span, since
+/// a spawned task doesn't inherit the caller's span automatically; those get
+/// their own longer-lived `call_id` span instead (see `handlers::call`).
 async fn log_request(req: Request, next: Next) -> Response {
-    tracing::debug!(method = %req.method(), uri = %req.uri(), "started processing request");
-    next.run(req).await
+    let req_id = uuid::Uuid::new_v4().simple().to_string()[..8].to_string();
+    let span = tracing::info_span!("request", req_id = %req_id);
+    async move {
+        tracing::debug!(method = %req.method(), uri = %req.uri(), "started processing request");
+        next.run(req).await
+    }
+    .instrument(span)
+    .await
 }
 
-fn http_routes() -> Router {
+fn http_routes() -> Router<AppState> {
     Router::new().route("/health", get(axum::Json("OK")))
 }
 
-fn call_routes() -> Router {
+fn call_routes() -> Router<AppState> {
     Router::new()
-        .route("/v1/webrtc/offer", post(handlers::webrtc_offer))
-        .route("/v1/test/mt", get(handlers::test_mt))
+        .route("/v1/try-agent/offer", post(handlers::webrtc_offer))
+        .route("/v1/call/start", post(handlers::start_call))
     // .route_layer(middleware::from_fn(require_session))
 }
 
-// fn twilio_routes() -> Router {
-//     Router::new()
-//         .route(
-//             "/v1/twilio/voice",
-//             get(call::twilio_voice).post(call::twilio_voice),
-//         )
-//         .route("/v1/twilio/ws/{call_id}", get(call::twilio_ws))
-// }
+fn twilio_routes() -> Router<AppState> {
+    Router::new()
+        .route("/v1/twilio/ws/{call_id}", get(handlers::twilio_ws))
+        .route("/v1/twilio/status/{call_id}", post(handlers::twilio_status))
+}
 
 pub async fn start_server() -> anyhow::Result<()> {
+    let config = config::get().map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    let app_state = AppState {
+        call_registry: CallRegistry::new(),
+        twilio: Arc::new(TwilioClient::new(
+            config.twilio_account_sid.clone(),
+            config.twilio_auth_token.clone(),
+        )),
+    };
+
     let router = http_routes()
         .merge(call_routes())
-        // .merge(twilio_routes())
+        .merge(twilio_routes())
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn(log_request))
-        .layer(cors_layer());
+        .layer(cors_layer())
+        .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8085").await?;
     tracing::info!("listening on http://{}", listener.local_addr()?);

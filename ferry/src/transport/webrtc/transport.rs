@@ -21,9 +21,12 @@ use webrtc::peer_connection::{
 use webrtc::runtime::default_runtime;
 
 use crate::audio::opus::{OpusDecoder, OpusEncoder, SAMPLE_RATE};
+use crate::call::CallStatus;
 use crate::codec::frame_serializer::FrameSerializer;
+use crate::codec::transport::webrtc_dc::{CALL_RINGING_TAG, PEER_CONNECTED_TAG};
 use crate::frames::{Frame, FrameKind, RawAudioFrame};
 use crate::transport::base::BaseTransport;
+use crate::transport::pacing::FramePacer;
 
 /// RTP payload type we assign Opus in our own SDP — arbitrary but fixed, since
 /// we register the codec ourselves rather than negotiating dynamically.
@@ -99,18 +102,22 @@ pub struct WebRtcClient<S: FrameSerializer<Message = bytes::Bytes>> {
     output_payload_type: u8,
     opus_encoder: OpusEncoder,
     /// Accumulates PCM across `TtsAudio` frames (which arrive in
-    /// provider-chosen chunk sizes, not 20ms-aligned) — also doubles as the
-    /// send queue: `run`'s pacing branch drains one `FRAME_BYTES` chunk off
-    /// the front every `FRAME_DURATION_MS`. `write_sample` has no pacing of
-    /// its own, so without this a long TTS response gets dumped onto the
-    /// wire in a burst far faster than real playback speed — the client's
-    /// jitter buffer can't hold that much lookahead and drops the excess,
-    /// which is why long responses were cutting off after a few words.
-    pcm_buffer: Vec<u8>,
-    /// When the next frame is allowed to go out.
-    next_frame_at: Option<tokio::time::Instant>,
+    /// provider-chosen chunk sizes, not 20ms-aligned) and doles it out one
+    /// `FRAME_BYTES` chunk every `FRAME_DURATION_MS` — `write_sample` has no
+    /// pacing of its own, so without this a long TTS response gets dumped
+    /// onto the wire in a burst far faster than real playback speed, and
+    /// the client's jitter buffer can't hold that much lookahead. Shared
+    /// with Twilio's own audio-out pacing — see
+    /// `ferry/src/transport/pacing.rs`.
+    pcm_pacer: FramePacer,
     /// Running count across the whole call, purely for the debug log.
     frames_sent: u32,
+    /// Fires when the call's `CallRegistry` entry transitions to `Ended` —
+    /// Twilio reporting busy/no-answer/failed, or the Twilio leg hanging up
+    /// — so this side hangs up too instead of sitting connected with no
+    /// audio ever arriving. `None` for one-way/no-registry calls (e.g. the
+    /// try-agent screen), which have no other leg to watch.
+    status_rx: Option<tokio::sync::watch::Receiver<CallStatus>>,
 }
 
 /// Bridges `webrtc`'s callback-based peer connection events into the signals
@@ -190,6 +197,7 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
     pub async fn accept_offer(
         base: BaseTransport<S>,
         offer_sdp: String,
+        status_rx: Option<tokio::sync::watch::Receiver<CallStatus>>,
     ) -> anyhow::Result<(Self, String)> {
         let (gather_complete_tx, gather_complete_rx) = oneshot::channel();
         let (data_channel_tx, data_channel_rx) = oneshot::channel();
@@ -282,46 +290,31 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                 output_ssrc,
                 output_payload_type,
                 opus_encoder,
-                pcm_buffer: Vec::new(),
-                next_frame_at: None,
+                pcm_pacer: FramePacer::new(
+                    FRAME_BYTES,
+                    std::time::Duration::from_millis(FRAME_DURATION_MS),
+                ),
                 frames_sent: 0,
+                status_rx,
             },
             answer_sdp,
         ))
     }
 
     /// When the pacing branch in `run`'s `select!` should next fire, or
-    /// `None` while `pcm_buffer` doesn't even hold one full frame — the
+    /// `None` while `pcm_pacer` doesn't even hold one full frame — the
     /// branch's `if` guard skips polling this case entirely, rather than
     /// spinning a timer with nothing to send.
     fn next_send_deadline(&self) -> Option<tokio::time::Instant> {
-        if self.pcm_buffer.len() < FRAME_BYTES {
-            return None;
-        }
-        Some(self.pacing_target())
+        self.pcm_pacer.next_deadline()
     }
 
-    /// If we've fallen more than a frame behind (e.g. a gap between TTS
-    /// responses left the buffer briefly empty), catching up by bursting
-    /// the backlog would just recreate the bug this pacing exists to fix —
-    /// restart pacing from now instead of chasing a stale deadline.
-    fn pacing_target(&self) -> tokio::time::Instant {
-        let frame_duration = std::time::Duration::from_millis(FRAME_DURATION_MS);
-        let now = tokio::time::Instant::now();
-        match self.next_frame_at {
-            Some(t) if t > now.checked_sub(frame_duration).unwrap_or(now) => t,
-            _ => now,
-        }
-    }
-
-    /// Encodes and sends the one frame's worth of PCM at the front of
-    /// `pcm_buffer`, advancing the pacing deadline for the next call.
-    /// No-op if less than a full frame is buffered.
+    /// Encodes and sends one frame's worth of PCM off `pcm_pacer`, if a full
+    /// frame is buffered. No-op otherwise.
     async fn send_paced_frame(&mut self) {
-        if self.pcm_buffer.len() < FRAME_BYTES {
+        let Some(chunk) = self.pcm_pacer.try_drain() else {
             return;
-        }
-        let chunk: Vec<u8> = self.pcm_buffer.drain(..FRAME_BYTES).collect();
+        };
         let samples: Vec<i16> = chunk
             .chunks_exact(2)
             .map(|b| i16::from_le_bytes([b[0], b[1]]))
@@ -342,9 +335,6 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
             ..Default::default()
         };
 
-        let frame_duration = std::time::Duration::from_millis(FRAME_DURATION_MS);
-        self.next_frame_at = Some(self.pacing_target() + frame_duration);
-
         match self
             .output_track
             .write_sample(self.output_ssrc, self.output_payload_type, &sample, &[])
@@ -352,7 +342,9 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
         {
             Ok(()) => {
                 self.frames_sent += 1;
-                tracing::debug!(
+                // Per-frame detail (every ~20ms) only at TRACE — `run`'s
+                // cleanup logs a whole-call total using `frames_sent` instead.
+                tracing::trace!(
                     "webrtc: wrote opus frame #{}, {opus_len} bytes, ssrc={}, payload_type={}",
                     self.frames_sent,
                     self.output_ssrc,
@@ -386,6 +378,43 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
             });
 
             tokio::select! {
+                changed = async {
+                    self.status_rx.as_mut().unwrap().changed().await
+                }, if self.status_rx.is_some() => {
+                    if changed.is_err() {
+                        // sender dropped without ever ending the call cleanly
+                        break;
+                    }
+                    // Copied out (CallStatus is Copy) so the watch::Ref guard
+                    // drops immediately — the Connected arm below needs to
+                    // `.await` a data-channel send, which can't happen while
+                    // still borrowing self.status_rx.
+                    let status = *self.status_rx.as_ref().unwrap().borrow();
+                    match status {
+                        CallStatus::Ended(_) => {
+                            tracing::info!("webrtc: call ended (other leg), hanging up");
+                            break;
+                        }
+                        // The other leg (e.g. Twilio) just answered — tell
+                        // the client so it can stop showing "ringing" and
+                        // start its call timer. No pipeline Frame backs
+                        // this, so it's a bare control byte, not something
+                        // routed through the serializer.
+                        CallStatus::Connected => {
+                            let msg = BytesMut::from(&[PEER_CONNECTED_TAG][..]);
+                            if data_channel.send(msg).await.is_err() {
+                                break;
+                            }
+                        }
+                        CallStatus::Ringing => {
+                            let msg = BytesMut::from(&[CALL_RINGING_TAG][..]);
+                            if data_channel.send(msg).await.is_err() {
+                                break;
+                            }
+                        }
+                        CallStatus::Dialing => {}
+                    }
+                }
                 _ = tokio::time::sleep_until(pace_deadline), if self.next_send_deadline().is_some() => {
                     self.send_paced_frame().await;
                 }
@@ -412,9 +441,9 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                                 "webrtc: got TtsAudio frame, {} bytes (sample_rate={}), buffer now {} bytes",
                                 audio.audio.len(),
                                 audio.sample_rate,
-                                self.pcm_buffer.len() + audio.audio.len()
+                                self.pcm_pacer.buffered_len() + audio.audio.len()
                             );
-                            self.pcm_buffer.extend_from_slice(&audio.audio);
+                            self.pcm_pacer.push(audio.audio);
                         }
                         other => {
                             if let Ok(msg) = self.base.serialize(Frame::new(other))
@@ -433,6 +462,12 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                 }
             }
         }
+
+        tracing::debug!(
+            frames_sent = self.frames_sent,
+            seconds_sent = self.frames_sent as f64 * FRAME_DURATION_MS as f64 / 1000.0,
+            "webrtc: audio streaming stopped"
+        );
 
         let _ = self.peer_connection.close().await;
     }

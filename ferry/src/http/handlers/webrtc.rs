@@ -3,11 +3,11 @@ use std::sync::Arc;
 use axum::{Json, http::StatusCode};
 use serde::{Deserialize, Serialize};
 
+use crate::call::call_span;
 use crate::codec::stt::deepgram::DeepgramSerializer;
 use crate::codec::transport::webrtc_dc::WebRtcSerializer;
 use crate::codec::tts::sarvam::SarvamSerializer;
 use crate::config::{self, Config};
-use crate::frames::{Frame, FrameKind, UserTurnAggregationFrame};
 use crate::http::response::ApiResponse;
 use crate::observer::latency_observer::LatencyObserver;
 use crate::observer::log_observer::LogObserver;
@@ -16,6 +16,7 @@ use crate::observer::stage_latency_observer::StageLatencyObserver;
 use crate::observer::transcript_log_observer::TranscriptLogObserver;
 use crate::observer::usage_observer::UsageObserver;
 use crate::pipeline::Pipeline;
+use crate::processor::FrameIo;
 use crate::services::mt::openrouter::{DeepSeekModel, MtModel};
 use crate::services::mt::sarvam::SarvamMtProvider;
 use crate::services::stt::deepgram::{DeepgramSttConfig, DeepgramSttProvider};
@@ -28,11 +29,11 @@ use crate::stages::stt::SttStage;
 use crate::stages::tts::TtsStage;
 use crate::transport::base::BaseTransport;
 use crate::transport::webrtc::transport::WebRtcClient;
+use tracing::Instrument;
+use uuid::Uuid;
 
 const SAMPLE_RATE: u32 = 16_000;
 const NUM_CHANNELS: u16 = 1;
-
-const SYSTEM_PROMPT: &str = "You are a translation model. Translate the user's speech into the english language. Just return the translated text, nothing else.";
 
 #[derive(Deserialize)]
 pub struct WebrtcOfferRequest {
@@ -44,6 +45,9 @@ pub struct WebrtcOfferResponse {
     pub answer_sdp: String,
 }
 
+/// One-way STT->MT->TTS demo, self-looped back to the same caller — this is
+/// what the try-agent screen talks to, not the two-leg (WebRTC + Twilio)
+/// call flow, so there's no `CallRegistry`/orchestration involved here.
 pub async fn webrtc_offer(
     Json(req): Json<WebrtcOfferRequest>,
 ) -> Result<ApiResponse<WebrtcOfferResponse>, ApiResponse<()>> {
@@ -54,11 +58,17 @@ pub async fn webrtc_offer(
         )
     })?;
 
-    let frame_io = build_pipeline(config);
+    // Not exposed to the client — try-agent has no registry/CallId of its
+    // own, this exists purely so log lines from this one-way demo call can
+    // be told apart from each other (and from real two-leg calls).
+    let call_id = Uuid::new_v4();
+    let span = call_span(call_id, "solo");
+
+    let frame_io = build_pipeline(config, span.clone());
     let serializer = WebRtcSerializer::new(SAMPLE_RATE, NUM_CHANNELS);
     let base = BaseTransport::new(frame_io, serializer);
 
-    let (client, answer_sdp) = WebRtcClient::accept_offer(base, req.offer_sdp)
+    let (client, answer_sdp) = WebRtcClient::accept_offer(base, req.offer_sdp, None)
         .await
         .map_err(|e| {
             ApiResponse::fail(
@@ -67,7 +77,7 @@ pub async fn webrtc_offer(
             )
         })?;
 
-    tokio::spawn(client.run());
+    tokio::spawn(client.run().instrument(span));
 
     Ok(ApiResponse::ok(
         StatusCode::OK,
@@ -75,36 +85,7 @@ pub async fn webrtc_offer(
     ))
 }
 
-pub async fn test_mt() -> Result<ApiResponse<&'static str>, ApiResponse<()>> {
-    let config = config::get().map_err(|e| {
-        ApiResponse::fail(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("server misconfigured: {e}"),
-        )
-    })?;
-
-    let frame_io = build_pipeline(config);
-    if !frame_io
-        .push(Frame::new(FrameKind::UserTurnAggregation(
-            UserTurnAggregationFrame {
-                text: "హలో ఎలా ఉన్నారు".to_string(),
-            },
-        )))
-        .await
-    {
-        return Err(ApiResponse::fail(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "MT pipeline is closed",
-        ));
-    }
-
-    Ok(ApiResponse::ok(
-        StatusCode::OK,
-        "MT frame pushed to pipeline",
-    ))
-}
-
-fn build_pipeline(config: &Config) -> crate::processor::FrameIo {
+fn build_pipeline(config: &Config, call_span: tracing::Span) -> FrameIo {
     let stt_serializer: Arc<
         dyn crate::codec::frame_serializer::FrameSerializer<
                 Message = tokio_tungstenite::tungstenite::Message,
@@ -165,5 +146,5 @@ fn build_pipeline(config: &Config) -> crate::processor::FrameIo {
         )),
     ];
 
-    Pipeline::spawn(stages, observers)
+    Pipeline::spawn(stages, observers, call_span)
 }
