@@ -4,7 +4,7 @@ use axum::extract::State;
 use axum::{Json, http::StatusCode};
 use serde::{Deserialize, Serialize};
 
-use crate::call::{CallId, CallStatus, EndReason, call_span};
+use crate::call::{CallHandle, CallId, CallStatus, EndReason, call_span};
 use crate::codec::stt::deepgram::DeepgramSerializer;
 use crate::codec::transport::webrtc_dc::WebRtcSerializer;
 use crate::codec::tts::sarvam::SarvamSerializer;
@@ -135,7 +135,7 @@ pub async fn start_call(
         );
     }
 
-    spawn_twilio_dial(app.clone(), call_id, config);
+    spawn_twilio_dial(app.clone(), call_id, handle.clone(), config);
 
     Ok(ApiResponse::ok(
         StatusCode::OK,
@@ -148,7 +148,18 @@ pub async fn start_call(
 
 /// Fire-and-forget: the outcome (answered / busy / no-answer / failed)
 /// arrives later as a POST to `status_callback_url`, not from this call.
-fn spawn_twilio_dial(app: AppState, call_id: CallId, config: &'static Config) {
+/// Takes `handle` directly rather than re-fetching it from the registry —
+/// `call_twilio` can take up to the Twilio client's request timeout, and if
+/// leg A hangs up during that window, its cleanup task removes the registry
+/// entry before this task's `Ok(sid)` ever lands. A registry lookup at that
+/// point would silently discard the sid (nobody left to hang it up),
+/// leaving an answered, billable PSTN call attached to no ferry leg.
+fn spawn_twilio_dial(
+    app: AppState,
+    call_id: CallId,
+    handle: Arc<CallHandle>,
+    config: &'static Config,
+) {
     tokio::spawn(
         async move {
             match app
@@ -162,15 +173,23 @@ fn spawn_twilio_dial(app: AppState, call_id: CallId, config: &'static Config) {
                 .await
             {
                 Ok(sid) => {
-                    if let Some(handle) = app.call_registry.get(&call_id) {
-                        *handle.twilio_call_sid.lock().await = Some(sid);
+                    *handle.twilio_call_sid.lock().await = Some(sid.clone());
+                    // Leg A may have already hung up while the dial was in
+                    // flight (see the doc comment above) — its cleanup task
+                    // found `twilio_call_sid` still `None` and skipped the
+                    // hangup, so this is the only place left that can still
+                    // do it.
+                    if handle.is_ended() {
+                        if let Err(e) = app.twilio.hangup_call(&sid).await {
+                            tracing::warn!(
+                                "twilio: failed to hang up {sid} for a call that ended before dial completed: {e}"
+                            );
+                        }
                     }
                 }
                 Err(e) => {
                     tracing::error!("twilio: outbound dial failed: {e}");
-                    if let Some(handle) = app.call_registry.get(&call_id) {
-                        handle.set_status(CallStatus::Ended(EndReason::Failed));
-                    }
+                    handle.set_status(CallStatus::Ended(EndReason::Failed));
                 }
             }
         }
