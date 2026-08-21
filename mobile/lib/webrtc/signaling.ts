@@ -8,7 +8,7 @@
 const DEFAULT_FERRY_URL = "http://127.0.0.1:8085";
 
 function ferryBaseUrl(): string {
-  return DEFAULT_FERRY_URL;
+  return process.env["EXPO_PUBLIC_FERRY_URL"] ?? DEFAULT_FERRY_URL;
 }
 
 type ApiResponse<T> = {

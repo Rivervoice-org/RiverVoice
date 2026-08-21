@@ -38,6 +38,9 @@ impl FrameProcessor for MtStage {
                 }
             };
 
+            // MT responses aren't streamed, so this measures time to the full
+            // response, not time to first byte — the metric name is just reused
+            // from FrameIo's TTFB helper.
             io.start_ttfb_metrics();
 
             tracing::debug!("MT stage: sending text to provider: {}", text);
