@@ -70,6 +70,7 @@ export interface ConnectOptions {
 }
 
 const SIGNALING_TIMEOUT_MS = 10_000;
+const ICE_GATHERING_TIMEOUT_MS = 5_000;
 
 /**
  * Asks for the microphone every time. The browser only shows a prompt when the
@@ -124,21 +125,32 @@ async function requestMic(): Promise<MediaStream> {
 }
 
 /**
- * Resolves once every ICE candidate has been gathered. Signaling here is a
- * single request/response with no side channel to trickle candidates back
- * on afterward, so the SDP sent to the server needs every candidate baked
- * in already rather than arriving incrementally (trickle ICE) — matches
+ * Resolves once every ICE candidate has been gathered, or after
+ * `ICE_GATHERING_TIMEOUT_MS` — whichever comes first — and continues with
+ * whatever candidates were gathered so far. Signaling here is a single
+ * request/response with no side channel to trickle candidates back on
+ * afterward, so the SDP sent to the server needs every candidate baked in
+ * already rather than arriving incrementally (trickle ICE) — matches
  * ferry's non-trickle signaling (ferry/src/transport/webrtc/transport.rs).
+ * A bounded wait matters here specifically because gathering can stall
+ * indefinitely with no fallback otherwise (no STUN/TURN is configured —
+ * see the `iceServers: []` below), which would hang `connect()` forever
+ * with the microphone already live. Mirrors
+ * `mobile/lib/webrtc/ferry-call.ts`'s `waitForIceGatheringComplete`.
  */
 function waitForIceGatheringComplete(pc: RTCPeerConnection): Promise<void> {
   if (pc.iceGatheringState === "complete") return Promise.resolve();
   return new Promise((resolve) => {
-    pc.addEventListener("icegatheringstatechange", function check() {
-      if (pc.iceGatheringState === "complete") {
-        pc.removeEventListener("icegatheringstatechange", check);
-        resolve();
-      }
-    });
+    const finish = () => {
+      pc.removeEventListener("icegatheringstatechange", check);
+      clearTimeout(timeoutId);
+      resolve();
+    };
+    const check = () => {
+      if (pc.iceGatheringState === "complete") finish();
+    };
+    const timeoutId = setTimeout(finish, ICE_GATHERING_TIMEOUT_MS);
+    pc.addEventListener("icegatheringstatechange", check);
   });
 }
 
@@ -248,14 +260,22 @@ export async function connectFerryCall(opts: ConnectOptions): Promise<BrowserVoi
   const stream = await requestMic();
   let stopLevelMeter: () => void = () => {};
   let remoteAudio: HTMLAudioElement | null = null;
+  // Declared here (not `const` inside the try) so the catch block below can
+  // close them on a setup failure — otherwise a rejected postOffer or a
+  // throwing setRemoteDescription leaves the ICE agent and DTLS transport
+  // running forever, with no `stop` handle ever handed back to close them.
+  let pc: RTCPeerConnection | undefined;
+  let dc: RTCDataChannel | undefined;
 
   try {
-    const pc = new RTCPeerConnection({ iceServers: [] });
-    for (const track of stream.getTracks()) pc.addTrack(track, stream);
+    const peerConnection = new RTCPeerConnection({ iceServers: [] });
+    pc = peerConnection;
+    for (const track of stream.getTracks()) peerConnection.addTrack(track, stream);
 
-    const dc = pc.createDataChannel("ferry");
-    dc.binaryType = "arraybuffer";
-    dc.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+    const dataChannel = peerConnection.createDataChannel("ferry");
+    dc = dataChannel;
+    dataChannel.binaryType = "arraybuffer";
+    dataChannel.onmessage = (event: MessageEvent<ArrayBuffer>) => {
       try {
         const message = decodeWireMessage(event.data);
         if (message.kind === WireMessageKind.Transcript) {
@@ -272,7 +292,7 @@ export async function connectFerryCall(opts: ConnectOptions): Promise<BrowserVoi
       }
     };
 
-    pc.ontrack = (event) => {
+    peerConnection.ontrack = (event) => {
       const [remoteStream] = event.streams;
       if (remoteStream) remoteAudio = attachRemoteAudio(remoteStream);
     };
@@ -282,8 +302,8 @@ export async function connectFerryCall(opts: ConnectOptions): Promise<BrowserVoi
       if (stopped) return;
       stopped = true;
       stopLevelMeter();
-      dc.close();
-      pc.close();
+      dataChannel.close();
+      peerConnection.close();
       for (const track of stream.getTracks()) track.stop();
       if (remoteAudio) {
         remoteAudio.srcObject = null;
@@ -292,28 +312,31 @@ export async function connectFerryCall(opts: ConnectOptions): Promise<BrowserVoi
       opts.onStatus(status);
     };
 
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "connected") {
+    peerConnection.onconnectionstatechange = () => {
+      if (peerConnection.connectionState === "connected") {
         opts.onStatus(BrowserVoiceStatus.Live);
-      } else if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+      } else if (
+        peerConnection.connectionState === "failed" ||
+        peerConnection.connectionState === "disconnected"
+      ) {
         opts.onError?.(
           new BrowserVoiceError(BrowserVoiceErrorCode.Dropped, "The call dropped unexpectedly."),
         );
         teardown(BrowserVoiceStatus.Error);
-      } else if (pc.connectionState === "closed") {
+      } else if (peerConnection.connectionState === "closed") {
         teardown(BrowserVoiceStatus.Ended);
       }
     };
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await waitForIceGatheringComplete(pc);
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    await waitForIceGatheringComplete(peerConnection);
 
-    const localDescription = pc.localDescription;
+    const localDescription = peerConnection.localDescription;
     if (!localDescription) throw new Error("No local SDP after ICE gathering");
 
     const { answerSdp, callId } = await postOffer(opts.signalingUrl, localDescription.sdp);
-    await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+    await peerConnection.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
     stopLevelMeter = startLevelMeter(stream, opts.onLevel);
 
@@ -322,6 +345,8 @@ export async function connectFerryCall(opts: ConnectOptions): Promise<BrowserVoi
       stop: () => teardown(BrowserVoiceStatus.Ended),
     };
   } catch (cause) {
+    dc?.close();
+    pc?.close();
     for (const track of stream.getTracks()) track.stop();
     if (cause instanceof BrowserVoiceError) throw cause;
     throw new BrowserVoiceError(
