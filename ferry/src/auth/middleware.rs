@@ -2,7 +2,6 @@ use axum::{extract::Request, http::StatusCode, middleware::Next, response::Respo
 
 use crate::auth::token;
 use crate::config;
-use crate::db;
 use crate::http::response::ApiResponse;
 use crate::http::state::AppState;
 
@@ -31,10 +30,7 @@ pub async fn require_session(mut req: Request, next: Next) -> Result<Response, A
     let session = token::verify_token(token, secret)
         .map_err(|_| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
 
-    req.extensions_mut().insert(AppState {
-        session,
-        pool: db::pool::get().clone(),
-    });
+    req.extensions_mut().insert(AppState { session });
 
     Ok(next.run(req).await)
 }

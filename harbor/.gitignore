@@ -1,6 +1,0 @@
-/bin/
-/harbor
-/harbor.exe
-.env
-*.test
-coverage.out

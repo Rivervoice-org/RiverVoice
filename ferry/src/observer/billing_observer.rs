@@ -1,18 +1,13 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use diesel_async::AsyncPgConnection;
-use diesel_async::pooled_connection::deadpool::Pool;
 use uuid::Uuid;
 
-use crate::db::enums::UsageUnit;
-use crate::db::mutations;
 use crate::frames::{Frame, FrameKind};
 use crate::observer::frame_observer::FrameObserver;
 use crate::pricing::{self, Per10KCost, PerMillionCost, PerMinuteCost};
 
 pub struct BillingObserver {
-    pool: &'static Pool<AsyncPgConnection>,
     org_id: Uuid,
     call_id: Uuid,
     mt_cost: PerMillionCost,
@@ -24,7 +19,6 @@ pub struct BillingObserver {
 
 impl BillingObserver {
     pub fn new(
-        pool: &'static Pool<AsyncPgConnection>,
         org_id: Uuid,
         call_id: Uuid,
         mt_cost: PerMillionCost,
@@ -32,7 +26,6 @@ impl BillingObserver {
         tts_cost: Per10KCost,
     ) -> Self {
         Self {
-            pool,
             org_id,
             call_id,
             mt_cost,
@@ -46,39 +39,19 @@ impl BillingObserver {
         self.exhausted.load(Ordering::Relaxed)
     }
 
-    fn charge(&self, cost_usd: f64, unit: UsageUnit, units: f64, note: &'static str) {
+    fn charge(&self, cost_usd: f64, unit: &'static str, units: f64, note: &'static str) {
         if cost_usd <= 0.0 {
             return;
         }
 
-        let pool = self.pool;
-        let org_id = self.org_id;
-        let call_id = self.call_id;
         let amount_micros = pricing::dollars_to_micros(cost_usd);
-        let exhausted = Arc::clone(&self.exhausted);
 
-        tokio::spawn(async move {
-            match mutations::charge_usage(
-                pool,
-                org_id,
-                call_id,
-                amount_micros,
-                unit,
-                units,
-                note.to_string(),
-            )
-            .await
-            {
-                Ok(balance) if balance < 0 => exhausted.store(true, Ordering::Relaxed),
-                Ok(_) => {}
-                Err(e) => {
-                    tracing::error!(
-                        %org_id, %call_id, error = %e,
-                        "billing: charge_usage failed"
-                    );
-                }
-            }
-        });
+        tracing::info!(
+            target: "ferry::billing",
+            org_id = %self.org_id, call_id = %self.call_id,
+            amount_micros, unit, units, note,
+            "charge_usage"
+        );
     }
 }
 
@@ -88,7 +61,7 @@ impl FrameObserver for BillingObserver {
             FrameKind::SttUsage(usage) if stage == "stt" => {
                 self.charge(
                     self.stt_cost.charge(usage.audio_seconds),
-                    UsageUnit::AudioSecond,
+                    "audio_second",
                     usage.audio_seconds,
                     "stt",
                 );
@@ -96,13 +69,13 @@ impl FrameObserver for BillingObserver {
             FrameKind::MtUsage(usage) if stage == "mt" => {
                 self.charge(
                     self.mt_cost.charge_prompt(usage.prompt_tokens),
-                    UsageUnit::PromptToken,
+                    "prompt_token",
                     usage.prompt_tokens as f64,
                     "mt",
                 );
                 self.charge(
                     self.mt_cost.charge_completion(usage.completion_tokens),
-                    UsageUnit::CompletionToken,
+                    "completion_token",
                     usage.completion_tokens as f64,
                     "mt",
                 );
@@ -110,7 +83,7 @@ impl FrameObserver for BillingObserver {
             FrameKind::TtsUsage(usage) if stage == "tts" => {
                 self.charge(
                     self.tts_cost.charge(usage.characters),
-                    UsageUnit::Character,
+                    "character",
                     usage.characters as f64,
                     "tts",
                 );
