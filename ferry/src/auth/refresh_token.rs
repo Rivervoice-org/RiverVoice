@@ -2,7 +2,9 @@ use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use chrono::{DateTime, Duration, FixedOffset, Utc};
 use rand::RngCore;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, sea_query::Expr};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set, sea_query::Expr,
+};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -35,7 +37,13 @@ fn hash_token(raw: &str) -> String {
 /// `family_id` ties rotated tokens together for reuse detection — pass
 /// `None` to start a new family (first login), or the prior token's
 /// `family_id` when rotating an existing session.
-pub async fn create_refresh_token(
+///
+/// Takes the connection as a parameter (rather than reaching for `db::get()`
+/// itself) so a caller can pass a `DatabaseTransaction` and get this insert
+/// committed atomically alongside whatever else it's doing — e.g. so a user
+/// row and its first refresh token either both land or neither does.
+pub async fn create_refresh_token<C: ConnectionTrait>(
+    conn: &C,
     user_id: Uuid,
     family_id: Option<Uuid>,
 ) -> Result<IssuedRefreshToken, sea_orm::DbErr> {
@@ -53,7 +61,7 @@ pub async fn create_refresh_token(
         created_at: Set(Utc::now().fixed_offset()),
     };
 
-    active.insert(db::get()).await?;
+    active.insert(conn).await?;
 
     Ok(IssuedRefreshToken {
         token: raw,
@@ -117,7 +125,7 @@ pub async fn rotate_refresh_token(
         RefreshTokenError::Invalid
     })?;
 
-    let issued = create_refresh_token(user_id, Some(family_id))
+    let issued = create_refresh_token(db, user_id, Some(family_id))
         .await
         .map_err(|e| {
             tracing::error!("refresh_token: failed to issue rotated token: {e}");
