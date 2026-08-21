@@ -21,7 +21,10 @@ pub async fn require_user(mut req: Request, next: Next) -> Result<Response, ApiR
         .headers()
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
+        .and_then(|v| {
+            let (scheme, token) = v.split_once(' ')?;
+            scheme.eq_ignore_ascii_case("Bearer").then_some(token)
+        })
         .ok_or_else(|| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
 
     let session = token::verify_access_token(token, secret)
