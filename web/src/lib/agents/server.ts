@@ -1,14 +1,5 @@
-import { cache } from "react";
-
-import { serverGet } from "@/lib/api-server";
+import { mockAgentSummary, mockAgentTemplate } from "@/lib/mock-data";
 import type { AgentPage, AgentTemplate } from "@/lib/agents/types";
-
-/**
- * Read once per request, however many components ask. React's cache dedupes
- * within a single render, so a layout and a page wanting the same roster cost
- * harbor one call rather than two. Deduping is by argument, so two different
- * pages stay two calls.
- */
 
 export type AgentQuery = {
   search?: string;
@@ -16,13 +7,17 @@ export type AgentQuery = {
   offset?: number;
 };
 
-export const getAgents = cache(({ search = "", limit = 10, offset = 0 }: AgentQuery = {}) => {
-  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+export const getAgents = async ({
+  search = "",
+  limit = 10,
+  offset = 0,
+}: AgentQuery = {}): Promise<AgentPage> => {
+  const agents =
+    search && !mockAgentSummary.name.toLowerCase().includes(search.toLowerCase())
+      ? []
+      : [mockAgentSummary];
 
-  // Only when there is one, so harbor takes the cheaper branch of the filter.
-  if (search) params.set("q", search);
+  return { agents, total: agents.length, limit, offset };
+};
 
-  return serverGet<AgentPage>(`/v1/agents?${params}`);
-});
-
-export const getAgentTemplates = cache(() => serverGet<AgentTemplate[]>("/v1/agent-templates"));
+export const getAgentTemplates = async (): Promise<AgentTemplate[]> => [mockAgentTemplate];

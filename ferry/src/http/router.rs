@@ -11,7 +11,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
 use super::handlers;
-use crate::auth::middleware::require_session;
+// use crate::auth::middleware::require_session;
 
 const ALLOWED_ORIGINS: &[&str] = &["http://localhost:3000"];
 

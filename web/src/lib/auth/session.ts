@@ -1,20 +1,11 @@
-import { cache } from "react";
+import { cookies } from "next/headers";
 
-import { serverGet } from "@/lib/api-server";
+import { mockMe } from "@/lib/mock-data";
+import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
 import type { Me } from "@/lib/auth/types";
 
-/**
- * Who is asking, according to harbor. Null covers every way of not knowing —
- * no cookie, an expired one, or harbor being unreachable. A gate that cannot
- * verify has to assume the worst; the alternative is letting a network blip
- * open the door.
- *
- * Cached for the request, so a layout and a page asking both cost one call.
- */
-export const getSession = cache(async (): Promise<Me | null> => {
-  try {
-    return await serverGet<Me>("/v1/me");
-  } catch {
-    return null;
-  }
-});
+/** No backend to ask anymore — "logged in" just means the mock cookie is set. */
+export const getSession = async (): Promise<Me | null> => {
+  const jar = await cookies();
+  return jar.get(SESSION_COOKIE) ? mockMe : null;
+};
