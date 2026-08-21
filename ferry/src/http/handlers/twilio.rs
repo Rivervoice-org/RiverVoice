@@ -3,12 +3,13 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
-use crate::call::{CallId, CallStatus, EndReason};
+use crate::call::{CallId, CallStatus, EndReason, call_span};
 use crate::codec::transport::telephony::twilio::TwilioSerializer;
 use crate::http::response::ApiResponse;
 use crate::http::state::AppState;
 use crate::transport::base::BaseTransport;
 use crate::transport::websockets::transport::WebSocketClient;
+use tracing::Instrument;
 
 pub async fn twilio_ws(
     Path(call_id): Path<String>,
@@ -36,15 +37,18 @@ pub async fn twilio_ws(
     let base = BaseTransport::new(b_io, TwilioSerializer::new());
     let client = WebSocketClient::new(base);
 
-    Ok(ws.on_upgrade(move |socket| async move {
-        client.on_connect(socket).await;
-        // B's leg ended (Twilio closed the stream, callee hung up, ...) —
-        // tear down A's leg too: A's WebRtcClient is watching this same
-        // status and will hang up once it sees `Ended`.
-        if !handle.is_ended() {
-            handle.set_status(CallStatus::Ended(EndReason::HungUpByB));
+    Ok(ws.on_upgrade(move |socket| {
+        async move {
+            client.on_connect(socket).await;
+            // B's leg ended (Twilio closed the stream, callee hung up, ...) —
+            // tear down A's leg too: A's WebRtcClient is watching this same
+            // status and will hang up once it sees `Ended`.
+            if !handle.is_ended() {
+                handle.set_status(CallStatus::Ended(EndReason::HungUpByB));
+            }
+            app.call_registry.remove(&call_id);
         }
-        app.call_registry.remove(&call_id);
+        .instrument(call_span(call_id, "b"))
     }))
 }
 

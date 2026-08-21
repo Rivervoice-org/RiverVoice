@@ -91,6 +91,12 @@ pub struct TwilioSerializer {
     /// ever drains a chunk. Shared with the WebRTC/Opus path's own pacing —
     /// see `ferry/src/transport/pacing.rs`.
     send_pacer: Mutex<FramePacer>,
+    /// Whole-call frame counters, purely for the one-line start/stop summary
+    /// logged around `TwilioInEvent::Start`/`Stop` — per-chunk detail (every
+    /// ~20ms) would drown every other log line in a call, so it only exists
+    /// at TRACE.
+    frames_in: Mutex<u64>,
+    frames_out: Mutex<u64>,
 }
 
 impl TwilioSerializer {
@@ -109,6 +115,8 @@ impl TwilioSerializer {
                 TWILIO_CHUNK_BYTES,
                 Duration::from_millis(TWILIO_CHUNK_MS),
             )),
+            frames_in: Mutex::new(0),
+            frames_out: Mutex::new(0),
         }
     }
 }
@@ -159,11 +167,14 @@ impl FrameSerializer for TwilioSerializer {
             .try_drain()?;
 
         let b64 = STANDARD.encode(&chunk);
-        tracing::debug!(
+        // Per-chunk detail (every ~20ms) only at TRACE — the whole-call
+        // frame count gets one summary line at TwilioInEvent::Stop instead.
+        tracing::trace!(
             mulaw = chunk.len(),
             b64 = b64.len(),
             "twilio: sending audio"
         );
+        *self.frames_out.lock().unwrap_or_else(|e| e.into_inner()) += 1;
 
         let msg = TwilioOutbound {
             event: TwilioOutEvent::Media,
@@ -205,11 +216,12 @@ impl FrameSerializer for TwilioSerializer {
                     .push(&samples, &mut resampled);
                 let up: Vec<u8> = resampled.iter().flat_map(|s| s.to_le_bytes()).collect();
                 let num_frames = up.len() as u32 / 2;
-                tracing::debug!(
+                tracing::trace!(
                     mulaw_in = mulaw_bytes.len(),
                     pcm_out = up.len(),
                     "twilio: received audio"
                 );
+                *self.frames_in.lock().unwrap_or_else(|e| e.into_inner()) += 1;
                 Ok(Some(Frame::new(FrameKind::RawAudio(RawAudioFrame {
                     audio: up,
                     sample_rate: PIPELINE_SAMPLE_RATE,
@@ -226,9 +238,22 @@ impl FrameSerializer for TwilioSerializer {
                         .map_err(|e| anyhow::anyhow!("twilio: lock poisoned: {e}"))?;
                     *w = Some(payload.stream_sid);
                 }
+                tracing::debug!("twilio: audio streaming started");
                 anyhow::bail!("twilio: start event — no audio")
             }
-            TwilioInEvent::Connected | TwilioInEvent::Stop => {
+            TwilioInEvent::Stop => {
+                let frames_in = *self.frames_in.lock().unwrap_or_else(|e| e.into_inner());
+                let frames_out = *self.frames_out.lock().unwrap_or_else(|e| e.into_inner());
+                tracing::debug!(
+                    frames_in,
+                    seconds_in = frames_in as f64 * TWILIO_CHUNK_MS as f64 / 1000.0,
+                    frames_out,
+                    seconds_out = frames_out as f64 * TWILIO_CHUNK_MS as f64 / 1000.0,
+                    "twilio: audio streaming stopped"
+                );
+                anyhow::bail!("twilio: stop event — no audio")
+            }
+            TwilioInEvent::Connected => {
                 anyhow::bail!("twilio: {:?} event — no audio", inbound.event)
             }
         }

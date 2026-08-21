@@ -11,6 +11,7 @@ use axum::{
 };
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
+use tracing::Instrument;
 
 use super::handlers;
 use super::state::AppState;
@@ -38,9 +39,20 @@ fn cors_layer() -> CorsLayer {
         .allow_credentials(true)
 }
 
+/// Every route gets a short `req_id` on this span for free — CRUD endpoints
+/// added later need no logging code of their own to get one. Long-running
+/// work a handler spawns (the call/pipeline tasks) outlives this span, since
+/// a spawned task doesn't inherit the caller's span automatically; those get
+/// their own longer-lived `call_id` span instead (see `handlers::call`).
 async fn log_request(req: Request, next: Next) -> Response {
-    tracing::debug!(method = %req.method(), uri = %req.uri(), "started processing request");
-    next.run(req).await
+    let req_id = uuid::Uuid::new_v4().simple().to_string()[..8].to_string();
+    let span = tracing::info_span!("request", req_id = %req_id);
+    async move {
+        tracing::debug!(method = %req.method(), uri = %req.uri(), "started processing request");
+        next.run(req).await
+    }
+    .instrument(span)
+    .await
 }
 
 fn http_routes() -> Router<AppState> {

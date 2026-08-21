@@ -342,7 +342,9 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
         {
             Ok(()) => {
                 self.frames_sent += 1;
-                tracing::debug!(
+                // Per-frame detail (every ~20ms) only at TRACE — `run`'s
+                // cleanup logs a whole-call total using `frames_sent` instead.
+                tracing::trace!(
                     "webrtc: wrote opus frame #{}, {opus_len} bytes, ssrc={}, payload_type={}",
                     self.frames_sent,
                     self.output_ssrc,
@@ -460,6 +462,12 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                 }
             }
         }
+
+        tracing::debug!(
+            frames_sent = self.frames_sent,
+            seconds_sent = self.frames_sent as f64 * FRAME_DURATION_MS as f64 / 1000.0,
+            "webrtc: audio streaming stopped"
+        );
 
         let _ = self.peer_connection.close().await;
     }

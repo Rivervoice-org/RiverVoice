@@ -3,6 +3,7 @@ use std::sync::Arc;
 use axum::{Json, http::StatusCode};
 use serde::{Deserialize, Serialize};
 
+use crate::call::call_span;
 use crate::codec::stt::deepgram::DeepgramSerializer;
 use crate::codec::transport::webrtc_dc::WebRtcSerializer;
 use crate::codec::tts::sarvam::SarvamSerializer;
@@ -28,6 +29,8 @@ use crate::stages::stt::SttStage;
 use crate::stages::tts::TtsStage;
 use crate::transport::base::BaseTransport;
 use crate::transport::webrtc::transport::WebRtcClient;
+use tracing::Instrument;
+use uuid::Uuid;
 
 const SAMPLE_RATE: u32 = 16_000;
 const NUM_CHANNELS: u16 = 1;
@@ -57,7 +60,13 @@ pub async fn webrtc_offer(
         )
     })?;
 
-    let frame_io = build_pipeline(config);
+    // Not exposed to the client — try-agent has no registry/CallId of its
+    // own, this exists purely so log lines from this one-way demo call can
+    // be told apart from each other (and from real two-leg calls).
+    let call_id = Uuid::new_v4();
+    let span = call_span(call_id, "solo");
+
+    let frame_io = build_pipeline(config, span.clone());
     let serializer = WebRtcSerializer::new(SAMPLE_RATE, NUM_CHANNELS);
     let base = BaseTransport::new(frame_io, serializer);
 
@@ -70,7 +79,7 @@ pub async fn webrtc_offer(
             )
         })?;
 
-    tokio::spawn(client.run());
+    tokio::spawn(client.run().instrument(span));
 
     Ok(ApiResponse::ok(
         StatusCode::OK,
@@ -78,7 +87,7 @@ pub async fn webrtc_offer(
     ))
 }
 
-fn build_pipeline(config: &Config) -> FrameIo {
+fn build_pipeline(config: &Config, call_span: tracing::Span) -> FrameIo {
     let stt_serializer: Arc<
         dyn crate::codec::frame_serializer::FrameSerializer<
                 Message = tokio_tungstenite::tungstenite::Message,
@@ -139,5 +148,5 @@ fn build_pipeline(config: &Config) -> FrameIo {
         )),
     ];
 
-    Pipeline::spawn(stages, observers)
+    Pipeline::spawn(stages, observers, call_span)
 }

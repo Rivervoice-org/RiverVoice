@@ -4,7 +4,7 @@ use axum::extract::State;
 use axum::{Json, http::StatusCode};
 use serde::{Deserialize, Serialize};
 
-use crate::call::{CallId, CallStatus, EndReason};
+use crate::call::{CallId, CallStatus, EndReason, call_span};
 use crate::codec::stt::deepgram::DeepgramSerializer;
 use crate::codec::transport::webrtc_dc::WebRtcSerializer;
 use crate::codec::tts::sarvam::SarvamSerializer;
@@ -32,6 +32,7 @@ use crate::stages::stt::SttStage;
 use crate::stages::tts::TtsStage;
 use crate::transport::base::BaseTransport;
 use crate::transport::webrtc::transport::WebRtcClient;
+use tracing::Instrument;
 
 const SAMPLE_RATE: u32 = 16_000;
 const NUM_CHANNELS: u16 = 1;
@@ -71,10 +72,22 @@ pub async fn start_call(
     // connect) is safe because a pipeline's stages don't touch either
     // participant's live transport — they're just STT/MT/TTS processing
     // chains hung off API keys/config.
-    let (a2b_exit, a2b_entrance) =
-        build_pipeline(config, Language::Te, Language::En, "shubh").into_parts();
-    let (b2a_exit, b2a_entrance) =
-        build_pipeline(config, Language::En, Language::Te, "shubh").into_parts();
+    let (a2b_exit, a2b_entrance) = build_pipeline(
+        config,
+        Language::Te,
+        Language::En,
+        "shubh",
+        call_span(call_id, "a2b"),
+    )
+    .into_parts();
+    let (b2a_exit, b2a_entrance) = build_pipeline(
+        config,
+        Language::En,
+        Language::Te,
+        "shubh",
+        call_span(call_id, "b2a"),
+    )
+    .into_parts();
 
     // A's transport reads outbound audio from B's pipeline's output
     // (b2a_exit) and pushes A's mic input into A's own pipeline's entrance
@@ -103,20 +116,23 @@ pub async fn start_call(
     {
         let app = app.clone();
         let handle = handle.clone();
-        tokio::spawn(async move {
-            client.run().await;
-            // A's leg ended (hangup, ICE failure, ...) — tear down B's leg
-            // too, since nothing else will notice A is gone.
-            if !handle.is_ended() {
-                handle.set_status(CallStatus::Ended(EndReason::HungUpByA));
-            }
-            if let Some(sid) = handle.twilio_call_sid.lock().await.clone() {
-                if let Err(e) = app.twilio.hangup_call(&sid).await {
-                    tracing::warn!("twilio: failed to hang up {sid} after A left: {e}");
+        tokio::spawn(
+            async move {
+                client.run().await;
+                // A's leg ended (hangup, ICE failure, ...) — tear down B's leg
+                // too, since nothing else will notice A is gone.
+                if !handle.is_ended() {
+                    handle.set_status(CallStatus::Ended(EndReason::HungUpByA));
                 }
+                if let Some(sid) = handle.twilio_call_sid.lock().await.clone() {
+                    if let Err(e) = app.twilio.hangup_call(&sid).await {
+                        tracing::warn!("twilio: failed to hang up {sid} after A left: {e}");
+                    }
+                }
+                app.call_registry.remove(&call_id);
             }
-            app.call_registry.remove(&call_id);
-        });
+            .instrument(call_span(call_id, "a")),
+        );
     }
 
     spawn_twilio_dial(app.clone(), call_id, config);
@@ -133,30 +149,33 @@ pub async fn start_call(
 /// Fire-and-forget: the outcome (answered / busy / no-answer / failed)
 /// arrives later as a POST to `status_callback_url`, not from this call.
 fn spawn_twilio_dial(app: AppState, call_id: CallId, config: &'static Config) {
-    tokio::spawn(async move {
-        match app
-            .twilio
-            .call_twilio(
-                call_id,
-                &config.twilio_from_number,
-                &config.twilio_to_number,
-                &config.public_base_url,
-            )
-            .await
-        {
-            Ok(sid) => {
-                if let Some(handle) = app.call_registry.get(&call_id) {
-                    *handle.twilio_call_sid.lock().await = Some(sid);
+    tokio::spawn(
+        async move {
+            match app
+                .twilio
+                .call_twilio(
+                    call_id,
+                    &config.twilio_from_number,
+                    &config.twilio_to_number,
+                    &config.public_base_url,
+                )
+                .await
+            {
+                Ok(sid) => {
+                    if let Some(handle) = app.call_registry.get(&call_id) {
+                        *handle.twilio_call_sid.lock().await = Some(sid);
+                    }
                 }
-            }
-            Err(e) => {
-                tracing::error!("twilio: outbound dial failed: {e}");
-                if let Some(handle) = app.call_registry.get(&call_id) {
-                    handle.set_status(CallStatus::Ended(EndReason::Failed));
+                Err(e) => {
+                    tracing::error!("twilio: outbound dial failed: {e}");
+                    if let Some(handle) = app.call_registry.get(&call_id) {
+                        handle.set_status(CallStatus::Ended(EndReason::Failed));
+                    }
                 }
             }
         }
-    });
+        .instrument(call_span(call_id, "dial")),
+    );
 }
 
 fn observers() -> Vec<Arc<dyn FrameObserver>> {
@@ -168,6 +187,7 @@ fn build_pipeline(
     source_lang: Language,
     target_lang: Language,
     tts_voice: &str,
+    call_span: tracing::Span,
 ) -> FrameIo {
     let stt_serializer: Arc<
         dyn crate::codec::frame_serializer::FrameSerializer<
@@ -229,5 +249,5 @@ fn build_pipeline(
         )),
     ];
 
-    Pipeline::spawn(stages, observers)
+    Pipeline::spawn(stages, observers, call_span)
 }

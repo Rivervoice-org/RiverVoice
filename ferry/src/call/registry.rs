@@ -33,6 +33,19 @@ impl std::str::FromStr for CallId {
     }
 }
 
+/// The one place a call-scoped tracing span gets built — entered (via
+/// `.instrument()`) around every task a call spawns (pipeline stages, the
+/// WebRTC/Twilio run loops), so every log line anywhere underneath carries
+/// `call_id`/`leg` automatically, without that code needing to know this
+/// exists. `call_id` takes anything `Display` (a real `CallId` for a
+/// registered two-leg call, or a bare `Uuid` for try-agent's one-way demo,
+/// which has no registry entry). `leg` is a free-form tag — "a"/"b" for a
+/// participant's transport, "a2b"/"b2a" for a pipeline's translation
+/// direction, "solo" for try-agent, "dial" for the outbound-dial task.
+pub fn call_span(call_id: impl std::fmt::Display, leg: &str) -> tracing::Span {
+    tracing::info_span!("call", call_id = %call_id, leg = %leg)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CallStatus {
     Dialing,

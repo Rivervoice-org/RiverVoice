@@ -3,6 +3,7 @@ use std::fmt;
 use nu_ansi_term::Color;
 use tracing::field::{Field, Visit};
 use tracing::{Event, Level, Subscriber};
+use tracing_subscriber::fmt::FormattedFields;
 use tracing_subscriber::fmt::format::Writer;
 use tracing_subscriber::fmt::time::{FormatTime, SystemTime};
 use tracing_subscriber::fmt::{FmtContext, FormatEvent, FormatFields};
@@ -52,7 +53,27 @@ fn stage_color(stage: &str) -> Color {
         "stt" => Color::Cyan,
         "mt" => Color::Purple,
         "tts" => Color::Blue,
+        "transport" => Color::LightPurple,
         _ => Color::White,
+    }
+}
+
+/// Derives a stage from an event's module-path target, for lines that don't
+/// carry an explicit `stage` field (most don't — only the metrics/usage
+/// events do). Lets any log line anywhere in a stage or transport module
+/// pick up that stage's color automatically, with zero changes to the code
+/// that emits it.
+fn stage_from_target(target: &str) -> Option<&'static str> {
+    if target.contains("::transport") {
+        Some("transport")
+    } else if target.contains("::stt") {
+        Some("stt")
+    } else if target.contains("::mt") {
+        Some("mt")
+    } else if target.contains("::tts") {
+        Some("tts")
+    } else {
+        None
     }
 }
 
@@ -80,7 +101,9 @@ struct Captured {
     ttfb_ms: Option<i64>,
     latency_ms: Option<i64>,
     text: Option<String>,
-    by_timeout: Option<bool>,
+    // ferry::frame_flow (handoff lines from LogObserver) only.
+    next: Option<String>,
+    payload: Option<String>,
     // ferry::usage fields — one event only ever carries the subset for its
     // own frame kind (stt/mt/tts), the rest stay None.
     audio_seconds: Option<f64>,
@@ -99,6 +122,8 @@ impl Visit for Captured {
         match field.name() {
             "stage" => self.stage = Some(value.to_string()),
             "text" => self.text = Some(value.to_string()),
+            "next" => self.next = Some(value.to_string()),
+            "payload" => self.payload = Some(value.to_string()),
             _ => {}
         }
     }
@@ -130,18 +155,13 @@ impl Visit for Captured {
         self.record_i64(field, value as i64);
     }
 
-    fn record_bool(&mut self, field: &Field, value: bool) {
-        if field.name() == "by_timeout" {
-            self.by_timeout = Some(value);
-        }
-    }
-
     fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
         let rendered = format!("{value:?}");
         match field.name() {
             "message" => self.message = rendered.trim_matches('"').to_string(),
             "stage" => self.stage = Some(rendered.trim_matches('"').to_string()),
             "text" => self.text = Some(rendered.trim_matches('"').to_string()),
+            "payload" => self.payload = Some(rendered.trim_matches('"').to_string()),
             _ => {}
         }
     }
@@ -180,6 +200,33 @@ where
                 " {:>5} ",
                 paint(level_color(meta.level()), ansi, meta.level().as_str())
             )?;
+
+            // Span context (req_id / call_id / leg, set up in
+            // `http::router::log_request` and `call::call_span`) — printed
+            // as one bracketed prefix so any log line, anywhere in a stage
+            // or provider, is traceable back to the request/call it belongs
+            // to without that code needing to pass those fields itself.
+            if let Some(scope) = ctx.event_scope() {
+                let mut span_fields = String::new();
+                for span in scope.from_root() {
+                    let ext = span.extensions();
+                    if let Some(fields) = ext.get::<FormattedFields<N>>()
+                        && !fields.is_empty()
+                    {
+                        if !span_fields.is_empty() {
+                            span_fields.push(' ');
+                        }
+                        span_fields.push_str(fields.as_str());
+                    }
+                }
+                if !span_fields.is_empty() {
+                    write!(
+                        w,
+                        "{} ",
+                        paint(Color::DarkGray, ansi, &format!("[{span_fields}]"))
+                    )?;
+                }
+            }
 
             let mut fields = Captured::default();
             event.record(&mut fields);
@@ -274,37 +321,51 @@ where
                         w,
                         "{}",
                         paint(
-                            Color::Cyan,
+                            stage_color("stt"),
                             ansi,
                             fields.text.as_deref().unwrap_or_default()
                         )
                     )?;
                 }
 
-                _ if fields.message == "user-aggregator: turn started" => {
+                // LogObserver's handoff line — "stt -> mt: <transcribed
+                // text>", "mt -> tts: <translated text>", "tts -> transport:
+                // <N> bytes" — colored by the *sending* stage, so you can
+                // watch what each stage produces for the next one without
+                // wading through every other frame kind. Frame kinds with no
+                // human-meaningful payload (usage/metrics, start/stop
+                // markers) never set `payload`, so they fall through to the
+                // generic branch below (and stay at TRACE, so invisible by
+                // default).
+                "ferry::frame_flow" if fields.payload.is_some() => {
+                    let stage = fields.stage.as_deref().unwrap_or("?");
+                    let next = fields.next.as_deref().unwrap_or("?");
                     write!(
                         w,
                         "{}",
-                        paint(Color::Red, ansi, &format!("{target}: {}", fields.message))
-                    )?;
-                }
-                _ if fields.text.is_some() => {
-                    let by_timeout = fields.by_timeout.unwrap_or_default();
-                    write!(
-                        w,
-                        "{}: {} by_timeout={by_timeout} text={}",
-                        target,
-                        fields.message,
                         paint(
-                            Color::Yellow,
+                            stage_color(stage),
                             ansi,
-                            fields.text.as_deref().unwrap_or_default()
-                        ),
+                            &format!(
+                                "{stage} -> {next}: {}",
+                                fields.payload.as_deref().unwrap_or_default()
+                            )
+                        )
                     )?;
                 }
+
                 _ => {
-                    write!(w, "{target}: ")?;
-                    ctx.format_fields(w, event)?;
+                    let color = stage_from_target(target).map(stage_color);
+                    let mut rendered = String::new();
+                    {
+                        let mut rw = Writer::new(&mut rendered);
+                        write!(rw, "{target}: ")?;
+                        ctx.format_fields(rw, event)?;
+                    }
+                    match color {
+                        Some(color) => write!(w, "{}", paint(color, ansi, &rendered))?,
+                        None => write!(w, "{rendered}")?,
+                    }
                 }
             }
         }
