@@ -44,6 +44,8 @@ audiopus = { version = "0.2.0", default-features = false, features = ["encoder",
 audiopus_sys = { version = "0.2.2", default-features = false, features = ["static"] }
 rtc = "0.20.3"
 rand = "0.8"
+sea-orm = { version = "2.0.2", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-uuid", "with-chrono"] }
+sha2 = "0.10"
 
 [profile.dev]
 debug = 1

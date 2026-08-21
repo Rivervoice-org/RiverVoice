@@ -3,6 +3,7 @@ pub mod auth;
 pub mod call;
 pub mod codec;
 pub mod config;
+pub mod db;
 pub mod frames;
 pub mod http;
 pub mod logging;
