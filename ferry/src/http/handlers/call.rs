@@ -27,7 +27,6 @@ use crate::services::stt::language::Language;
 use crate::services::stt::provider::{SttConfig, SttConfigKind};
 use crate::services::tts::provider::TtsConfigKind;
 use crate::services::tts::sarvam::{SarvamModel, SarvamTtsConfig, SarvamTtsProvider};
-use crate::services::twilio::CreateCallParams;
 use crate::stages::mt::MtStage;
 use crate::stages::stt::SttStage;
 use crate::stages::tts::TtsStage;
@@ -135,18 +134,14 @@ pub async fn start_call(
 /// arrives later as a POST to `status_callback_url`, not from this call.
 fn spawn_twilio_dial(app: AppState, call_id: CallId, config: &'static Config) {
     tokio::spawn(async move {
-        let base_host = strip_scheme(&config.public_base_url);
-        let stream_url = format!("wss://{base_host}/v1/twilio/ws/{call_id}");
-        let status_callback_url = format!("https://{base_host}/v1/twilio/status/{call_id}");
-
         match app
             .twilio
-            .create_call(CreateCallParams {
-                to: &config.twilio_to_number,
-                from: &config.twilio_from_number,
-                stream_url,
-                status_callback_url,
-            })
+            .call_twilio(
+                call_id,
+                &config.twilio_from_number,
+                &config.twilio_to_number,
+                &config.public_base_url,
+            )
             .await
         {
             Ok(sid) => {
@@ -166,13 +161,6 @@ fn spawn_twilio_dial(app: AppState, call_id: CallId, config: &'static Config) {
 
 fn observers() -> Vec<Arc<dyn FrameObserver>> {
     vec![Arc::new(LogObserver)]
-}
-
-/// Strips a leading scheme (`https://`/`http://`) off `public_base_url` so
-/// it can be reused as a bare host for both `wss://` and `https://` URLs.
-fn strip_scheme(url: &str) -> &str {
-    url.trim_start_matches("https://")
-        .trim_start_matches("http://")
 }
 
 fn build_pipeline(

@@ -2,6 +2,8 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
+use crate::call::CallId;
+
 /// `reqwest::Client` has no request timeout by default — without one, a
 /// stalled Twilio response leaves the caller (e.g. `spawn_twilio_dial`)
 /// hanging indefinitely, with no `Ok`/`Err` ever arriving to update the
@@ -110,6 +112,30 @@ impl TwilioClient {
         Ok(call.sid)
     }
 
+    /// Builds the media-stream and status-callback URLs for `call_id` from
+    /// `public_base_url`, then fires the outbound dial — the one thing
+    /// `call.rs`'s `spawn_twilio_dial` actually needs from this module,
+    /// rather than assembling Twilio's URL scheme itself.
+    pub async fn call_twilio(
+        &self,
+        call_id: CallId,
+        from: &str,
+        to: &str,
+        public_base_url: &str,
+    ) -> Result<String, TwilioError> {
+        let base_host = strip_scheme(public_base_url);
+        let stream_url = format!("wss://{base_host}/v1/twilio/ws/{call_id}");
+        let status_callback_url = format!("https://{base_host}/v1/twilio/status/{call_id}");
+
+        self.create_call(CreateCallParams {
+            to,
+            from,
+            stream_url,
+            status_callback_url,
+        })
+        .await
+    }
+
     /// Ends a call in progress — used to propagate a hangup from leg A (the
     /// WebRTC side) onto leg B (the PSTN side), since closing the Twilio
     /// media-stream WS alone does not end the underlying phone call.
@@ -136,6 +162,13 @@ impl TwilioClient {
 
         Ok(())
     }
+}
+
+/// Strips a leading scheme (`https://`/`http://`) off `public_base_url` so
+/// it can be reused as a bare host for both `wss://` and `https://` URLs.
+fn strip_scheme(url: &str) -> &str {
+    url.trim_start_matches("https://")
+        .trim_start_matches("http://")
 }
 
 fn xml_escape(s: &str) -> String {

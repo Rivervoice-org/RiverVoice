@@ -51,4 +51,14 @@ impl<S: FrameSerializer> BaseTransport<S> {
     pub async fn push_frame(&self, frame: Frame) -> bool {
         self.io.push(frame).await
     }
+
+    /// See [`FrameSerializer::drain_paced`](crate::codec::frame_serializer::FrameSerializer::drain_paced).
+    pub fn drain_paced(&self) -> Option<S::Message> {
+        self.serializer.drain_paced()
+    }
+
+    /// See [`FrameSerializer::pace_interval`](crate::codec::frame_serializer::FrameSerializer::pace_interval).
+    pub fn pace_interval(&self) -> Option<std::time::Duration> {
+        self.serializer.pace_interval()
+    }
 }
