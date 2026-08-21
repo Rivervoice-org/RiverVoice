@@ -4,7 +4,10 @@ use crate::auth::token;
 use crate::config;
 use crate::http::response::ApiResponse;
 
-pub async fn require_session(mut req: Request, next: Next) -> Result<Response, ApiResponse<()>> {
+/// The access token travels in `Authorization: Bearer <token>`. On success,
+/// the verified `UserSession` is put on the request as an extension;
+/// handlers pull it out with the `Extension<UserSession>` extractor.
+pub async fn require_user(mut req: Request, next: Next) -> Result<Response, ApiResponse<()>> {
     let secret = &config::get()
         .map_err(|_| {
             ApiResponse::fail(
@@ -14,19 +17,14 @@ pub async fn require_session(mut req: Request, next: Next) -> Result<Response, A
         })?
         .jwt_secret;
 
-    let cookie_header = req
+    let token = req
         .headers()
-        .get(axum::http::header::COOKIE)
+        .get(axum::http::header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
         .ok_or_else(|| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
 
-    let token = cookie_header
-        .split(';')
-        .map(|kv| kv.trim())
-        .find_map(|kv| kv.strip_prefix("rv_session="))
-        .ok_or_else(|| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
-
-    let session = token::verify_token(token, secret)
+    let session = token::verify_access_token(token, secret)
         .map_err(|_| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
 
     req.extensions_mut().insert(session);
