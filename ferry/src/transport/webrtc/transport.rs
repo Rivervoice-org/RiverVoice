@@ -21,6 +21,7 @@ use webrtc::peer_connection::{
 use webrtc::runtime::default_runtime;
 
 use crate::audio::opus::{OpusDecoder, OpusEncoder, SAMPLE_RATE};
+use crate::call::CallStatus;
 use crate::codec::frame_serializer::FrameSerializer;
 use crate::frames::{Frame, FrameKind, RawAudioFrame};
 use crate::transport::base::BaseTransport;
@@ -111,6 +112,12 @@ pub struct WebRtcClient<S: FrameSerializer<Message = bytes::Bytes>> {
     next_frame_at: Option<tokio::time::Instant>,
     /// Running count across the whole call, purely for the debug log.
     frames_sent: u32,
+    /// Fires when the call's `CallRegistry` entry transitions to `Ended` —
+    /// Twilio reporting busy/no-answer/failed, or the Twilio leg hanging up
+    /// — so this side hangs up too instead of sitting connected with no
+    /// audio ever arriving. `None` for one-way/no-registry calls (e.g. the
+    /// try-agent screen), which have no other leg to watch.
+    status_rx: Option<tokio::sync::watch::Receiver<CallStatus>>,
 }
 
 /// Bridges `webrtc`'s callback-based peer connection events into the signals
@@ -190,6 +197,7 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
     pub async fn accept_offer(
         base: BaseTransport<S>,
         offer_sdp: String,
+        status_rx: Option<tokio::sync::watch::Receiver<CallStatus>>,
     ) -> anyhow::Result<(Self, String)> {
         let (gather_complete_tx, gather_complete_rx) = oneshot::channel();
         let (data_channel_tx, data_channel_rx) = oneshot::channel();
@@ -285,6 +293,7 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                 pcm_buffer: Vec::new(),
                 next_frame_at: None,
                 frames_sent: 0,
+                status_rx,
             },
             answer_sdp,
         ))
@@ -386,6 +395,18 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
             });
 
             tokio::select! {
+                changed = async {
+                    self.status_rx.as_mut().unwrap().changed().await
+                }, if self.status_rx.is_some() => {
+                    if changed.is_err() {
+                        // sender dropped without ever ending the call cleanly
+                        break;
+                    }
+                    if matches!(*self.status_rx.as_ref().unwrap().borrow(), CallStatus::Ended(_)) {
+                        tracing::info!("webrtc: call ended (other leg), hanging up");
+                        break;
+                    }
+                }
                 _ = tokio::time::sleep_until(pace_deadline), if self.next_send_deadline().is_some() => {
                     self.send_paced_frame().await;
                 }

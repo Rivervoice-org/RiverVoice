@@ -25,7 +25,11 @@ impl<S: FrameSerializer<Message = Message> + 'static> WebSocketClient<S> {
         ws.on_upgrade(move |socket| self.on_connect(socket))
     }
 
-    async fn on_connect(mut self, socket: WebSocket) {
+    /// `pub(crate)` (rather than private) so a caller that needs to run
+    /// cleanup once this loop exits — e.g. tearing down the other leg of a
+    /// bridged call — can drive it directly instead of via [`connect`](Self::connect),
+    /// which has no hook for "after the loop ends".
+    pub(crate) async fn on_connect(mut self, socket: WebSocket) {
         let (mut wire_out, mut wire_in) = socket.split();
 
         tracing::info!("ws: connected, entering read/write loop");

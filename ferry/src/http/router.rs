@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{
     Router,
     extract::Request,
@@ -11,6 +13,10 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
 use super::handlers;
+use super::state::AppState;
+use crate::call::CallRegistry;
+use crate::config;
+use crate::services::twilio::TwilioClient;
 // use crate::auth::middleware::require_session;
 
 const ALLOWED_ORIGINS: &[&str] = &["http://localhost:3000"];
@@ -37,33 +43,41 @@ async fn log_request(req: Request, next: Next) -> Response {
     next.run(req).await
 }
 
-fn http_routes() -> Router {
+fn http_routes() -> Router<AppState> {
     Router::new().route("/health", get(axum::Json("OK")))
 }
 
-fn call_routes() -> Router {
+fn call_routes() -> Router<AppState> {
     Router::new()
-        .route("/v1/webrtc/offer", post(handlers::webrtc_offer))
-        .route("/v1/test/mt", get(handlers::test_mt))
+        .route("/v1/try-agent/offer", post(handlers::webrtc_offer))
+        .route("/v1/call/start", post(handlers::start_call))
     // .route_layer(middleware::from_fn(require_session))
 }
 
-// fn twilio_routes() -> Router {
-//     Router::new()
-//         .route(
-//             "/v1/twilio/voice",
-//             get(call::twilio_voice).post(call::twilio_voice),
-//         )
-//         .route("/v1/twilio/ws/{call_id}", get(call::twilio_ws))
-// }
+fn twilio_routes() -> Router<AppState> {
+    Router::new()
+        .route("/v1/twilio/ws/{call_id}", get(handlers::twilio_ws))
+        .route("/v1/twilio/status/{call_id}", post(handlers::twilio_status))
+}
 
 pub async fn start_server() -> anyhow::Result<()> {
+    let config = config::get().map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    let app_state = AppState {
+        call_registry: CallRegistry::new(),
+        twilio: Arc::new(TwilioClient::new(
+            config.twilio_account_sid.clone(),
+            config.twilio_auth_token.clone(),
+        )),
+    };
+
     let router = http_routes()
         .merge(call_routes())
-        // .merge(twilio_routes())
+        .merge(twilio_routes())
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn(log_request))
-        .layer(cors_layer());
+        .layer(cors_layer())
+        .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8085").await?;
     tracing::info!("listening on http://{}", listener.local_addr()?);

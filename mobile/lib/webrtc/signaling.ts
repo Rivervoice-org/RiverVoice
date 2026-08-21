@@ -1,6 +1,6 @@
 /**
- * Signaling against ferry's single WebRTC endpoint (POST /v1/webrtc/offer —
- * see ferry/src/http/handlers.rs webrtc_offer). Non-trickle: the caller is
+ * Signaling against ferry's try-agent WebRTC endpoint (POST /v1/try-agent/offer —
+ * see ferry/src/http/handlers/webrtc.rs webrtc_offer). Non-trickle: the caller is
  * expected to wait for local ICE gathering to finish before calling this,
  * same as the server does on its side (ferry/src/transport/webrtc/transport.rs).
  */
@@ -30,9 +30,9 @@ export async function postOffer(offerSdp: string): Promise<string> {
   try {
     console.log(
       "[ferry] posting offer to",
-      `${ferryBaseUrl()}/v1/webrtc/offer`,
+      `${ferryBaseUrl()}/v1/try-agent/offer`,
     );
-    response = await fetch(`${ferryBaseUrl()}/v1/webrtc/offer`, {
+    response = await fetch(`${ferryBaseUrl()}/v1/try-agent/offer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ offer_sdp: offerSdp }),

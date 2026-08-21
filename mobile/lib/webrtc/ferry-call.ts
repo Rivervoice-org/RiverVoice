@@ -39,7 +39,7 @@ const ICE_GATHERING_TIMEOUT_MS = 5_000;
 
 /**
  * Owns one WebRTC call's imperative lifecycle end to end: mic capture,
- * signaling against ferry's /v1/webrtc/offer, the data channel (transcripts
+ * signaling against ferry's /v1/try-agent/offer, the data channel (transcripts
  * only — audio is a real Opus track in both directions, negotiated by the
  * server), and teardown. Kept independent of React so it can't be caught up
  * in stale-closure/re-render bugs; `useFerryCall` is the thin React wrapper.
