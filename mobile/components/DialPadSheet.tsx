@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { View, Pressable, Linking } from "react-native";
+import { View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   BottomSheetModal,
@@ -11,6 +11,7 @@ import { Phone } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
+import { startCallWith } from "@/lib/start-call";
 
 const KEYS: { digit: string; letters?: string }[] = [
   { digit: "1" },
@@ -99,8 +100,8 @@ export function DialPadSheet({ visible, onClose }: { visible: boolean; onClose: 
 
   function call() {
     if (!digits) return;
-    Linking.openURL(`tel:${digits}`);
     onClose();
+    startCallWith({ phone: digits });
   }
 
   return (

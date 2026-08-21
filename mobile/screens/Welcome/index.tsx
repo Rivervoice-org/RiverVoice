@@ -25,12 +25,17 @@ export default function WelcomeScreen() {
 
       {/* Center illustration area */}
       <View className="mt-auto mb-auto items-center">
-        <Mascot seed="welcome-agent" size={160} />
+        <Mascot
+          seed="Nikhil"
+          style="notionists"
+          size={160}
+          params={{ glassesProbability: 100 }}
+        />
         <Text className="mt-8 text-center text-[26px] font-semibold leading-tight tracking-[-0.02em]">
-          Your calls,{"\n"}answered by an AI agent{"\n"}in the caller's language
+          AI translation,{"\n"}on every call
         </Text>
         <Text variant="muted" className="mt-4 max-w-xs text-center text-sm leading-6">
-          5 languages, switched mid-call, on a line that picks up in one ring.
+          An AI agent answers in real time, translating any language into yours as the call happens.
         </Text>
       </View>
 
