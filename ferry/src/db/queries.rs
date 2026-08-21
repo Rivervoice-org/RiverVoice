@@ -1,11 +1,3 @@
-//! Read-only lookups. `agents`/`agent_versions` grant app_worker an
-//! unconditional `select` (harbor/db/migrations/0008_app_worker_agent_reads.sql)
-//! because RLS's usual `app.current_org_id()` check depends on a
-//! session-local setting ferry's connections never set — so every query
-//! here filters by `caller_org_id` itself instead of trusting Postgres to.
-//! Dropping that filter doesn't fail closed, it fails open: the row just
-//! comes back for whichever org asked.
-
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use uuid::Uuid;

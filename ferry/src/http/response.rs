@@ -5,10 +5,6 @@ use axum::{
 };
 use serde::Serialize;
 
-/// Mirrors harbor's `httpx.APIResponse[T]` (harbor/internal/httpx/types.go)
-/// field for field, so a client written against one service's JSON needs no
-/// separate case for the other's: `{ statusCode, data?, error? }`, and a
-/// failure carries nothing but `error.message`.
 #[derive(Serialize)]
 pub struct ApiError {
     pub message: String,

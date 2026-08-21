@@ -2,13 +2,6 @@ use crate::frames::frames::Frame;
 use crate::processor::processor::FrameIo;
 use crate::serializer::serializer::FrameSerializer;
 
-/// What every transport owns, regardless of its wire: access to the
-/// pipeline and the serializer that speaks the wire's dialect. Concrete
-/// transports (WebSocket today, WebRTC later) embed this and add only
-/// their wire-specific plumbing.
-///
-/// The boundary: `BaseTransport` knows everything pipeline-facing and
-/// nothing wire-facing. no sockets, no connection handling.
 pub struct BaseTransport<S: FrameSerializer> {
     io: FrameIo,
     serializer: S,
@@ -19,12 +12,10 @@ impl<S: FrameSerializer> BaseTransport<S> {
         Self { io, serializer }
     }
 
-    /// Returns `false` when the pipeline is gone (torn down); the
-    /// transport should stop reading its wire. A message that fails to
-    /// deserialize is dropped (logged), not fatal to the call.
     pub async fn push_wire_message(&self, msg: S::Message) -> bool {
         match self.serializer.deserialize(msg) {
-            Ok(frame) => self.io.push(frame).await,
+            Ok(Some(frame)) => self.io.push(frame).await,
+            Ok(None) => true,
             Err(e) => {
                 tracing::warn!("{}: dropping undeserializable message: {e}", self.io.name());
                 true
@@ -32,28 +23,31 @@ impl<S: FrameSerializer> BaseTransport<S> {
         }
     }
 
-    /// Returns `None` when the pipeline shut down; the call is over and
-    /// the transport should close its wire. A frame that fails to serialize
-    /// is skipped (logged), and the next frame is tried.
     pub async fn next_wire_message(&mut self) -> Option<S::Message> {
         while let Some(frame) = self.io.take().await {
             match self.serializer.serialize(frame) {
                 Ok(msg) => return Some(msg),
-                Err(e) => {
-                    // Routine, not a problem: a pipeline can (and here,
-                    // does) produce frames a given wire format has no
-                    // representation for at all — e.g. a transcript, on
-                    // a serializer that only knows raw audio. Every such
-                    // frame hits this once by design, not by mistake.
-                    tracing::trace!("{}: dropping unserializable frame: {e}", self.io.name());
-                }
+                Err(_) => {}
             }
         }
         None
     }
 
-    /// Push an already-built Frame into the pipeline (for frames the
-    /// transport creates itself, e.g. `CallEnded` when the wire dies).
+    /// Like [`next_wire_message`](Self::next_wire_message), but hands back the
+    /// raw `Frame` instead of serializing it — for transports (WebRTC) that need
+    /// to route some frame kinds somewhere other than the serializer/wire-message
+    /// path (e.g. `TtsAudio` going out over a real RTP track instead of the data
+    /// channel).
+    pub async fn next_frame(&mut self) -> Option<Frame> {
+        self.io.take().await
+    }
+
+    /// Serializes a single frame already pulled via [`next_frame`](Self::next_frame)
+    /// into a wire message, for the caller to send after handling it specially.
+    pub fn serialize(&self, frame: Frame) -> anyhow::Result<S::Message> {
+        self.serializer.serialize(frame)
+    }
+
     pub async fn push_frame(&self, frame: Frame) -> bool {
         self.io.push(frame).await
     }

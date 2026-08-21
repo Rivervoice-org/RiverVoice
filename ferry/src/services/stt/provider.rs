@@ -6,11 +6,10 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::frames::frames::Frame;
+use crate::frames::frames::{Frame, RawAudioFrame};
 use crate::serializer::serializer::FrameSerializer;
 use crate::services::stt::language::Language;
 use crate::services::ws_client;
-use crate::turns::strategy::TurnStrategy;
 
 pub struct Transcript {
     pub text: String,
@@ -18,15 +17,11 @@ pub struct Transcript {
     pub is_final: bool,
 }
 
-/// Everything an [`SttProvider`] can push back while a session is open.
-/// Turn boundaries share this stream with transcripts rather than getting
-/// their own channel, because a provider that detects turns emits both
-/// from the same read loop off the same connection.
 pub enum SttEvent {
     Transcript(Transcript),
-    /// The user started speaking, per the provider's own detection.
+
     UserStartedSpeaking,
-    /// The user's turn ended, per the provider's own detection.
+
     UserStoppedSpeaking,
 }
 
@@ -34,41 +29,12 @@ pub enum SttEvent {
 pub trait SttProvider: Send {
     fn name(&self) -> &'static str;
 
-    /// The turn strategy this provider recommends, announced to the rest
-    /// of the pipeline in a
-    /// [`ServiceMetadataFrame`](crate::frames::frames::ServiceMetadataFrame)
-    /// when a call starts.
-    ///
-    /// `None` — the default, and the common case — means no opinion:
-    /// most providers only transcribe, so whatever the pipeline is
-    /// already doing stands. A provider that detects turns itself returns
-    /// [`TurnStrategy::External`].
-    ///
-    /// It is a recommendation, not an instruction: explicit configuration
-    /// wins. See
-    /// [`TurnStrategySelection`](crate::turns::strategy::TurnStrategySelection).
-    fn recommended_turn_strategy(&self) -> Option<TurnStrategy> {
-        None
-    }
-
     async fn open(
         &self,
         config: SttConfig,
         serializer: Arc<dyn FrameSerializer<Message = Message>>,
     ) -> Result<(Box<dyn SttSession>, Receiver<SttEvent>), SttError>;
 
-    /// Keeps a WebSocket-based connection alive by sending `message`
-    /// whenever it's gone `interval` without any other traffic. Shared
-    /// default rather than a per-provider trait method: this gets spawned
-    /// onto its own `tokio` task, which requires everything it captures to
-    /// be `'static` — `&self` never is, so this takes exactly the state
-    /// such a task can actually carry across (an owned client, a message,
-    /// an interval), no vendor-specific logic. Every provider gets it for
-    /// free; one that doesn't need a keepalive (or needs a vendor-specific
-    /// one) can override it. The actual loop lives in
-    /// [`ws_client::spawn_keepalive_task`], shared with
-    /// [`TtsProvider`](crate::services::tts::provider::TtsProvider)'s
-    /// identical default.
     fn spawn_keepalive_task(
         client: WsOutboundClient,
         message: Message,
@@ -80,18 +46,6 @@ pub trait SttProvider: Send {
         ws_client::spawn_keepalive_task(client, message, interval)
     }
 
-    /// Reads `read` until it closes, decoding each message through
-    /// `serializer` and handing the resulting `Frame` to `map` to turn
-    /// into zero or more [`SttEvent`]s (zero for a message this provider
-    /// has nothing to say about; more than one for something like Flux's
-    /// `EndOfTurn`, which is both a final transcript and a stopped-speaking
-    /// signal — see `DeepgramFluxSttProvider`). Same reasoning as
-    /// [`SttProvider::spawn_keepalive_task`] for why this isn't a `&self`
-    /// method: the plumbing (read, decode, dispatch to `tx`) is identical
-    /// across providers, only `map` differs. The loop itself lives in
-    /// [`ws_client::spawn_read_task`], shared with
-    /// [`TtsProvider`](crate::services::tts::provider::TtsProvider)'s
-    /// identical default.
     fn spawn_read_task<F>(
         name: &'static str,
         read: SttWsRead,
@@ -123,23 +77,14 @@ impl SttConfig {
     }
 }
 
-// One `SttConfig` is built per call and lives for the life of that call's
-// STT session — never in a hot loop or a large collection — so the ~200
-// byte gap between variants isn't worth the indirection (and the three
-// call sites' worth of `Box::new`/deref churn) boxing would add.
 #[allow(clippy::large_enum_variant)]
 pub enum SttConfigKind {
     DeepgramSttConfig(crate::services::stt::deepgram::DeepgramSttConfig),
-    DeepgramFluxSttConfig(crate::services::stt::deepgram::DeepgramFluxSttConfig),
 }
 
 #[async_trait]
 pub trait SttSession: Send {
-    /// Sends one chunk of audio. Takes a borrow rather than an owned
-    /// buffer: this only ever needs to read `pcm`, so a caller that also
-    /// needs to keep (e.g. forward downstream) the same bytes isn't forced
-    /// to clone them just to satisfy this signature.
-    async fn send_audio(&mut self, pcm: &[u8]) -> Result<(), SttError>;
+    async fn send_audio(&mut self, frame: RawAudioFrame) -> Result<(), SttError>;
 
     async fn close(self: Box<Self>);
 }
@@ -164,11 +109,7 @@ impl std::fmt::Display for SttError {
 impl std::error::Error for SttError {}
 
 pub use crate::services::ws_client::WsOutboundClient;
-/// STT's own name for the shared client's read half — kept so existing
-/// STT code doesn't have to rename what it imports. The connect/send/
-/// idle-tracking client itself lives in
-/// [`ws_client`](crate::services::ws_client), shared with TTS's Sarvam
-/// session rather than duplicated per vendor family.
+
 pub use crate::services::ws_client::WsRead as SttWsRead;
 
 impl From<crate::services::ws_client::WsError> for SttError {

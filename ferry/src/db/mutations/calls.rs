@@ -1,7 +1,3 @@
-//! App-facing wrappers around the SQL functions bound in dsl.rs. Each fn
-//! here takes plain Rust types, builds whatever jsonb payload the function
-//! expects, and executes it — call this, not `dsl::` directly.
-
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -54,9 +50,6 @@ fn call_speaker_str(speaker: CallSpeaker) -> &'static str {
     }
 }
 
-/// Builds the `p_tool_invocations`/`p_transcript` jsonb arrays
-/// `app.record_call_usage` expects (see the shape documented on each
-/// parameter in 0009_credits.sql) and calls it in one round trip.
 #[allow(clippy::too_many_arguments)]
 pub async fn record_call_usage(
     pool: &diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>,
@@ -145,10 +138,6 @@ pub async fn record_call_usage(
     Ok(usage_id)
 }
 
-/// Debits one usage frame's cost the moment it's known — see
-/// `app.charge_usage` in 0010_usage_charging.sql. Returns the org's balance
-/// right after the debit; a negative result means this call has run the
-/// org's credit out and should be ended.
 pub async fn charge_usage(
     pool: &diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>,
     org_id: Uuid,

@@ -1,49 +1,60 @@
 /** @type {import('tailwindcss').Config} */
+
+/**
+ * Reads a theme color from the CSS variables set by ThemeProvider (see
+ * lib/theme.tsx), so every className using this token repaints on scheme
+ * change without a `dark:` variant at each call site.
+ */
+function withOpacity(name) {
+  return `rgb(var(--color-${name}) / <alpha-value>)`;
+}
+
 module.exports = {
-  content: ["./App.tsx", "./app/**/*.{js,jsx,ts,tsx}", "./components/**/*.{js,jsx,ts,tsx}", "./lib/**/*.{js,jsx,ts,tsx}"],
+  content: ["./App.tsx", "./app/**/*.{js,jsx,ts,tsx}", "./components/**/*.{js,jsx,ts,tsx}", "./lib/**/*.{js,jsx,ts,tsx}", "./screens/**/*.{js,jsx,ts,tsx}", "./state/**/*.{js,jsx,ts,tsx}"],
   presets: [require("nativewind/preset")],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
-        canvas: "#f5f5f5",
-        background: "#ffffff",
-        foreground: "#3c3832",
-        card: "#ffffff",
-        popover: "#ffffff",
+        canvas: withOpacity("canvas"),
+        background: withOpacity("background"),
+        foreground: withOpacity("foreground"),
+        card: withOpacity("card"),
+        popover: withOpacity("popover"),
         primary: {
-          DEFAULT: "#2e2a25",
-          foreground: "#fcfbf9",
+          DEFAULT: withOpacity("primary"),
+          foreground: withOpacity("primary-foreground"),
         },
         secondary: {
-          DEFAULT: "#f6f5f4",
-          foreground: "#3c3832",
+          DEFAULT: withOpacity("secondary"),
+          foreground: withOpacity("secondary-foreground"),
         },
         muted: {
-          DEFAULT: "#f5f4f3",
-          foreground: "#8f8c87",
+          DEFAULT: withOpacity("muted"),
+          foreground: withOpacity("muted-foreground"),
         },
         accent: {
-          DEFAULT: "#f3f2f0",
-          foreground: "#3c3832",
+          DEFAULT: withOpacity("accent"),
+          foreground: withOpacity("accent-foreground"),
         },
         destructive: {
-          DEFAULT: "#c43030",
-          foreground: "#fcfbf9",
+          DEFAULT: withOpacity("destructive"),
+          foreground: withOpacity("destructive-foreground"),
         },
-        border: "#ebe9e6",
-        input: "#e9e7e4",
-        ring: "#7a7670",
+        border: withOpacity("border"),
+        input: withOpacity("input"),
+        ring: withOpacity("ring"),
         river: {
-          DEFAULT: "#3b5dab",
-          tint: "#eef2fc",
+          DEFAULT: withOpacity("river"),
+          tint: withOpacity("river-tint"),
         },
         amber: {
-          DEFAULT: "#c68a1f",
-          tint: "#fdf6ea",
+          DEFAULT: withOpacity("amber"),
+          tint: withOpacity("amber-tint"),
         },
         green: {
-          DEFAULT: "#2a8c4d",
-          tint: "#eaf8ef",
+          DEFAULT: withOpacity("green"),
+          tint: withOpacity("green-tint"),
         },
       },
       borderRadius: {

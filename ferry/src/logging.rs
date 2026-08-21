@@ -10,28 +10,14 @@ use tracing_subscriber::registry::LookupSpan;
 
 use crate::config::{self, Environment};
 
-/// Installs the global `tracing` subscriber: colored, human-shaped lines
-/// for a local terminal (`ENVIRONMENT=dev`); structured JSON once deployed
-/// (anything else, including unset — see [`config::environment`]) so log
-/// platforms (CloudWatch, Loki, ...) get real queryable fields instead of
-/// ANSI escapes baked into a string. Level defaults to `debug` in dev,
-/// `info` in prod, but honors `RUST_LOG` if set.
-///
-/// `tracing-subscriber`'s `tracing-log` feature is deliberately left off
-/// (see Cargo.toml) so `log`-crate output from `webrtc` and its
-/// sub-crates (ice/dtls/sctp/srtp/...) never reaches this subscriber at
-/// all — no per-packet noise (`bypass ice read`, `recv dtls RAW`, ...)
-/// regardless of `RUST_LOG`, and nothing to filter here.
-///
-/// Call before [`config::init`] — this needs to be up first so a
-/// `Config` validation failure has somewhere to log to, which is why
-/// this reads `ENVIRONMENT` via [`config::environment`] directly rather
-/// than through the fallible, not-yet-installed `Config`.
 pub fn init() {
     let environment = config::environment();
 
     let default_level = match environment {
-        Environment::Dev => "debug",
+        // ferry's own targets at debug; everything else (hyper, reqwest,
+        // rustls, h2...) at info so library chatter doesn't drown the
+        // transcript. RUST_LOG still overrides.
+        Environment::Dev => "ferry=debug,info",
         Environment::Prod => "info",
     };
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
@@ -45,6 +31,12 @@ pub fn init() {
                 .init();
         }
         Environment::Dev => {
+            // Windows consoles don't interpret ANSI escape codes by default —
+            // without this, every `paint()` call below just prints raw
+            // escape sequences (or nothing) instead of actual color.
+            #[cfg(windows)]
+            let _ = nu_ansi_term::enable_ansi_support();
+
             tracing_subscriber::fmt()
                 .event_format(ColorEventFormatter)
                 .with_env_filter(filter)
@@ -53,17 +45,12 @@ pub fn init() {
     }
 }
 
-/// Color-codes ferry's own structured logs by *meaning* — which pipeline
-/// stage, a transcription, an interruption, the end-to-end latency —
-/// instead of only by level, so a scrolling terminal reads at a glance.
-/// Anything outside these known targets (vendor crates like `hyper_util`,
-/// `tungstenite`) falls back to the stock field formatter.
 pub struct ColorEventFormatter;
 
 fn stage_color(stage: &str) -> Color {
     match stage {
         "stt" => Color::Cyan,
-        "llm" => Color::Purple,
+        "mt" => Color::Purple,
         "tts" => Color::Blue,
         _ => Color::White,
     }
@@ -79,6 +66,13 @@ fn level_color(level: &Level) -> Color {
     }
 }
 
+// One consistent color per log *kind* — so "this is a metrics line" / "this
+// is a usage line" is recognizable at a glance regardless of which stage it
+// came from. The stage name itself still gets `stage_color` within that line,
+// so which stage is still visually distinct too.
+const METRICS_COLOR: Color = Color::LightYellow;
+const USAGE_COLOR: Color = Color::LightBlue;
+
 #[derive(Default)]
 struct Captured {
     message: String,
@@ -87,6 +81,17 @@ struct Captured {
     latency_ms: Option<i64>,
     text: Option<String>,
     by_timeout: Option<bool>,
+    // ferry::usage fields — one event only ever carries the subset for its
+    // own frame kind (stt/mt/tts), the rest stay None.
+    audio_seconds: Option<f64>,
+    total_audio_seconds: Option<f64>,
+    prompt_tokens: Option<i64>,
+    completion_tokens: Option<i64>,
+    total_tokens: Option<i64>,
+    total_prompt_tokens: Option<i64>,
+    total_completion_tokens: Option<i64>,
+    characters: Option<i64>,
+    total_characters: Option<i64>,
 }
 
 impl Visit for Captured {
@@ -98,10 +103,25 @@ impl Visit for Captured {
         }
     }
 
+    fn record_f64(&mut self, field: &Field, value: f64) {
+        match field.name() {
+            "audio_seconds" => self.audio_seconds = Some(value),
+            "total_audio_seconds" => self.total_audio_seconds = Some(value),
+            _ => {}
+        }
+    }
+
     fn record_i64(&mut self, field: &Field, value: i64) {
         match field.name() {
             "ttfb_ms" => self.ttfb_ms = Some(value),
             "latency_ms" => self.latency_ms = Some(value),
+            "prompt_tokens" => self.prompt_tokens = Some(value),
+            "completion_tokens" => self.completion_tokens = Some(value),
+            "total_tokens" => self.total_tokens = Some(value),
+            "total_prompt_tokens" => self.total_prompt_tokens = Some(value),
+            "total_completion_tokens" => self.total_completion_tokens = Some(value),
+            "characters" => self.characters = Some(value),
+            "total_characters" => self.total_characters = Some(value),
             _ => {}
         }
     }
@@ -127,9 +147,6 @@ impl Visit for Captured {
     }
 }
 
-/// Paints `s` with `color` when the writer has ANSI enabled, otherwise
-/// returns it unchanged — keeps the special-cased branches below from
-/// hand-rolling this check every time.
 fn paint(color: Color, ansi: bool, s: &str) -> String {
     if ansi {
         color.paint(s).to_string()
@@ -153,72 +170,149 @@ where
         let meta = event.metadata();
         let target = meta.target();
 
-        SystemTime.format_time(&mut writer)?;
-        write!(
-            writer,
-            " {:>5} ",
-            paint(level_color(meta.level()), ansi, meta.level().as_str())
-        )?;
+        let mut body = String::new();
+        {
+            let mut w = Writer::new(&mut body);
 
-        let mut fields = Captured::default();
-        event.record(&mut fields);
+            SystemTime.format_time(&mut w)?;
+            write!(
+                w,
+                " {:>5} ",
+                paint(level_color(meta.level()), ansi, meta.level().as_str())
+            )?;
 
-        match target {
-            "ferry::metrics" => {
-                let stage = fields.stage.as_deref().unwrap_or("?");
-                let color = stage_color(stage);
-                write!(
-                    writer,
-                    "{}: ttfb {}={} {}={}",
-                    target,
-                    paint(color, ansi, "stage"),
-                    paint(color, ansi, stage),
-                    paint(color, ansi, "ttfb_ms"),
-                    paint(color, ansi, &fields.ttfb_ms.unwrap_or_default().to_string()),
-                )?;
+            let mut fields = Captured::default();
+            event.record(&mut fields);
+
+            match target {
+                "ferry::metrics" => {
+                    let stage = fields.stage.as_deref().unwrap_or("?");
+                    let stage_col = stage_color(stage);
+                    write!(
+                        w,
+                        "{}: {} {}={} {}={}",
+                        paint(METRICS_COLOR, ansi, target),
+                        paint(METRICS_COLOR, ansi, "ttfb"),
+                        paint(METRICS_COLOR, ansi, "stage"),
+                        paint(stage_col, ansi, stage),
+                        paint(METRICS_COLOR, ansi, "ttfb_ms"),
+                        paint(
+                            METRICS_COLOR,
+                            ansi,
+                            &fields.ttfb_ms.unwrap_or_default().to_string()
+                        ),
+                    )?;
+                }
+                "ferry::usage" => {
+                    let stage = fields.stage.as_deref().unwrap_or("?");
+                    let stage_col = stage_color(stage);
+                    let label = |s: &str| paint(USAGE_COLOR, ansi, s);
+
+                    write!(
+                        w,
+                        "{}: {} {}={}",
+                        label(target),
+                        label(&fields.message),
+                        label("stage"),
+                        paint(stage_col, ansi, stage),
+                    )?;
+
+                    match fields.message.as_str() {
+                        "stt_usage" => write!(
+                            w,
+                            " {}={:.2} {}={:.2}",
+                            label("audio_seconds"),
+                            fields.audio_seconds.unwrap_or_default(),
+                            label("total_audio_seconds"),
+                            fields.total_audio_seconds.unwrap_or_default(),
+                        )?,
+                        "mt_usage" => write!(
+                            w,
+                            " {}={} {}={} {}={} {}={} {}={}",
+                            label("prompt_tokens"),
+                            fields.prompt_tokens.unwrap_or_default(),
+                            label("completion_tokens"),
+                            fields.completion_tokens.unwrap_or_default(),
+                            label("total_tokens"),
+                            fields.total_tokens.unwrap_or_default(),
+                            label("total_prompt_tokens"),
+                            fields.total_prompt_tokens.unwrap_or_default(),
+                            label("total_completion_tokens"),
+                            fields.total_completion_tokens.unwrap_or_default(),
+                        )?,
+                        "tts_usage" => write!(
+                            w,
+                            " {}={} {}={}",
+                            label("characters"),
+                            fields.characters.unwrap_or_default(),
+                            label("total_characters"),
+                            fields.total_characters.unwrap_or_default(),
+                        )?,
+                        _ => {}
+                    }
+                }
+                "ferry::latency" => {
+                    let color = Color::LightGreen;
+                    write!(
+                        w,
+                        "{}: {} {}={}",
+                        target,
+                        paint(color, ansi, &fields.message),
+                        paint(color, ansi, "latency_ms"),
+                        paint(
+                            color,
+                            ansi,
+                            &fields.latency_ms.unwrap_or_default().to_string()
+                        ),
+                    )?;
+                }
+
+                "ferry::transcript" => {
+                    // Just the raw STT text, nothing else — the whole line
+                    // is the transcript so it scans clean in any language.
+                    write!(
+                        w,
+                        "{}",
+                        paint(
+                            Color::Cyan,
+                            ansi,
+                            fields.text.as_deref().unwrap_or_default()
+                        )
+                    )?;
+                }
+
+                _ if fields.message == "user-aggregator: turn started" => {
+                    write!(
+                        w,
+                        "{}",
+                        paint(Color::Red, ansi, &format!("{target}: {}", fields.message))
+                    )?;
+                }
+                _ if fields.text.is_some() => {
+                    let by_timeout = fields.by_timeout.unwrap_or_default();
+                    write!(
+                        w,
+                        "{}: {} by_timeout={by_timeout} text={}",
+                        target,
+                        fields.message,
+                        paint(
+                            Color::Yellow,
+                            ansi,
+                            fields.text.as_deref().unwrap_or_default()
+                        ),
+                    )?;
+                }
+                _ => {
+                    write!(w, "{target}: ")?;
+                    ctx.format_fields(w, event)?;
+                }
             }
-            "ferry::latency" => {
-                let color = Color::LightGreen;
-                write!(
-                    writer,
-                    "{}: {} {}={}",
-                    target,
-                    paint(color, ansi, &fields.message),
-                    paint(color, ansi, "latency_ms"),
-                    paint(
-                        color,
-                        ansi,
-                        &fields.latency_ms.unwrap_or_default().to_string()
-                    ),
-                )?;
-            }
-            // Both events come from `user_aggregator`'s turn-tracking, so
-            // they share a target — distinguish by which fields are set.
-            _ if fields.message == "user-aggregator: turn started" => {
-                write!(
-                    writer,
-                    "{}",
-                    paint(Color::Red, ansi, &format!("{target}: {}", fields.message))
-                )?;
-            }
-            _ if fields.text.is_some() => {
-                let by_timeout = fields.by_timeout.unwrap_or_default();
-                write!(
-                    writer,
-                    "{}: {} by_timeout={by_timeout} text={}",
-                    target,
-                    fields.message,
-                    paint(
-                        Color::Yellow,
-                        ansi,
-                        &format!("{:?}", fields.text.unwrap_or_default())
-                    ),
-                )?;
-            }
-            _ => {
-                write!(writer, "{target}: ")?;
-                ctx.format_fields(writer.by_ref(), event)?;
-            }
+        }
+
+        if *meta.level() == Level::ERROR {
+            write!(writer, "{}", paint(Color::Red, ansi, &body))?;
+        } else {
+            write!(writer, "{body}")?;
         }
 
         writeln!(writer)

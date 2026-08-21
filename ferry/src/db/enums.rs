@@ -1,14 +1,3 @@
-//! Hand-written mirrors of the Postgres enums declared in
-//! harbor/db/migrations. Diesel generates a marker type per enum into
-//! schema.rs (see sql_types::*), but has no way to generate the Rust enum
-//! itself — that half is on us, via `db_enum(existing_type_path = ...)`.
-//! A variant added on the Postgres side without a matching addition here is
-//! a compile error the next time schema.rs is regenerated and something
-//! selects the column, not a runtime surprise.
-//!
-//! `member_role` isn't here: harbor is the only service that reads/writes
-//! `users.role`, ferry never selects that column.
-
 use diesel_derive_enum::DbEnum;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]

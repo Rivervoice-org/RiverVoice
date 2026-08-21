@@ -1,18 +1,12 @@
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::Deserialize;
 
-/// Mirrors harbor's `auth.Claims` (harbor/internal/auth/token.go). Both
-/// services sign/verify with the same `JWT_SECRET`, so the field names must
-/// match harbor's JSON tags exactly or every token fails to parse.
 #[derive(Debug, Deserialize)]
 struct Claims {
     sub: String,
     org: String,
     role: String,
-    // Never read directly: `validation.validate_exp` below makes
-    // `jsonwebtoken` check this claim against the current time itself
-    // during `decode` — an expired token fails there before this struct
-    // is even built, so nothing downstream needs to re-check it.
+
     #[allow(dead_code)]
     exp: usize,
 }
@@ -29,13 +23,6 @@ pub enum AuthError {
     Invalid,
 }
 
-/// Verifies a harbor-issued session JWT (the `rv_session` cookie value).
-///
-/// Pins the algorithm to HS256, same protection as harbor's
-/// `jwt.WithValidMethods`, so a token claiming `alg=none` is rejected before
-/// its signature is ever checked. Also requires `exp` to be present, same as
-/// harbor's `jwt.WithExpirationRequired()`, and rejects the token once `exp`
-/// is in the past.
 pub fn verify_token(token: &str, secret: &[u8]) -> Result<Session, AuthError> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.set_required_spec_claims(&["exp"]);
@@ -45,8 +32,6 @@ pub fn verify_token(token: &str, secret: &[u8]) -> Result<Session, AuthError> {
 
     let claims = data.claims;
 
-    // Same post-parse check as harbor's verifyToken: a syntactically valid
-    // token with an empty subject or org is still not a usable session.
     if claims.sub.is_empty() || claims.org.is_empty() {
         return Err(AuthError::Invalid);
     }
