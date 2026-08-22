@@ -6,6 +6,7 @@ import { Plus, ChevronRight, Bot } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { CallRow } from "@/components/CallRow";
 import { SearchInput } from "@/components/SearchInput";
+import { SignInPrompt } from "@/components/SignInPrompt";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Rise, rowDelay } from "@/components/ui/rise";
@@ -58,24 +59,10 @@ export default function AgentsScreen() {
         {/* List */}
         {!isAuthenticated ? (
           <Rise index={2}>
-            <View className="items-center py-16">
-              <View className="h-12 w-12 items-center justify-center rounded-full bg-border">
-                <Bot size={22} strokeWidth={1.75} color={colors.faint} />
-              </View>
-              <Text variant="muted" className="mt-3 text-sm">
-                Sign in to see your agents
-              </Text>
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-4"
-                onPress={() => router.push("/(auth)/continue-with-number")}
-              >
-                <Text className="text-xs font-medium text-foreground">
-                  Continue with number
-                </Text>
-              </Button>
-            </View>
+            <SignInPrompt
+              icon={<Bot size={22} strokeWidth={1.75} color={colors.faint} />}
+              message="Sign in to see your agents"
+            />
           </Rise>
         ) : isPending ? (
           <View className="items-center py-16">

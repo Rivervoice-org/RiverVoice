@@ -13,6 +13,17 @@ export type CreateAgentRequest = {
   mascot?: string | null;
 };
 
+/** Mirrors ferry/src/http/handlers/agent.rs UpdateAgentRequest — every field
+ * optional, and omitted fields leave that column untouched server-side. */
+export type UpdateAgentRequest = {
+  name?: string;
+  input_language?: Language;
+  output_language?: Language;
+  mode?: Mode | null;
+  gender?: Gender | null;
+  mascot?: string | null;
+};
+
 /** Mirrors ferry/src/http/handlers/agent.rs AgentResponse. */
 export type AgentResponse = {
   id: string;

@@ -20,9 +20,9 @@ import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
-import { createAgent } from "@/lib/agents/api";
+import { createAgent, updateAgent } from "@/lib/agents/api";
 import { agentsQueryKey, useAgents } from "@/lib/agents/hooks";
-import type { Gender, Language, Mode } from "@/lib/agents/types";
+import type { Gender, Language, Mode, UpdateAgentRequest } from "@/lib/agents/types";
 import { useAuth } from "@/hooks/use-auth";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 
@@ -209,10 +209,39 @@ export default function AgentNewScreen() {
     },
     onSubmit: async ({ value }) => {
       setError("");
-      if (isEditing) {
-        // No update endpoint on ferry yet — still mocked.
-        await new Promise((r) => setTimeout(r, 800));
-        router.back();
+      if (isEditing && editingAgent) {
+        const patch: UpdateAgentRequest = {};
+        if (value.name.trim() !== editingAgent.name) {
+          patch.name = value.name.trim();
+        }
+        if (value.inputLang !== editingAgent.input_language) {
+          patch.input_language = value.inputLang as Language;
+        }
+        if (value.outputLang !== editingAgent.output_language) {
+          patch.output_language = value.outputLang as Language;
+        }
+        if (value.mode !== editingAgent.mode) {
+          patch.mode = value.mode as Mode | null;
+        }
+        if (value.gender !== editingAgent.gender) {
+          patch.gender = value.gender as Gender | null;
+        }
+        if ((value.mascot ?? null) !== editingAgent.mascot) {
+          patch.mascot = value.mascot ?? null;
+        }
+
+        if (Object.keys(patch).length === 0) {
+          router.back();
+          return;
+        }
+
+        try {
+          await updateAgent(editingAgent.id, patch);
+          await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+          router.back();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+        }
         return;
       }
       // Backstop for the New button's own requireAuth gate — a direct
@@ -276,7 +305,7 @@ export default function AgentNewScreen() {
               onSelect={(ref) => form.setFieldValue("mascot", ref)}
             />
             <Input
-              className="mt-4 h-12 min-w-[140px] max-w-full border-0 bg-transparent px-0 text-[22px] font-semibold"
+              className="mt-4 h-12 min-w-[140px] max-w-full border-0 bg-transparent px-0 text-center text-[22px] font-semibold"
               placeholder="Untitled agent"
               placeholderTextColor={colors.faint}
               value={values.name}

@@ -3,12 +3,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { ChevronRight, Phone, Plus } from "lucide-react-native";
 import { CallRow } from "@/components/CallRow";
+import { SignInPrompt } from "@/components/SignInPrompt";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Rise, rowDelay } from "@/components/ui/rise";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 import { NUMBERS, type PhoneNumber } from "./mock";
 
 function SectionLabel({ children }: { children: string }) {
@@ -71,6 +73,7 @@ function NumberGroup({
 
 export default function PhonebookScreen() {
   const colors = useThemeColors();
+  const { requireAuth, isAuthenticated } = useRequireAuth();
   const numbers = NUMBERS.filter((n) => !n.assignedAgent);
 
   return (
@@ -82,11 +85,13 @@ export default function PhonebookScreen() {
             <Text className="text-[28px] font-semibold tracking-[-0.02em]">
               My numbers
             </Text>
-            <Text variant="muted" className="mt-1 text-sm">
-              {numbers.length} number{numbers.length === 1 ? "" : "s"}
-            </Text>
+            {isAuthenticated ? (
+              <Text variant="muted" className="mt-1 text-sm">
+                {numbers.length} number{numbers.length === 1 ? "" : "s"}
+              </Text>
+            ) : null}
           </View>
-          <Button size="sm" onPress={() => router.push("/number-new")}>
+          <Button size="sm" onPress={() => requireAuth(() => router.push("/number-new"))}>
             <Plus size={14} strokeWidth={2} color={colors.onInk} />
             <Text className="text-xs font-medium text-primary-foreground">
               Add
@@ -100,7 +105,16 @@ export default function PhonebookScreen() {
         contentContainerStyle={{ paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
       >
-        <NumberGroup numbers={numbers} className="mt-4" />
+        {!isAuthenticated ? (
+          <Rise index={1}>
+            <SignInPrompt
+              icon={<Phone size={22} strokeWidth={1.75} color={colors.faint} />}
+              message="Sign in to see your numbers"
+            />
+          </Rise>
+        ) : (
+          <NumberGroup numbers={numbers} className="mt-4" />
+        )}
       </ScrollView>
     </SafeAreaView>
   );

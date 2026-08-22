@@ -6,6 +6,7 @@ import {
   Bell,
   ChevronRight,
   CircleHelp,
+  CircleUserRound,
   FileText,
   Headphones,
   LogOut,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react-native";
 import { useAuth } from "@/hooks/use-auth";
 import { MascotPicker } from "@/components/MascotPicker";
+import { SignInPrompt } from "@/components/SignInPrompt";
 import { Card } from "@/components/ui/card";
 import { Rise } from "@/components/ui/rise";
 import { Switch } from "@/components/ui/switch";
@@ -164,7 +166,7 @@ function AppearancePicker() {
 }
 
 export default function SettingsScreen() {
-  const { signOut, user } = useAuth();
+  const { signOut, user, isAuthenticated } = useAuth();
   const colors = useThemeColors();
   const ICONS = useMemo(() => buildIcons(colors.ink), [colors.ink]);
   const [mascot, setMascot] = useState<string | undefined>(undefined);
@@ -194,97 +196,120 @@ export default function SettingsScreen() {
       >
         {/* Profile */}
         <Rise index={1}>
-          <View className="items-center px-6 pt-6 pb-8">
-            <MascotPicker value={mascot} onSelect={setMascot} />
-            <Text className="mt-3 text-[20px] font-semibold">{user?.name || "You"}</Text>
-            {user?.phone ? (
-              <Text variant="muted" className="mt-0.5 text-[13px]">
-                +{user.phone}
+          {isAuthenticated ? (
+            <View className="items-center px-6 pt-6 pb-8">
+              <MascotPicker value={mascot} onSelect={setMascot} />
+              <Text className="mt-3 text-[20px] font-semibold">{user?.name || "You"}</Text>
+              {user?.phone ? (
+                <Text variant="muted" className="mt-0.5 text-[13px]">
+                  +{user.phone}
+                </Text>
+              ) : null}
+              <Text variant="muted" className="mt-1 text-[12px]">
+                Tap the face to change your mascot
               </Text>
-            ) : null}
-            <Text variant="muted" className="mt-1 text-[12px]">
-              Tap the face to change your mascot
-            </Text>
-          </View>
+            </View>
+          ) : (
+            <SignInPrompt
+              icon={<CircleUserRound size={22} strokeWidth={1.75} color={colors.faint} />}
+              message="Sign in to see your profile"
+            />
+          )}
         </Rise>
 
         {/* Appearance */}
         <Rise index={2}>
-          <SectionLabel>Appearance</SectionLabel>
-          <Card className="mx-5 mt-2.5 overflow-hidden">
-            <AppearancePicker />
-          </Card>
+          <View className="mt-8">
+            <SectionLabel>Appearance</SectionLabel>
+            <Card className="mx-5 mt-2.5 overflow-hidden">
+              <AppearancePicker />
+            </Card>
+          </View>
         </Rise>
 
         {/* Calls */}
-        <Rise index={3}>
-          <SectionLabel>Calls</SectionLabel>
-          <Card className="mx-5 mt-2.5 overflow-hidden">
-            <Row
-              icon={ICONS.transcript}
-              label="Voicemail transcripts"
-              description="Text you a transcript of every voicemail"
-              switchChecked={transcribeVoicemails}
-              onSwitchChange={setTranscribeVoicemails}
-            />
-            <Row
-              icon={ICONS.bell}
-              label="Missed call alerts"
-              description="Notify me when a call goes unanswered"
-              switchChecked={missedCallAlerts}
-              onSwitchChange={setMissedCallAlerts}
-              last
-            />
-          </Card>
-        </Rise>
+        {isAuthenticated ? (
+          <Rise index={3}>
+            <View className="mt-8">
+              <SectionLabel>Calls</SectionLabel>
+              <Card className="mx-5 mt-2.5 overflow-hidden">
+                <Row
+                  icon={ICONS.transcript}
+                  label="Voicemail transcripts"
+                  description="Text you a transcript of every voicemail"
+                  switchChecked={transcribeVoicemails}
+                  onSwitchChange={setTranscribeVoicemails}
+                />
+                <Row
+                  icon={ICONS.bell}
+                  label="Missed call alerts"
+                  description="Notify me when a call goes unanswered"
+                  switchChecked={missedCallAlerts}
+                  onSwitchChange={setMissedCallAlerts}
+                  last
+                />
+              </Card>
+            </View>
+          </Rise>
+        ) : null}
 
         {/* Privacy */}
-        <Rise index={4}>
-          <SectionLabel>Privacy</SectionLabel>
-          <Card className="mx-5 mt-2.5 overflow-hidden">
-            <Row
-              icon={ICONS.shield}
-              label="Keep call recordings"
-              description="Store audio after the call ends"
-              switchChecked={keepRecordings}
-              onSwitchChange={setKeepRecordings}
-            />
-            <Row
-              icon={ICONS.shield}
-              label="Share diagnostics"
-              description="Send crash and usage data to improve the app"
-              switchChecked={shareDiagnostics}
-              onSwitchChange={setShareDiagnostics}
-              last
-            />
-          </Card>
-        </Rise>
+        {isAuthenticated ? (
+          <Rise index={4}>
+            <View className="mt-8">
+              <SectionLabel>Privacy</SectionLabel>
+              <Card className="mx-5 mt-2.5 overflow-hidden">
+                <Row
+                  icon={ICONS.shield}
+                  label="Keep call recordings"
+                  description="Store audio after the call ends"
+                  switchChecked={keepRecordings}
+                  onSwitchChange={setKeepRecordings}
+                />
+                <Row
+                  icon={ICONS.shield}
+                  label="Share diagnostics"
+                  description="Send crash and usage data to improve the app"
+                  switchChecked={shareDiagnostics}
+                  onSwitchChange={setShareDiagnostics}
+                  last
+                />
+              </Card>
+            </View>
+          </Rise>
+        ) : null}
 
         {/* Support */}
         <Rise index={5}>
-          <SectionLabel>Support</SectionLabel>
-          <Card className="mx-5 mt-2.5 overflow-hidden">
-            <Row icon={ICONS.help} label="Help center" onPress={noop} />
-            <Row icon={ICONS.headset} label="Contact support" onPress={noop} />
-            <Row icon={ICONS.doc} label="Terms of service" onPress={noop} />
-            <Row icon={ICONS.doc} label="Privacy policy" onPress={noop} last />
-          </Card>
+          <View className="mt-8">
+            <SectionLabel>Support</SectionLabel>
+            <Card className="mx-5 mt-2.5 overflow-hidden">
+              <Row icon={ICONS.help} label="Help center" onPress={noop} />
+              <Row icon={ICONS.headset} label="Contact support" onPress={noop} />
+              <Row icon={ICONS.doc} label="Terms of service" onPress={noop} />
+              <Row icon={ICONS.doc} label="Privacy policy" onPress={noop} last />
+            </Card>
+          </View>
         </Rise>
 
         {/* About */}
         <Rise index={6}>
-          <SectionLabel>About</SectionLabel>
-          <Card className="mx-5 mt-2.5 overflow-hidden">
-            <Row label="Version" value={Constants.expoConfig?.version ?? "1.0.0"} last />
-          </Card>
+          <View className="mt-8">
+            <SectionLabel>About</SectionLabel>
+            <Card className="mx-5 mt-2.5 overflow-hidden">
+              <Row label="Version" value={Constants.expoConfig?.version ?? "1.0.0"} last />
+            </Card>
 
-          <View className="items-center pt-8">
-            <Button variant="outline" onPress={signOut} className="px-5">
-              <LogOut size={16} strokeWidth={1.75} color={colors.destructive} />
-              <Text variant="destructive" className="text-sm font-medium">
-                Sign out
-              </Text>
-            </Button>
+            {isAuthenticated ? (
+              <View className="items-center pt-8">
+                <Button variant="outline" onPress={signOut} className="px-5">
+                  <LogOut size={16} strokeWidth={1.75} color={colors.destructive} />
+                  <Text variant="destructive" className="text-sm font-medium">
+                    Sign out
+                  </Text>
+                </Button>
+              </View>
+            ) : null}
           </View>
         </Rise>
       </ScrollView>

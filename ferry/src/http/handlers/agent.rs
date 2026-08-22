@@ -24,6 +24,27 @@ pub struct CreateAgentRequest {
     pub mascot: Option<String>,
 }
 
+/// Partial update — every field is optional and, when omitted from the
+/// request body entirely, leaves that column untouched. Only fields the
+/// client actually sends get validated and written.
+#[derive(Deserialize, Validate)]
+pub struct UpdateAgentRequest {
+    #[serde(default)]
+    #[validate(length(min = 1, message = "name is required"))]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub input_language: Option<Language>,
+    #[serde(default)]
+    pub output_language: Option<Language>,
+    #[serde(default)]
+    pub mode: Option<Mode>,
+    #[serde(default)]
+    pub gender: Option<Gender>,
+    #[serde(default)]
+    #[validate(length(min = 1, message = "mascot must not be empty"))]
+    pub mascot: Option<String>,
+}
+
 #[derive(Serialize)]
 pub struct AgentResponse {
     pub id: String,
@@ -47,6 +68,80 @@ impl From<agents::Model> for AgentResponse {
             mascot: model.mascot,
         }
     }
+}
+
+pub async fn delete_agent(Path(id): Path<String>) -> Result<ApiResponse<()>, ApiResponse<()>> {
+    let id = Uuid::parse_str(&id)
+        .map_err(|_| ApiResponse::fail(StatusCode::BAD_REQUEST, "invalid agent id"))?;
+
+    let result = agents::Entity::delete_by_id(id)
+        .exec(db::get())
+        .await
+        .map_err(|e| {
+            tracing::error!("delete_agent: failed to delete agent {id}: {e}");
+            ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+        })?;
+
+    if result.rows_affected == 0 {
+        return Err(ApiResponse::fail(StatusCode::NOT_FOUND, "agent not found"));
+    }
+
+    Ok(ApiResponse::ok(StatusCode::OK, ()))
+}
+
+pub async fn update_agent(
+    Path(id): Path<String>,
+    req: Request,
+) -> Result<ApiResponse<AgentResponse>, ApiResponse<()>> {
+    let id = Uuid::parse_str(&id)
+        .map_err(|_| ApiResponse::fail(StatusCode::BAD_REQUEST, "invalid agent id"))?;
+
+    let body = to_bytes(req.into_body(), usize::MAX)
+        .await
+        .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid body: {e}")))?;
+
+    let payload: UpdateAgentRequest = serde_json::from_slice(&body)
+        .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid json: {e}")))?;
+
+    payload
+        .validate()
+        .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    let model = agents::Entity::find_by_id(id)
+        .one(db::get())
+        .await
+        .map_err(|e| {
+            tracing::error!("update_agent: failed to look up agent {id}: {e}");
+            ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+        })?
+        .ok_or_else(|| ApiResponse::fail(StatusCode::NOT_FOUND, "agent not found"))?;
+
+    let mut active: agents::ActiveModel = model.into();
+    if let Some(name) = payload.name {
+        active.name = Set(name);
+    }
+    if let Some(input_language) = payload.input_language {
+        active.input_language = Set(input_language);
+    }
+    if let Some(output_language) = payload.output_language {
+        active.output_language = Set(output_language);
+    }
+    if let Some(mode) = payload.mode {
+        active.mode = Set(Some(mode));
+    }
+    if let Some(gender) = payload.gender {
+        active.gender = Set(Some(gender));
+    }
+    if let Some(mascot) = payload.mascot {
+        active.mascot = Set(Some(mascot));
+    }
+
+    let model = active.update(db::get()).await.map_err(|e| {
+        tracing::error!("update_agent: failed to update agent {id}: {e}");
+        ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+    })?;
+
+    Ok(ApiResponse::ok(StatusCode::OK, model.into()))
 }
 
 pub async fn create_agent(req: Request) -> Result<ApiResponse<AgentResponse>, ApiResponse<()>> {

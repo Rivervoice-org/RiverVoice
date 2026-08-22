@@ -7,7 +7,7 @@ use axum::{
     middleware,
     middleware::Next,
     response::Response,
-    routing::{get, post},
+    routing::{delete, get, patch, post},
 };
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -34,7 +34,7 @@ fn cors_layer() -> CorsLayer {
 
     CorsLayer::new()
         .allow_origin(origins)
-        .allow_methods([Method::GET, Method::POST])
+        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE])
         .allow_credentials(true)
 }
@@ -81,6 +81,10 @@ fn agent_routes() -> Router<AppState> {
         .route(
             "/v1/agents",
             post(handlers::create_agent).get(handlers::get_agents),
+        )
+        .route(
+            "/v1/agents/{id}",
+            patch(handlers::update_agent).delete(handlers::delete_agent),
         )
         .route_layer(middleware::from_fn(require_user))
 }

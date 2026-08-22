@@ -5,7 +5,7 @@ pub mod twilio;
 pub mod user;
 pub mod webrtc;
 
-pub use agent::{create_agent, get_agents};
+pub use agent::{create_agent, delete_agent, get_agents, update_agent};
 pub use auth::refresh;
 pub use call::start_call;
 pub use twilio::{twilio_status, twilio_ws};
