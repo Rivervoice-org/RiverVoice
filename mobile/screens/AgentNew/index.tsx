@@ -23,6 +23,8 @@ import { useThemeColors } from "@/lib/theme";
 import { createAgent } from "@/lib/agents/api";
 import { agentsQueryKey, useAgents } from "@/lib/agents/hooks";
 import type { Gender, Language, Mode } from "@/lib/agents/types";
+import { useAuth } from "@/hooks/use-auth";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 
 const LANGUAGES = [
   { value: "en", label: "English" },
@@ -173,6 +175,8 @@ export default function AgentNewScreen() {
   const isEditing = !!editingAgent;
   const [error, setError] = useState("");
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
+  const { requireAuth } = useRequireAuth();
 
   const form = useForm({
     defaultValues: editingAgent
@@ -186,10 +190,20 @@ export default function AgentNewScreen() {
         }
       : DEFAULT_VALUES,
     validators: {
+      onMount: ({ value }) => {
+        if (!value.name.trim()) return "Give your agent a name";
+        if (!value.inputLang) return "Pick an input language";
+        if (!value.outputLang) return "Pick an output language";
+        if (!value.mode) return "Pick a mode";
+        if (!value.gender) return "Pick a voice gender";
+        return undefined;
+      },
       onChange: ({ value }) => {
         if (!value.name.trim()) return "Give your agent a name";
         if (!value.inputLang) return "Pick an input language";
         if (!value.outputLang) return "Pick an output language";
+        if (!value.mode) return "Pick a mode";
+        if (!value.gender) return "Pick a voice gender";
         return undefined;
       },
     },
@@ -199,6 +213,12 @@ export default function AgentNewScreen() {
         // No update endpoint on ferry yet — still mocked.
         await new Promise((r) => setTimeout(r, 800));
         router.back();
+        return;
+      }
+      // Backstop for the New button's own requireAuth gate — a direct
+      // deep link to /agent-new skips that check entirely.
+      if (!isAuthenticated) {
+        requireAuth(() => {});
         return;
       }
       try {

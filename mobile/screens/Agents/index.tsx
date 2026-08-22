@@ -12,11 +12,13 @@ import { Rise, rowDelay } from "@/components/ui/rise";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { useAgents } from "@/lib/agents/hooks";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 
 export default function AgentsScreen() {
   const colors = useThemeColors();
   const [search, setSearch] = useState("");
   const { data: agents, isPending, isError } = useAgents();
+  const { requireAuth, isAuthenticated } = useRequireAuth();
 
   const filtered = (agents ?? []).filter(
     (agent) => !search || agent.name.toLowerCase().includes(search.toLowerCase()),
@@ -32,7 +34,7 @@ export default function AgentsScreen() {
               Agents
             </Text>
           </View>
-          <Button size="sm" onPress={() => router.push("/agent-new")}>
+          <Button size="sm" onPress={() => requireAuth(() => router.push("/agent-new"))}>
             <Plus size={14} strokeWidth={2} color={colors.onInk} />
             <Text className="text-xs font-medium text-primary-foreground">
               New
@@ -54,7 +56,28 @@ export default function AgentsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* List */}
-        {isPending ? (
+        {!isAuthenticated ? (
+          <Rise index={2}>
+            <View className="items-center py-16">
+              <View className="h-12 w-12 items-center justify-center rounded-full bg-border">
+                <Bot size={22} strokeWidth={1.75} color={colors.faint} />
+              </View>
+              <Text variant="muted" className="mt-3 text-sm">
+                Sign in to see your agents
+              </Text>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-4"
+                onPress={() => router.push("/(auth)/continue-with-number")}
+              >
+                <Text className="text-xs font-medium text-foreground">
+                  Continue with number
+                </Text>
+              </Button>
+            </View>
+          </Rise>
+        ) : isPending ? (
           <View className="items-center py-16">
             <ActivityIndicator color={colors.muted} />
           </View>
