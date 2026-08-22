@@ -90,6 +90,12 @@ fn agent_routes() -> Router<AppState> {
         .route_layer(middleware::from_fn(require_user))
 }
 
+fn voice_routes() -> Router<AppState> {
+    Router::new()
+        .route("/v1/voices/preview", post(handlers::preview_voice))
+        .route_layer(middleware::from_fn(require_user))
+}
+
 fn auth_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/auth/refresh", post(handlers::refresh))
@@ -114,6 +120,7 @@ pub async fn start_server() -> anyhow::Result<()> {
         .merge(protected_user_routes())
         .merge(auth_routes())
         .merge(agent_routes())
+        .merge(voice_routes())
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn(log_request))
         .layer(cors_layer())

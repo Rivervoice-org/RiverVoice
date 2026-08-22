@@ -11,6 +11,7 @@ use crate::db;
 use crate::db::entity::agents::{self, Gender, Language, Mode};
 use crate::db::entity::users;
 use crate::http::response::ApiResponse;
+use crate::services::tts::sarvam::{BulbulV2Voice, BulbulV3Voice, VoiceGender};
 
 const GENERIC_SERVER_ERROR: &str = "Something went wrong. Please try again.";
 
@@ -24,16 +25,10 @@ pub struct CreateAgentRequest {
     pub gender: Option<Gender>,
     #[validate(length(min = 1, message = "mascot must not be empty"))]
     pub mascot: Option<String>,
+    #[validate(length(min = 1, message = "voice must not be empty"))]
+    pub voice: Option<String>,
 }
 
-/// A field that's present in the JSON body but has no key. Distinguishing
-/// this from `deserialize_double_option` below is what lets a nullable
-/// column be told apart from "leave it alone": omitted key -> outer `None`
-/// ("don't touch"), explicit `null` -> `Some(None)` ("clear it"), a real
-/// value -> `Some(Some(v))` ("set it"). Plain `Option<Option<T>>` can't do
-/// this on its own — serde's blanket `Option` impl treats JSON `null` as
-/// `None` regardless of nesting, so a naive derive would collapse omitted
-/// and explicit-null to the same thing.
 fn deserialize_double_option<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
     T: Deserialize<'de>,
@@ -42,12 +37,6 @@ where
     Deserialize::deserialize(deserializer).map(Some)
 }
 
-/// Partial update — every field is optional and, when omitted from the
-/// request body entirely, leaves that column untouched. Only fields the
-/// client actually sends get validated and written. `mode`/`gender`/
-/// `mascot` are nullable columns, so they use the tri-state double-Option
-/// above rather than plain `Option<T>` — that lets a client actually clear
-/// one back to null instead of only ever setting it to a new value.
 #[derive(Deserialize, Validate)]
 pub struct UpdateAgentRequest {
     #[serde(default)]
@@ -90,10 +79,16 @@ impl From<agents::Model> for AgentResponse {
     }
 }
 
-/// The access token could outlive the account it was issued for (e.g. the
-/// account was deleted after the token was minted but before it expired) —
-/// confirm the session's user still exists before trusting it for a
-/// mutating request.
+fn voice_gender(voice: &str) -> Option<Gender> {
+    let gender = BulbulV3Voice::from_slug(voice)
+        .map(BulbulV3Voice::gender)
+        .or_else(|| BulbulV2Voice::from_slug(voice).map(BulbulV2Voice::gender))?;
+
+    Some(match gender {
+        VoiceGender::Male => Gender::Male,
+        VoiceGender::Female => Gender::Female,
+    })
+}
 async fn require_existing_user(session: &UserSession) -> Result<(), ApiResponse<()>> {
     let exists = users::Entity::find_by_id(session.user_id)
         .one(db::get())
@@ -239,6 +234,15 @@ pub async fn create_agent(
     payload
         .validate()
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    if let (Some(gender), Some(voice)) = (&payload.gender, &payload.voice) {
+        if voice_gender(voice).as_ref() != Some(gender) {
+            return Err(ApiResponse::fail(
+                StatusCode::BAD_REQUEST,
+                "voice does not match selected gender",
+            ));
+        }
+    }
 
     let active = agents::ActiveModel {
         id: Set(Uuid::new_v4()),

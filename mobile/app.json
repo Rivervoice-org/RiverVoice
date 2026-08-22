@@ -16,7 +16,8 @@
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone to place calls."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-audio"
     ],
     "ios": {
       "supportsTablet": true,

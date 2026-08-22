@@ -35,3 +35,12 @@ export function deleteAgent(id: string): Promise<null> {
 export function updateAgent(id: string, payload: UpdateAgentRequest): Promise<AgentResponse> {
   return ferry.patch<AgentResponse>(`/v1/agents/${id}`, payload, authHeader());
 }
+
+/**
+ * Hits ferry's `POST /v1/voices/preview` (see
+ * ferry/src/http/handlers/voice.rs). Also protected. Returns a base64-encoded
+ * WAV clip of `voice` speaking a fixed sample sentence.
+ */
+export function previewVoice(voice: string): Promise<{ audio_base64: string }> {
+  return ferry.post<{ audio_base64: string }>("/v1/voices/preview", { voice }, authHeader());
+}

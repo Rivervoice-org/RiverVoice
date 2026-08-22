@@ -30,6 +30,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "expo": "~54.0.37",
+    "expo-audio": "~1.1.1",
     "expo-constants": "~18.0.14",
     "expo-contacts": "~15.0.11",
     "expo-dev-client": "~6.0.21",

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   Pressable,
@@ -14,14 +14,15 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Check, PhoneCall } from "lucide-react-native";
+import { createAudioPlayer, type AudioPlayer } from "expo-audio";
+import { ChevronLeft, Check, PhoneCall, Play } from "lucide-react-native";
 import { MascotPicker } from "@/components/MascotPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
-import { createAgent, updateAgent } from "@/lib/agents/api";
+import { createAgent, updateAgent, previewVoice } from "@/lib/agents/api";
 import { agentsQueryKey, useAgents } from "@/lib/agents/hooks";
 import type {
   AgentResponse,
@@ -70,6 +71,19 @@ const GENDERS = [
   { value: "neutral", label: "Neutral" },
 ];
 
+/**
+ * A curated subset of Sarvam's bulbul:v3 voice names
+ * (https://docs.sarvam.ai — Text to Speech), keyed by the same values as
+ * GENDERS. Sarvam doesn't publish gender/tone tags for bulbul:v3 voices, so
+ * this grouping — "Neutral" included — is a UI-only curation choice, not a
+ * documented Sarvam mapping.
+ */
+const VOICES_BY_GENDER: Record<string, string[]> = {
+  female: ["priya", "neha", "pooja", "kavya", "shreya", "ishita"],
+  male: ["shubh", "aditya", "rahul", "rohan", "amit", "dev"],
+  neutral: ["ratan", "varun", "sumit", "roopa", "mani"],
+};
+
 type AgentValues = {
   name: string;
   inputLang: string | null;
@@ -77,6 +91,9 @@ type AgentValues = {
   mode: string | null;
   gender: string | null;
   mascot: string | undefined;
+  // UI-only for now — ferry's agents table has no voice column yet, so
+  // this isn't sent to createAgent/updateAgent.
+  voice: string | null;
 };
 
 const DEFAULT_VALUES: AgentValues = {
@@ -86,6 +103,7 @@ const DEFAULT_VALUES: AgentValues = {
   mode: null,
   gender: null,
   mascot: undefined,
+  voice: null,
 };
 
 function SectionLabel({ children }: { children: string }) {
@@ -173,6 +191,76 @@ function ModeList({
   );
 }
 
+/**
+ * Voices for the currently-picked "Voice gender" only — picking a voice
+ * before a gender doesn't make sense, and showing all three groups at once
+ * just makes the list longer without helping the choice.
+ */
+function VoiceGroupPicker({
+  gender,
+  value,
+  onChange,
+  onPreview,
+  previewingVoice,
+}: {
+  gender: string | null;
+  value: string | null;
+  onChange: (value: string | null) => void;
+  onPreview: (voice: string) => void;
+  previewingVoice: string | null;
+}) {
+  const colors = useThemeColors();
+
+  if (!gender) {
+    return (
+      <View className="rounded-xl border border-border bg-card px-3.5 py-3">
+        <Text variant="muted" className="text-[13px]">
+          Pick a voice gender above to see voices
+        </Text>
+      </View>
+    );
+  }
+
+  const voices = VOICES_BY_GENDER[gender] ?? [];
+
+  return (
+    <View className="gap-2">
+      {voices.map((voice) => {
+        const selected = voice === value;
+        const isLoadingPreview = previewingVoice === voice;
+        return (
+          <Pressable
+            key={voice}
+            onPress={() => onChange(selected ? null : voice)}
+            className={cn(
+              "flex-row items-center gap-3 rounded-xl border bg-card px-3.5 py-3 active:opacity-80",
+              selected ? "border-foreground" : "border-border",
+            )}
+          >
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                onPreview(voice);
+              }}
+              disabled={isLoadingPreview}
+              hitSlop={8}
+              className="h-8 w-8 items-center justify-center rounded-full bg-secondary active:opacity-70"
+            >
+              {isLoadingPreview ? (
+                <ActivityIndicator size="small" color={colors.ink} />
+              ) : (
+                <Play size={14} strokeWidth={1.75} color={colors.ink} fill={colors.ink} />
+              )}
+            </Pressable>
+            <Text className="flex-1 text-sm font-medium capitalize">{voice}</Text>
+            {selected && <Check size={16} strokeWidth={2} color={colors.ink} />}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function AgentNewScreen() {
   const colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -239,9 +327,33 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
   const isEditing = !!editingAgent;
   const [error, setError] = useState("");
   const [isSavingForTry, setIsSavingForTry] = useState(false);
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
+  const previewPlayerRef = useRef<AudioPlayer | null>(null);
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
   const { requireAuth } = useRequireAuth();
+
+  useEffect(() => {
+    return () => {
+      previewPlayerRef.current?.release();
+    };
+  }, []);
+
+  async function handlePreviewVoice(voice: string) {
+    if (previewingVoice) return;
+    setPreviewingVoice(voice);
+    try {
+      const { audio_base64 } = await previewVoice(voice);
+      previewPlayerRef.current?.release();
+      const player = createAudioPlayer(`data:audio/wav;base64,${audio_base64}`);
+      previewPlayerRef.current = player;
+      player.play();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't play that voice. Please try again.");
+    } finally {
+      setPreviewingVoice(null);
+    }
+  }
 
   const form = useForm({
     defaultValues: editingAgent
@@ -252,6 +364,7 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
           mode: editingAgent.mode,
           gender: editingAgent.gender,
           mascot: editingAgent.mascot ?? undefined,
+          voice: null,
         }
       : DEFAULT_VALUES,
     validators: {
@@ -446,7 +559,24 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
               <ChipGroup
                 options={GENDERS}
                 value={values.gender}
-                onChange={(v) => form.setFieldValue("gender", v)}
+                onChange={(v) => {
+                  form.setFieldValue("gender", v);
+                  // The voice list is scoped to the selected gender — a
+                  // voice picked under the old one won't be in the new
+                  // list, so it'd sit selected but invisible.
+                  form.setFieldValue("voice", null);
+                }}
+              />
+            </View>
+
+            <View className="gap-2.5">
+              <SectionLabel>Voice</SectionLabel>
+              <VoiceGroupPicker
+                gender={values.gender}
+                value={values.voice}
+                onChange={(v) => form.setFieldValue("voice", v)}
+                onPreview={handlePreviewVoice}
+                previewingVoice={previewingVoice}
               />
             </View>
           </View>
