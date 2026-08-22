@@ -10,6 +10,7 @@ import { PortalHost } from "@rn-primitives/portal";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/query-client";
 import { SessionProvider } from "@/state/session";
+import { SignInPromptProvider } from "@/providers/sign-in-prompt-provider";
 import { ContactsProvider } from "@/state/contacts";
 import { Splash } from "@/components/Splash";
 import { ThemeProvider, useTheme } from "@/lib/theme";
@@ -23,21 +24,23 @@ function AppShell({ booted, onBooted }: { booted: boolean; onBooted: () => void 
 
   return (
     <SessionProvider>
-      <ContactsProvider>
-        <Stack
-          screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}
-        >
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="call-detail" />
-          <Stack.Screen name="transcript" />
-          <Stack.Screen name="agent-new" />
-          <Stack.Screen name="in-call" />
-        </Stack>
-        <PortalHost />
-        <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-        {!booted && <Splash onDone={onBooted} />}
-      </ContactsProvider>
+      <SignInPromptProvider>
+        <ContactsProvider>
+          <Stack
+            screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}
+          >
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="call-detail" />
+            <Stack.Screen name="transcript" />
+            <Stack.Screen name="agent-new" />
+            <Stack.Screen name="in-call" />
+          </Stack>
+          <PortalHost />
+          <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+          {!booted && <Splash onDone={onBooted} />}
+        </ContactsProvider>
+      </SignInPromptProvider>
     </SessionProvider>
   );
 }
