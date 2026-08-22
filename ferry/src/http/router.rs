@@ -70,6 +70,12 @@ fn user_routes() -> Router<AppState> {
     Router::new().route("/v1/users", post(handlers::create_user))
 }
 
+fn protected_user_routes() -> Router<AppState> {
+    Router::new()
+        .route("/v1/users/me", get(handlers::get_me))
+        .route_layer(middleware::from_fn(require_user))
+}
+
 fn agent_routes() -> Router<AppState> {
     Router::new()
         .route(
@@ -98,6 +104,7 @@ pub async fn start_server() -> anyhow::Result<()> {
         .merge(call_routes())
         .merge(twilio_routes())
         .merge(user_routes())
+        .merge(protected_user_routes())
         .merge(auth_routes())
         .merge(agent_routes())
         .layer(TraceLayer::new_for_http())

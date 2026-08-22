@@ -1,7 +1,7 @@
 use std::sync::LazyLock;
 
 use axum::body::to_bytes;
-use axum::extract::Request;
+use axum::extract::{Extension, Request};
 use axum::http::StatusCode;
 use regex::Regex;
 use sea_orm::{
@@ -10,6 +10,7 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::auth::token::UserSession;
 use crate::auth::{refresh_token, token};
 use crate::config;
 use crate::db;
@@ -54,6 +55,25 @@ pub struct CreateUserResponse {
     pub mascot: String,
     pub access_token: String,
     pub refresh_token: String,
+}
+
+#[derive(Serialize)]
+pub struct UserResponse {
+    pub id: String,
+    pub mobile_number: String,
+    pub name: String,
+    pub mascot: String,
+}
+
+impl From<users::Model> for UserResponse {
+    fn from(model: users::Model) -> Self {
+        Self {
+            id: model.id.to_string(),
+            mobile_number: model.mobile_number,
+            name: model.name,
+            mascot: model.mascot,
+        }
+    }
 }
 
 pub async fn create_user(req: Request) -> Result<ApiResponse<CreateUserResponse>, ApiResponse<()>> {
@@ -176,4 +196,24 @@ pub async fn create_user(req: Request) -> Result<ApiResponse<CreateUserResponse>
             refresh_token: refresh.token,
         },
     ))
+}
+
+/// Returns the caller's own profile, resolved from the access token's
+/// `sub` (put on the request by `require_user`) rather than anything the
+/// client sends — this is the source of truth clients should re-fetch
+/// from on launch instead of trusting a locally cached name/mascot that
+/// could go stale.
+pub async fn get_me(
+    Extension(session): Extension<UserSession>,
+) -> Result<ApiResponse<UserResponse>, ApiResponse<()>> {
+    let model = users::Entity::find_by_id(session.user_id)
+        .one(db::get())
+        .await
+        .map_err(|e| {
+            tracing::error!("get_me: failed to look up user: {e}");
+            ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+        })?
+        .ok_or_else(|| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
+
+    Ok(ApiResponse::ok(StatusCode::OK, model.into()))
 }
