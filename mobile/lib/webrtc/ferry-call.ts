@@ -66,7 +66,7 @@ export class FerryCall {
     return this.status;
   }
 
-  async start(): Promise<void> {
+  async start(agentId: string): Promise<void> {
     if (this.status === CallStatus.Connecting || this.status === CallStatus.Connected) {
       return;
     }
@@ -184,7 +184,7 @@ export class FerryCall {
         throw new Error("No local SDP after ICE gathering");
       }
 
-      const answerSdp = await postOffer(localDescription.sdp);
+      const answerSdp = await postOffer(localDescription.sdp, agentId);
       if (this.aborted) {
         this.teardown();
         return;

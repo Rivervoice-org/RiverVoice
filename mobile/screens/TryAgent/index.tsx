@@ -15,9 +15,11 @@ import { useFerryCall } from "@/hooks/use-ferry-call";
 
 export default function TryAgentScreen() {
   const params = useLocalSearchParams<{
+    id?: string;
     name: string;
     mascot: string;
   }>();
+  const missingAgent = !params.id;
 
   const insets = useSafeAreaInsets();
   const colors = useThemeColors();
@@ -42,9 +44,15 @@ export default function TryAgentScreen() {
 
   // Kick off the call as soon as the screen mounts — getUserMedia() below
   // handles the mic-permission prompt itself, no separate step needed.
+  // Requires a persisted agent id (the endpoint looks the agent up
+  // server-side) — AgentNew's "Try agent" button saves the agent first and
+  // always navigates here with one, so a missing id means a broken link,
+  // not a normal state to silently recover from.
   useEffect(() => {
-    start();
-  }, [start]);
+    if (params.id) {
+      start(params.id);
+    }
+  }, [start, params.id]);
 
   useEffect(() => {
     if (status !== CallStatus.Connected) return;
@@ -89,7 +97,11 @@ export default function TryAgentScreen() {
         <Text className="mt-3 text-[17px] font-semibold">{agentName}</Text>
 
         <View className="mt-1.5 flex-row items-center gap-1.5">
-          {status === CallStatus.Idle || status === CallStatus.Connecting ? (
+          {missingAgent ? (
+            <Text className="text-[13px] text-destructive">
+              Missing agent — go back and try again.
+            </Text>
+          ) : status === CallStatus.Idle || status === CallStatus.Connecting ? (
             <Text variant="muted" className="text-[13px]">Connecting…</Text>
           ) : status === CallStatus.Connected ? (
             <>

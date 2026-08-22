@@ -35,12 +35,237 @@ pub enum SarvamModel {
 }
 
 impl SarvamModel {
-    fn slug(self) -> &'static str {
+    pub fn slug(self) -> &'static str {
         match self {
             Self::BulbulV2 => "bulbul:v2",
             Self::BulbulV3 => "bulbul:v3",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BulbulV3Voice {
+    // Female
+    Ritu,
+    Priya,
+    Neha,
+    Pooja,
+    Simran,
+    Kavya,
+    Ishita,
+    Shreya,
+    Roopa,
+    Tanya,
+    Shruti,
+    Suhani,
+    Kavitha,
+    Rupali,
+    // Male
+    Shubh,
+    Aditya,
+    Rahul,
+    Rohan,
+    Amit,
+    Dev,
+    Ratan,
+    Varun,
+    Manan,
+    Sumit,
+    Kabir,
+    Aayan,
+    Ashutosh,
+    Advait,
+    Anand,
+    Tarun,
+    Sunny,
+    Mani,
+    Gokul,
+    Vijay,
+    Mohit,
+    Rehan,
+    Soham,
+}
+
+impl BulbulV3Voice {
+    pub fn slug(self) -> &'static str {
+        match self {
+            Self::Shubh => "shubh",
+            Self::Aditya => "aditya",
+            Self::Ritu => "ritu",
+            Self::Priya => "priya",
+            Self::Neha => "neha",
+            Self::Rahul => "rahul",
+            Self::Pooja => "pooja",
+            Self::Rohan => "rohan",
+            Self::Simran => "simran",
+            Self::Kavya => "kavya",
+            Self::Amit => "amit",
+            Self::Dev => "dev",
+            Self::Ishita => "ishita",
+            Self::Shreya => "shreya",
+            Self::Ratan => "ratan",
+            Self::Varun => "varun",
+            Self::Manan => "manan",
+            Self::Sumit => "sumit",
+            Self::Roopa => "roopa",
+            Self::Kabir => "kabir",
+            Self::Aayan => "aayan",
+            Self::Ashutosh => "ashutosh",
+            Self::Advait => "advait",
+            Self::Anand => "anand",
+            Self::Tanya => "tanya",
+            Self::Tarun => "tarun",
+            Self::Sunny => "sunny",
+            Self::Mani => "mani",
+            Self::Gokul => "gokul",
+            Self::Vijay => "vijay",
+            Self::Shruti => "shruti",
+            Self::Suhani => "suhani",
+            Self::Mohit => "mohit",
+            Self::Kavitha => "kavitha",
+            Self::Rehan => "rehan",
+            Self::Soham => "soham",
+            Self::Rupali => "rupali",
+        }
+    }
+
+    pub fn from_slug(slug: &str) -> Option<Self> {
+        Some(match slug {
+            "shubh" => Self::Shubh,
+            "aditya" => Self::Aditya,
+            "ritu" => Self::Ritu,
+            "priya" => Self::Priya,
+            "neha" => Self::Neha,
+            "rahul" => Self::Rahul,
+            "pooja" => Self::Pooja,
+            "rohan" => Self::Rohan,
+            "simran" => Self::Simran,
+            "kavya" => Self::Kavya,
+            "amit" => Self::Amit,
+            "dev" => Self::Dev,
+            "ishita" => Self::Ishita,
+            "shreya" => Self::Shreya,
+            "ratan" => Self::Ratan,
+            "varun" => Self::Varun,
+            "manan" => Self::Manan,
+            "sumit" => Self::Sumit,
+            "roopa" => Self::Roopa,
+            "kabir" => Self::Kabir,
+            "aayan" => Self::Aayan,
+            "ashutosh" => Self::Ashutosh,
+            "advait" => Self::Advait,
+            "anand" => Self::Anand,
+            "tanya" => Self::Tanya,
+            "tarun" => Self::Tarun,
+            "sunny" => Self::Sunny,
+            "mani" => Self::Mani,
+            "gokul" => Self::Gokul,
+            "vijay" => Self::Vijay,
+            "shruti" => Self::Shruti,
+            "suhani" => Self::Suhani,
+            "mohit" => Self::Mohit,
+            "kavitha" => Self::Kavitha,
+            "rehan" => Self::Rehan,
+            "soham" => Self::Soham,
+            "rupali" => Self::Rupali,
+            _ => return None,
+        })
+    }
+
+    pub fn gender(self) -> VoiceGender {
+        match self {
+            Self::Ritu
+            | Self::Priya
+            | Self::Neha
+            | Self::Pooja
+            | Self::Simran
+            | Self::Kavya
+            | Self::Ishita
+            | Self::Shreya
+            | Self::Roopa
+            | Self::Tanya
+            | Self::Shruti
+            | Self::Suhani
+            | Self::Kavitha
+            | Self::Rupali => VoiceGender::Female,
+            Self::Shubh
+            | Self::Aditya
+            | Self::Rahul
+            | Self::Rohan
+            | Self::Amit
+            | Self::Dev
+            | Self::Ratan
+            | Self::Varun
+            | Self::Manan
+            | Self::Sumit
+            | Self::Kabir
+            | Self::Aayan
+            | Self::Ashutosh
+            | Self::Advait
+            | Self::Anand
+            | Self::Tarun
+            | Self::Sunny
+            | Self::Mani
+            | Self::Gokul
+            | Self::Vijay
+            | Self::Mohit
+            | Self::Rehan
+            | Self::Soham => VoiceGender::Male,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BulbulV2Voice {
+    // Female
+    Anushka,
+    Manisha,
+    Vidya,
+    Arya,
+    // Male
+    Abhilash,
+    Karun,
+    Hitesh,
+}
+
+impl BulbulV2Voice {
+    pub fn slug(self) -> &'static str {
+        match self {
+            Self::Anushka => "anushka",
+            Self::Manisha => "manisha",
+            Self::Vidya => "vidya",
+            Self::Arya => "arya",
+            Self::Abhilash => "abhilash",
+            Self::Karun => "karun",
+            Self::Hitesh => "hitesh",
+        }
+    }
+
+    pub fn from_slug(slug: &str) -> Option<Self> {
+        Some(match slug {
+            "anushka" => Self::Anushka,
+            "manisha" => Self::Manisha,
+            "vidya" => Self::Vidya,
+            "arya" => Self::Arya,
+            "abhilash" => Self::Abhilash,
+            "karun" => Self::Karun,
+            "hitesh" => Self::Hitesh,
+            _ => return None,
+        })
+    }
+
+    pub fn gender(self) -> VoiceGender {
+        match self {
+            Self::Anushka | Self::Manisha | Self::Vidya | Self::Arya => VoiceGender::Female,
+            Self::Abhilash | Self::Karun | Self::Hitesh => VoiceGender::Male,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VoiceGender {
+    Male,
+    Female,
 }
 
 #[derive(Debug, Clone, Default)]

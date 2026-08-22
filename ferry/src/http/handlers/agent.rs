@@ -2,7 +2,7 @@ use axum::body::to_bytes;
 use axum::extract::{Extension, Path, Request};
 use axum::http::StatusCode;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -11,6 +11,7 @@ use crate::db;
 use crate::db::entity::agents::{self, Gender, Language, Mode};
 use crate::db::entity::users;
 use crate::http::response::ApiResponse;
+use crate::services::tts::sarvam::{BulbulV2Voice, BulbulV3Voice, VoiceGender};
 
 const GENERIC_SERVER_ERROR: &str = "Something went wrong. Please try again.";
 
@@ -20,34 +21,19 @@ pub struct CreateAgentRequest {
     pub name: String,
     pub input_language: Language,
     pub output_language: Language,
-    pub mode: Option<Mode>,
-    pub gender: Option<Gender>,
+    pub mode: Mode,
+    pub gender: Gender,
     #[validate(length(min = 1, message = "mascot must not be empty"))]
-    pub mascot: Option<String>,
-}
-
-/// A field that's present in the JSON body but has no key. Distinguishing
-/// this from `deserialize_double_option` below is what lets a nullable
-/// column be told apart from "leave it alone": omitted key -> outer `None`
-/// ("don't touch"), explicit `null` -> `Some(None)` ("clear it"), a real
-/// value -> `Some(Some(v))` ("set it"). Plain `Option<Option<T>>` can't do
-/// this on its own — serde's blanket `Option` impl treats JSON `null` as
-/// `None` regardless of nesting, so a naive derive would collapse omitted
-/// and explicit-null to the same thing.
-fn deserialize_double_option<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
-where
-    T: Deserialize<'de>,
-    D: Deserializer<'de>,
-{
-    Deserialize::deserialize(deserializer).map(Some)
+    pub mascot: String,
+    #[validate(length(min = 1, message = "voice must not be empty"))]
+    pub voice: String,
 }
 
 /// Partial update — every field is optional and, when omitted from the
-/// request body entirely, leaves that column untouched. Only fields the
-/// client actually sends get validated and written. `mode`/`gender`/
-/// `mascot` are nullable columns, so they use the tri-state double-Option
-/// above rather than plain `Option<T>` — that lets a client actually clear
-/// one back to null instead of only ever setting it to a new value.
+/// request body entirely, leaves that column untouched. All of `agents`'
+/// columns are NOT NULL, so there's no separate "clear it back to null"
+/// state to represent — a plain `Option<T>` (omitted vs. present) covers
+/// this fully, unlike the double-Option tri-state a nullable column needs.
 #[derive(Deserialize, Validate)]
 pub struct UpdateAgentRequest {
     #[serde(default)]
@@ -57,12 +43,16 @@ pub struct UpdateAgentRequest {
     pub input_language: Option<Language>,
     #[serde(default)]
     pub output_language: Option<Language>,
-    #[serde(default, deserialize_with = "deserialize_double_option")]
-    pub mode: Option<Option<Mode>>,
-    #[serde(default, deserialize_with = "deserialize_double_option")]
-    pub gender: Option<Option<Gender>>,
-    #[serde(default, deserialize_with = "deserialize_double_option")]
-    pub mascot: Option<Option<String>>,
+    #[serde(default)]
+    pub mode: Option<Mode>,
+    #[serde(default)]
+    pub gender: Option<Gender>,
+    #[serde(default)]
+    #[validate(length(min = 1, message = "mascot must not be empty"))]
+    pub mascot: Option<String>,
+    #[serde(default)]
+    #[validate(length(min = 1, message = "voice must not be empty"))]
+    pub voice: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -71,9 +61,10 @@ pub struct AgentResponse {
     pub name: String,
     pub input_language: Language,
     pub output_language: Language,
-    pub mode: Option<Mode>,
-    pub gender: Option<Gender>,
-    pub mascot: Option<String>,
+    pub mode: Mode,
+    pub gender: Gender,
+    pub mascot: String,
+    pub voice: String,
 }
 
 impl From<agents::Model> for AgentResponse {
@@ -86,14 +77,29 @@ impl From<agents::Model> for AgentResponse {
             mode: model.mode,
             gender: model.gender,
             mascot: model.mascot,
+            voice: model.voice,
         }
     }
 }
 
-/// The access token could outlive the account it was issued for (e.g. the
-/// account was deleted after the token was minted but before it expired) —
-/// confirm the session's user still exists before trusting it for a
-/// mutating request.
+fn voice_gender(voice: &str) -> Option<Gender> {
+    let gender = BulbulV3Voice::from_slug(voice)
+        .map(BulbulV3Voice::gender)
+        .or_else(|| BulbulV2Voice::from_slug(voice).map(BulbulV2Voice::gender))?;
+
+    Some(match gender {
+        VoiceGender::Male => Gender::Male,
+        VoiceGender::Female => Gender::Female,
+    })
+}
+
+/// Sarvam has no neutral voices (see `to_sarvam_gender` in pipeline.rs,
+/// which likewise omits `Neutral` rather than guessing) — so a `Neutral`
+/// agent has nothing to check a voice against, and any voice is accepted.
+fn voice_matches_gender(gender: &Gender, voice: &str) -> bool {
+    *gender == Gender::Neutral || voice_gender(voice).as_ref() == Some(gender)
+}
+
 async fn require_existing_user(session: &UserSession) -> Result<(), ApiResponse<()>> {
     let exists = users::Entity::find_by_id(session.user_id)
         .one(db::get())
@@ -169,19 +175,6 @@ pub async fn update_agent(
         .validate()
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, e.to_string()))?;
 
-    // `mascot` becoming an explicit-null-aware Option<Option<String>> means
-    // the validator crate's `length` attribute (built for plain Option<T>)
-    // no longer applies to it — check the "clear it" case manually: a
-    // present-but-empty mascot is still not a valid mascot.
-    if let Some(Some(mascot)) = &payload.mascot {
-        if mascot.trim().is_empty() {
-            return Err(ApiResponse::fail(
-                StatusCode::BAD_REQUEST,
-                "mascot must not be empty",
-            ));
-        }
-    }
-
     require_existing_user(&session).await?;
 
     let model = agents::Entity::find_by_id(id)
@@ -195,6 +188,22 @@ pub async fn update_agent(
 
     if model.user_id != session.user_id {
         return Err(ApiResponse::fail(StatusCode::FORBIDDEN, "not authorized"));
+    }
+
+    // Validate voice/gender consistency against the *effective* values after
+    // this patch applies, not just the fields the client happened to touch —
+    // e.g. changing only `gender` on an agent that already has a `voice` set
+    // must still be checked against that existing voice.
+    let effective_gender = payload
+        .gender
+        .clone()
+        .unwrap_or_else(|| model.gender.clone());
+    let effective_voice = payload.voice.clone().unwrap_or_else(|| model.voice.clone());
+    if !voice_matches_gender(&effective_gender, &effective_voice) {
+        return Err(ApiResponse::fail(
+            StatusCode::BAD_REQUEST,
+            "voice does not match selected gender",
+        ));
     }
 
     let mut active: agents::ActiveModel = model.into();
@@ -215,6 +224,9 @@ pub async fn update_agent(
     }
     if let Some(mascot) = payload.mascot {
         active.mascot = Set(mascot);
+    }
+    if let Some(voice) = payload.voice {
+        active.voice = Set(voice);
     }
 
     let model = active.update(db::get()).await.map_err(|e| {
@@ -240,6 +252,13 @@ pub async fn create_agent(
         .validate()
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, e.to_string()))?;
 
+    if !voice_matches_gender(&payload.gender, &payload.voice) {
+        return Err(ApiResponse::fail(
+            StatusCode::BAD_REQUEST,
+            "voice does not match selected gender",
+        ));
+    }
+
     let active = agents::ActiveModel {
         id: Set(Uuid::new_v4()),
         user_id: Set(session.user_id),
@@ -249,6 +268,7 @@ pub async fn create_agent(
         mode: Set(payload.mode),
         gender: Set(payload.gender),
         mascot: Set(payload.mascot),
+        voice: Set(payload.voice),
     };
 
     let model = active.insert(db::get()).await.map_err(|e| {

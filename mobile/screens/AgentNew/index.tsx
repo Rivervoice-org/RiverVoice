@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   Pressable,
@@ -14,14 +14,15 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Check, PhoneCall } from "lucide-react-native";
+import { createAudioPlayer, type AudioPlayer } from "expo-audio";
+import { ChevronLeft, Check, PhoneCall, Play } from "lucide-react-native";
 import { MascotPicker } from "@/components/MascotPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
-import { createAgent, updateAgent } from "@/lib/agents/api";
+import { createAgent, updateAgent, previewVoice } from "@/lib/agents/api";
 import { agentsQueryKey, useAgents } from "@/lib/agents/hooks";
 import type {
   AgentResponse,
@@ -70,6 +71,21 @@ const GENDERS = [
   { value: "neutral", label: "Neutral" },
 ];
 
+/**
+ * A curated subset of Sarvam's bulbul:v3 voice names
+ * (https://docs.sarvam.ai — Text to Speech), keyed by the same values as
+ * GENDERS. The female/male voices here match Sarvam's documented gender for
+ * each (see ferry's BulbulV3Voice::gender, which the create/update agent
+ * endpoints validate against) — Sarvam has no neutral voices at all, so the
+ * "neutral" group is just a curated pick from the full list, and ferry
+ * doesn't enforce a gender match for it.
+ */
+const VOICES_BY_GENDER: Record<string, string[]> = {
+  female: ["priya", "neha", "pooja", "kavya", "shreya", "ishita"],
+  male: ["shubh", "aditya", "rahul", "rohan", "amit", "dev"],
+  neutral: ["ratan", "varun", "sumit", "roopa", "mani"],
+};
+
 type AgentValues = {
   name: string;
   inputLang: string | null;
@@ -77,6 +93,7 @@ type AgentValues = {
   mode: string | null;
   gender: string | null;
   mascot: string | undefined;
+  voice: string | null;
 };
 
 const DEFAULT_VALUES: AgentValues = {
@@ -86,6 +103,7 @@ const DEFAULT_VALUES: AgentValues = {
   mode: null,
   gender: null,
   mascot: undefined,
+  voice: null,
 };
 
 function SectionLabel({ children }: { children: string }) {
@@ -173,6 +191,76 @@ function ModeList({
   );
 }
 
+/**
+ * Voices for the currently-picked "Voice gender" only — picking a voice
+ * before a gender doesn't make sense, and showing all three groups at once
+ * just makes the list longer without helping the choice.
+ */
+function VoiceGroupPicker({
+  gender,
+  value,
+  onChange,
+  onPreview,
+  previewingVoice,
+}: {
+  gender: string | null;
+  value: string | null;
+  onChange: (value: string | null) => void;
+  onPreview: (voice: string) => void;
+  previewingVoice: string | null;
+}) {
+  const colors = useThemeColors();
+
+  if (!gender) {
+    return (
+      <View className="rounded-xl border border-border bg-card px-3.5 py-3">
+        <Text variant="muted" className="text-[13px]">
+          Pick a voice gender above to see voices
+        </Text>
+      </View>
+    );
+  }
+
+  const voices = VOICES_BY_GENDER[gender] ?? [];
+
+  return (
+    <View className="gap-2">
+      {voices.map((voice) => {
+        const selected = voice === value;
+        const isLoadingPreview = previewingVoice === voice;
+        return (
+          <Pressable
+            key={voice}
+            onPress={() => onChange(selected ? null : voice)}
+            className={cn(
+              "flex-row items-center gap-3 rounded-xl border bg-card px-3.5 py-3 active:opacity-80",
+              selected ? "border-foreground" : "border-border",
+            )}
+          >
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                onPreview(voice);
+              }}
+              disabled={isLoadingPreview}
+              hitSlop={8}
+              className="h-8 w-8 items-center justify-center rounded-full bg-secondary active:opacity-70"
+            >
+              {isLoadingPreview ? (
+                <ActivityIndicator size="small" color={colors.ink} />
+              ) : (
+                <Play size={14} strokeWidth={1.75} color={colors.ink} fill={colors.ink} />
+              )}
+            </Pressable>
+            <Text className="flex-1 text-sm font-medium capitalize">{voice}</Text>
+            {selected && <Check size={16} strokeWidth={2} color={colors.ink} />}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function AgentNewScreen() {
   const colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -206,14 +294,77 @@ export default function AgentNewScreen() {
   return <AgentForm editingAgent={editingAgent} />;
 }
 
+/** Only the fields that actually changed vs. `editingAgent` — omitted keys
+ * leave that column untouched server-side (see UpdateAgentRequest on
+ * ferry). Shared by the Save button and the Try-agent save-first flow so
+ * they can't drift on what counts as "changed". */
+function buildPatch(value: AgentValues, editingAgent: AgentResponse): UpdateAgentRequest {
+  const patch: UpdateAgentRequest = {};
+  if (value.name.trim() !== editingAgent.name) {
+    patch.name = value.name.trim();
+  }
+  if (value.inputLang !== editingAgent.input_language) {
+    patch.input_language = value.inputLang as Language;
+  }
+  if (value.outputLang !== editingAgent.output_language) {
+    patch.output_language = value.outputLang as Language;
+  }
+  if (value.mode && value.mode !== editingAgent.mode) {
+    patch.mode = value.mode as Mode;
+  }
+  if (value.gender && value.gender !== editingAgent.gender) {
+    patch.gender = value.gender as Gender;
+  }
+  if (value.mascot && value.mascot !== editingAgent.mascot) {
+    patch.mascot = value.mascot;
+  }
+  if (value.voice && value.voice !== editingAgent.voice) {
+    patch.voice = value.voice;
+  }
+  return patch;
+}
+
 function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }) {
   const insets = useSafeAreaInsets();
   const colors = useThemeColors();
   const isEditing = !!editingAgent;
   const [error, setError] = useState("");
+  const [isSavingForTry, setIsSavingForTry] = useState(false);
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
+  const previewPlayerRef = useRef<AudioPlayer | null>(null);
+  // Save and Try-agent both end up calling createAgent/updateAgent on the
+  // same agent — without a shared guard, tapping both in quick succession
+  // (before either button's own loading state re-renders) fires both
+  // requests concurrently. A ref is checked/set synchronously, unlike
+  // state, so the second tap sees it immediately rather than one render
+  // late. `isSaving` just mirrors it for the `disabled` props below.
+  const savingRef = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
   const { requireAuth } = useRequireAuth();
+
+  useEffect(() => {
+    return () => {
+      previewPlayerRef.current?.release();
+    };
+  }, []);
+
+  async function handlePreviewVoice(voice: string) {
+    if (previewingVoice) return;
+    setPreviewingVoice(voice);
+    try {
+      const { audio_base64 } = await previewVoice(voice);
+      previewPlayerRef.current?.release();
+      const player = createAudioPlayer(`data:audio/wav;base64,${audio_base64}`);
+      previewPlayerRef.current = player;
+      player.play();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't play that voice. Please try again.");
+    } finally {
+      setPreviewingVoice(null);
+    }
+  }
 
   const form = useForm({
     defaultValues: editingAgent
@@ -224,6 +375,7 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
           mode: editingAgent.mode,
           gender: editingAgent.gender,
           mascot: editingAgent.mascot ?? undefined,
+          voice: editingAgent.voice,
         }
       : DEFAULT_VALUES,
     validators: {
@@ -233,6 +385,8 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
         if (!value.outputLang) return "Pick an output language";
         if (!value.mode) return "Pick a mode";
         if (!value.gender) return "Pick a voice gender";
+        if (!value.mascot) return "Pick a mascot";
+        if (!value.voice) return "Pick a voice";
         return undefined;
       },
       onChange: ({ value }) => {
@@ -241,72 +395,121 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
         if (!value.outputLang) return "Pick an output language";
         if (!value.mode) return "Pick a mode";
         if (!value.gender) return "Pick a voice gender";
+        if (!value.mascot) return "Pick a mascot";
+        if (!value.voice) return "Pick a voice";
         return undefined;
       },
     },
     onSubmit: async ({ value }) => {
+      if (savingRef.current) return;
+      savingRef.current = true;
+      setIsSaving(true);
       setError("");
-      if (isEditing && editingAgent) {
-        const patch: UpdateAgentRequest = {};
-        if (value.name.trim() !== editingAgent.name) {
-          patch.name = value.name.trim();
-        }
-        if (value.inputLang !== editingAgent.input_language) {
-          patch.input_language = value.inputLang as Language;
-        }
-        if (value.outputLang !== editingAgent.output_language) {
-          patch.output_language = value.outputLang as Language;
-        }
-        if (value.mode !== editingAgent.mode) {
-          patch.mode = value.mode as Mode | null;
-        }
-        if (value.gender !== editingAgent.gender) {
-          patch.gender = value.gender as Gender | null;
-        }
-        if ((value.mascot ?? null) !== editingAgent.mascot) {
-          patch.mascot = value.mascot ?? null;
-        }
+      try {
+        if (isEditing && editingAgent) {
+          const patch = buildPatch(value, editingAgent);
 
-        if (Object.keys(patch).length === 0) {
-          router.back();
-          return;
-        }
+          if (Object.keys(patch).length === 0) {
+            router.back();
+            return;
+          }
 
-        try {
           await updateAgent(editingAgent.id, patch);
           await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
           router.back();
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+          return;
         }
-        return;
-      }
-      // Backstop for the New button's own requireAuth gate — a direct
-      // deep link to /agent-new skips that check entirely.
-      if (!isAuthenticated) {
-        requireAuth(() => {});
-        return;
-      }
-      try {
+        // Backstop for the New button's own requireAuth gate — a direct
+        // deep link to /agent-new skips that check entirely.
+        if (!isAuthenticated) {
+          requireAuth(() => {});
+          return;
+        }
+        // Guaranteed non-null by the form's onMount/onChange validators,
+        // which block canSubmit (and thus this handler) until every one of
+        // these is picked — see CreateAgentRequest's required fields.
         await createAgent({
           name: value.name.trim(),
           input_language: value.inputLang as Language,
           output_language: value.outputLang as Language,
-          mode: value.mode as Mode | null,
-          gender: value.gender as Gender | null,
-          mascot: value.mascot ?? null,
+          mode: value.mode as Mode,
+          gender: value.gender as Gender,
+          mascot: value.mascot as string,
+          voice: value.voice as string,
         });
         await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
         router.back();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      } finally {
+        savingRef.current = false;
+        setIsSaving(false);
       }
     },
   });
 
+  // The try-agent call now requires a persisted agent (ferry looks it up
+  // server-side for languages/mode/gender), so trying an unsaved draft
+  // means saving it first — create it if it's new, or push through any
+  // pending edits if it already exists, then navigate with the real id.
+  async function handleTryAgent() {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setIsSaving(true);
+    setError("");
+    if (!isAuthenticated) {
+      requireAuth(() => {});
+      savingRef.current = false;
+      setIsSaving(false);
+      return;
+    }
+
+    const value = form.state.values;
+    setIsSavingForTry(true);
+    try {
+      let agentId: string;
+      if (isEditing && editingAgent) {
+        const patch = buildPatch(value, editingAgent);
+        agentId =
+          Object.keys(patch).length === 0
+            ? editingAgent.id
+            : (await updateAgent(editingAgent.id, patch)).id;
+      } else {
+        // Same guarantee as onSubmit above — canSubmit blocks this button
+        // until name/languages/mode/gender/mascot/voice are all picked.
+        const created = await createAgent({
+          name: value.name.trim(),
+          input_language: value.inputLang as Language,
+          output_language: value.outputLang as Language,
+          mode: value.mode as Mode,
+          gender: value.gender as Gender,
+          mascot: value.mascot as string,
+          voice: value.voice as string,
+        });
+        agentId = created.id;
+      }
+      await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+      router.push({
+        pathname: "/try-agent",
+        params: { id: agentId, name: value.name, mascot: value.mascot ?? "" },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setIsSavingForTry(false);
+      savingRef.current = false;
+      setIsSaving(false);
+    }
+  }
+
   const values = useStore(form.store, (state) => state.values);
   const canSubmit = useStore(form.store, (state) => state.canSubmit);
   const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
+
+  // Editing an agent with no actual changes has nothing to save — Save
+  // changes should be disabled, not fire a no-op PATCH. New agents have no
+  // "unchanged" state to compare against, so this only applies once editing.
+  const hasChanges = !isEditing || (editingAgent && Object.keys(buildPatch(values, editingAgent)).length > 0);
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
@@ -387,7 +590,24 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
               <ChipGroup
                 options={GENDERS}
                 value={values.gender}
-                onChange={(v) => form.setFieldValue("gender", v)}
+                onChange={(v) => {
+                  form.setFieldValue("gender", v);
+                  // The voice list is scoped to the selected gender — a
+                  // voice picked under the old one won't be in the new
+                  // list, so it'd sit selected but invisible.
+                  form.setFieldValue("voice", null);
+                }}
+              />
+            </View>
+
+            <View className="gap-2.5">
+              <SectionLabel>Voice</SectionLabel>
+              <VoiceGroupPicker
+                gender={values.gender}
+                value={values.voice}
+                onChange={(v) => form.setFieldValue("voice", v)}
+                onPreview={handlePreviewVoice}
+                previewingVoice={previewingVoice}
               />
             </View>
           </View>
@@ -408,13 +628,9 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
             variant="outline"
             size="lg"
             className="flex-1"
-            disabled={!canSubmit}
-            onPress={() =>
-              router.push({
-                pathname: "/try-agent",
-                params: { name: values.name, mascot: values.mascot ?? "" },
-              })
-            }
+            disabled={!canSubmit || isSaving}
+            loading={isSavingForTry}
+            onPress={handleTryAgent}
           >
             <PhoneCall size={16} strokeWidth={1.75} color={colors.ink} />
             <Text className="text-sm font-medium text-foreground">
@@ -424,7 +640,7 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
           <Button
             size="lg"
             className="flex-1"
-            disabled={!canSubmit}
+            disabled={!canSubmit || !hasChanges || isSaving}
             loading={isSubmitting}
             onPress={() => form.handleSubmit()}
           >

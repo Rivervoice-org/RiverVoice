@@ -35,7 +35,7 @@ fn cors_layer() -> CorsLayer {
     CorsLayer::new()
         .allow_origin(origins)
         .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
-        .allow_headers([header::CONTENT_TYPE])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
         .allow_credentials(true)
 }
 
@@ -54,10 +54,11 @@ fn http_routes() -> Router<AppState> {
     Router::new().route("/health", get(axum::Json("OK")))
 }
 
-fn call_routes() -> Router<AppState> {
+fn protected_call_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/try-agent/offer", post(handlers::webrtc_offer))
         .route("/v1/call/start", post(handlers::start_call))
+        .route_layer(middleware::from_fn(require_user))
 }
 
 fn twilio_routes() -> Router<AppState> {
@@ -89,6 +90,12 @@ fn agent_routes() -> Router<AppState> {
         .route_layer(middleware::from_fn(require_user))
 }
 
+fn voice_routes() -> Router<AppState> {
+    Router::new()
+        .route("/v1/voices/preview", post(handlers::preview_voice))
+        .route_layer(middleware::from_fn(require_user))
+}
+
 fn auth_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/auth/refresh", post(handlers::refresh))
@@ -107,12 +114,13 @@ pub async fn start_server() -> anyhow::Result<()> {
     };
 
     let router = http_routes()
-        .merge(call_routes())
+        .merge(protected_call_routes())
         .merge(twilio_routes())
         .merge(user_routes())
         .merge(protected_user_routes())
         .merge(auth_routes())
         .merge(agent_routes())
+        .merge(voice_routes())
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn(log_request))
         .layer(cors_layer())

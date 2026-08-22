@@ -37,7 +37,7 @@ export function useFerryCall() {
     };
   }, []);
 
-  const start = useCallback(() => {
+  const start = useCallback((agentId: string) => {
     if (callRef.current) {
       return;
     }
@@ -66,7 +66,7 @@ export function useFerryCall() {
       onError: setError,
     });
     callRef.current = call;
-    void call.start();
+    void call.start(agentId);
   }, []);
 
   const end = useCallback(() => {
