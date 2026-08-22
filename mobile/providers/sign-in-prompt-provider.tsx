@@ -76,8 +76,13 @@ export function SignInPromptProvider({ children }: { children: React.ReactNode }
     action();
   }, [isAuthenticated]);
 
+  // Memoized so the dialog's own open/close state (which re-renders this
+  // provider) doesn't hand every context consumer — every row in the
+  // contacts list, in particular — a new object identity to re-render for.
+  const contextValue = React.useMemo(() => ({ requireAuth }), [requireAuth]);
+
   return (
-    <SignInPromptContext.Provider value={{ requireAuth }}>
+    <SignInPromptContext.Provider value={contextValue}>
       {children}
       <SignInRequiredDialog open={open} onOpenChange={handleOpenChange} onConfirm={handleConfirm} />
     </SignInPromptContext.Provider>

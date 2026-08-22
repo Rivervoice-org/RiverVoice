@@ -11,6 +11,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/query-client";
 import { SessionProvider } from "@/state/session";
 import { SignInPromptProvider } from "@/providers/sign-in-prompt-provider";
+import { AgentPickerProvider } from "@/providers/agent-picker-provider";
 import { ContactsProvider } from "@/state/contacts";
 import { Splash } from "@/components/Splash";
 import { ThemeProvider, useTheme } from "@/lib/theme";
@@ -25,21 +26,23 @@ function AppShell({ booted, onBooted }: { booted: boolean; onBooted: () => void 
   return (
     <SessionProvider>
       <SignInPromptProvider>
-        <ContactsProvider>
-          <Stack
-            screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}
-          >
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="call-detail" />
-            <Stack.Screen name="transcript" />
-            <Stack.Screen name="agent-new" />
-            <Stack.Screen name="in-call" />
-          </Stack>
-          <PortalHost />
-          <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-          {!booted && <Splash onDone={onBooted} />}
-        </ContactsProvider>
+        <AgentPickerProvider>
+          <ContactsProvider>
+            <Stack
+              screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}
+            >
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="call-detail" />
+              <Stack.Screen name="transcript" />
+              <Stack.Screen name="agent-new" />
+              <Stack.Screen name="in-call" />
+            </Stack>
+            <PortalHost />
+            <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+            {!booted && <Splash onDone={onBooted} />}
+          </ContactsProvider>
+        </AgentPickerProvider>
       </SignInPromptProvider>
     </SessionProvider>
   );
@@ -50,17 +53,26 @@ export default function RootLayout() {
 
   return (
     <StrictMode>
-      {/* @gorhom/bottom-sheet (and gesture-handler generally) needs this at the root. */}
+      {/* gesture-handler needs this at the root. */}
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <BottomSheetModalProvider>
-          <SafeAreaProvider>
-            <QueryClientProvider client={queryClient}>
-              <ThemeProvider>
+        <SafeAreaProvider>
+          <QueryClientProvider client={queryClient}>
+            <ThemeProvider>
+              {/*
+                @gorhom/bottom-sheet renders every BottomSheetModal's content
+                through an internal Portal, whose host is a *sibling* of
+                whatever BottomSheetModalProvider wraps (see PortalProvider in
+                @gorhom/portal) — not a descendant of it. Nesting it here,
+                innermost, means that sibling host still inherits SafeArea/
+                QueryClient/Theme context; nesting it further out (as it used
+                to be) left sheet content unable to reach ThemeProvider at all.
+              */}
+              <BottomSheetModalProvider>
                 <AppShell booted={booted} onBooted={() => setBooted(true)} />
-              </ThemeProvider>
-            </QueryClientProvider>
-          </SafeAreaProvider>
-        </BottomSheetModalProvider>
+              </BottomSheetModalProvider>
+            </ThemeProvider>
+          </QueryClientProvider>
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     </StrictMode>
   );
