@@ -17,7 +17,16 @@
         }
       ],
       "expo-secure-store",
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#E6F4FE"
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,
