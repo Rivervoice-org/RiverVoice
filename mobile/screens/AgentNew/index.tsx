@@ -206,11 +206,39 @@ export default function AgentNewScreen() {
   return <AgentForm editingAgent={editingAgent} />;
 }
 
+/** Only the fields that actually changed vs. `editingAgent` — omitted keys
+ * leave that column untouched server-side (see UpdateAgentRequest on
+ * ferry). Shared by the Save button and the Try-agent save-first flow so
+ * they can't drift on what counts as "changed". */
+function buildPatch(value: AgentValues, editingAgent: AgentResponse): UpdateAgentRequest {
+  const patch: UpdateAgentRequest = {};
+  if (value.name.trim() !== editingAgent.name) {
+    patch.name = value.name.trim();
+  }
+  if (value.inputLang !== editingAgent.input_language) {
+    patch.input_language = value.inputLang as Language;
+  }
+  if (value.outputLang !== editingAgent.output_language) {
+    patch.output_language = value.outputLang as Language;
+  }
+  if (value.mode !== editingAgent.mode) {
+    patch.mode = value.mode as Mode | null;
+  }
+  if (value.gender !== editingAgent.gender) {
+    patch.gender = value.gender as Gender | null;
+  }
+  if ((value.mascot ?? null) !== editingAgent.mascot) {
+    patch.mascot = value.mascot ?? null;
+  }
+  return patch;
+}
+
 function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }) {
   const insets = useSafeAreaInsets();
   const colors = useThemeColors();
   const isEditing = !!editingAgent;
   const [error, setError] = useState("");
+  const [isSavingForTry, setIsSavingForTry] = useState(false);
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
   const { requireAuth } = useRequireAuth();
@@ -247,25 +275,7 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
     onSubmit: async ({ value }) => {
       setError("");
       if (isEditing && editingAgent) {
-        const patch: UpdateAgentRequest = {};
-        if (value.name.trim() !== editingAgent.name) {
-          patch.name = value.name.trim();
-        }
-        if (value.inputLang !== editingAgent.input_language) {
-          patch.input_language = value.inputLang as Language;
-        }
-        if (value.outputLang !== editingAgent.output_language) {
-          patch.output_language = value.outputLang as Language;
-        }
-        if (value.mode !== editingAgent.mode) {
-          patch.mode = value.mode as Mode | null;
-        }
-        if (value.gender !== editingAgent.gender) {
-          patch.gender = value.gender as Gender | null;
-        }
-        if ((value.mascot ?? null) !== editingAgent.mascot) {
-          patch.mascot = value.mascot ?? null;
-        }
+        const patch = buildPatch(value, editingAgent);
 
         if (Object.keys(patch).length === 0) {
           router.back();
@@ -304,9 +314,58 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
     },
   });
 
+  // The try-agent call now requires a persisted agent (ferry looks it up
+  // server-side for languages/mode/gender), so trying an unsaved draft
+  // means saving it first — create it if it's new, or push through any
+  // pending edits if it already exists, then navigate with the real id.
+  async function handleTryAgent() {
+    setError("");
+    if (!isAuthenticated) {
+      requireAuth(() => {});
+      return;
+    }
+
+    const value = form.state.values;
+    setIsSavingForTry(true);
+    try {
+      let agentId: string;
+      if (isEditing && editingAgent) {
+        const patch = buildPatch(value, editingAgent);
+        agentId =
+          Object.keys(patch).length === 0
+            ? editingAgent.id
+            : (await updateAgent(editingAgent.id, patch)).id;
+      } else {
+        const created = await createAgent({
+          name: value.name.trim(),
+          input_language: value.inputLang as Language,
+          output_language: value.outputLang as Language,
+          mode: value.mode as Mode | null,
+          gender: value.gender as Gender | null,
+          mascot: value.mascot ?? null,
+        });
+        agentId = created.id;
+      }
+      await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+      router.push({
+        pathname: "/try-agent",
+        params: { id: agentId, name: value.name, mascot: value.mascot ?? "" },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setIsSavingForTry(false);
+    }
+  }
+
   const values = useStore(form.store, (state) => state.values);
   const canSubmit = useStore(form.store, (state) => state.canSubmit);
   const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
+
+  // Editing an agent with no actual changes has nothing to save — Save
+  // changes should be disabled, not fire a no-op PATCH. New agents have no
+  // "unchanged" state to compare against, so this only applies once editing.
+  const hasChanges = !isEditing || (editingAgent && Object.keys(buildPatch(values, editingAgent)).length > 0);
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
@@ -409,12 +468,8 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
             size="lg"
             className="flex-1"
             disabled={!canSubmit}
-            onPress={() =>
-              router.push({
-                pathname: "/try-agent",
-                params: { name: values.name, mascot: values.mascot ?? "" },
-              })
-            }
+            loading={isSavingForTry}
+            onPress={handleTryAgent}
           >
             <PhoneCall size={16} strokeWidth={1.75} color={colors.ink} />
             <Text className="text-sm font-medium text-foreground">
@@ -424,7 +479,7 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
           <Button
             size="lg"
             className="flex-1"
-            disabled={!canSubmit}
+            disabled={!canSubmit || !hasChanges}
             loading={isSubmitting}
             onPress={() => form.handleSubmit()}
           >
