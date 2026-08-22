@@ -3,16 +3,18 @@ import { View, Pressable, ScrollView, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Pencil, Trash2 } from "lucide-react-native";
+import { Bot, ChevronLeft, Pencil, Trash2 } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DeleteAlert } from "@/components/delete-alert";
+import { SignInPrompt } from "@/components/SignInPrompt";
 import { Rise } from "@/components/ui/rise";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { deleteAgent } from "@/lib/agents/api";
 import { agentsQueryKey, useAgents } from "@/lib/agents/hooks";
+import { useAuth } from "@/hooks/use-auth";
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
@@ -49,6 +51,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 export default function AgentDetailScreen() {
   const colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { isAuthenticated, isBootstrapping } = useAuth();
   const { data: agents, isPending } = useAgents();
   const agent = agents?.find((a) => a.id === id);
   const queryClient = useQueryClient();
@@ -61,6 +64,36 @@ export default function AgentDetailScreen() {
       router.back();
     },
   });
+
+  // useAgents() disables its query while signed out, which leaves
+  // react-query's isPending stuck at true forever — it never actually
+  // fetches, so that alone can't be used to tell "still loading" apart
+  // from "signed out". Check auth first: isBootstrapping keeps the normal
+  // spinner (session restore is still in flight), a confirmed signed-out
+  // state gets its own prompt instead of hanging on a spinner or falling
+  // through to a false "Agent not found", and only once authenticated does
+  // isPending mean what it normally means.
+  if (isBootstrapping) {
+    return (
+      <SafeAreaView
+        className="flex-1 items-center justify-center bg-canvas"
+        edges={["top"]}
+      >
+        <ActivityIndicator color={colors.muted} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["top"]}>
+        <SignInPrompt
+          icon={<Bot size={22} strokeWidth={1.75} color={colors.faint} />}
+          message="Sign in to see this agent"
+        />
+      </SafeAreaView>
+    );
+  }
 
   if (isPending) {
     return (
