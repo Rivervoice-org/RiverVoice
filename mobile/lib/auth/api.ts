@@ -1,4 +1,4 @@
-import { ferryPost } from "@/lib/ferry";
+import { ferry } from "@/lib/ferry";
 import type { CreateUserRequest, CreateUserResponse } from "@/lib/auth/types";
 
 /**
@@ -7,5 +7,5 @@ import type { CreateUserRequest, CreateUserResponse } from "@/lib/auth/types";
  * route ferry exposes, and it creates the user if the number is new.
  */
 export function createUser(payload: CreateUserRequest): Promise<CreateUserResponse> {
-  return ferryPost<CreateUserResponse>("/v1/users", payload);
+  return ferry.post<CreateUserResponse>("/v1/users", payload);
 }

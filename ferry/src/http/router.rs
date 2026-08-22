@@ -15,6 +15,7 @@ use tracing::Instrument;
 
 use super::handlers;
 use super::state::AppState;
+use crate::auth::middleware::require_user;
 use crate::call::CallRegistry;
 use crate::config;
 use crate::services::twilio::TwilioClient;
@@ -69,6 +70,15 @@ fn user_routes() -> Router<AppState> {
     Router::new().route("/v1/users", post(handlers::create_user))
 }
 
+fn agent_routes() -> Router<AppState> {
+    Router::new()
+        .route(
+            "/v1/agents",
+            post(handlers::create_agent).get(handlers::get_agents),
+        )
+        .route_layer(middleware::from_fn(require_user))
+}
+
 fn auth_routes() -> Router<AppState> {
     Router::new().route("/v1/auth/refresh", post(handlers::refresh))
 }
@@ -89,6 +99,7 @@ pub async fn start_server() -> anyhow::Result<()> {
         .merge(twilio_routes())
         .merge(user_routes())
         .merge(auth_routes())
+        .merge(agent_routes())
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn(log_request))
         .layer(cors_layer())

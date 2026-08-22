@@ -6,7 +6,7 @@
  */
 
 import type { ApiResponse } from "@/lib/api-types";
-import { ferryBaseUrl } from "@/lib/ferry";
+import { ferry } from "@/lib/ferry";
 
 const SIGNALING_TIMEOUT_MS = 15_000;
 
@@ -21,9 +21,9 @@ export async function postOffer(offerSdp: string): Promise<string> {
   try {
     console.log(
       "[ferry] posting offer to",
-      `${ferryBaseUrl()}/v1/try-agent/offer`,
+      `${ferry.baseUrl()}/v1/try-agent/offer`,
     );
-    response = await fetch(`${ferryBaseUrl()}/v1/try-agent/offer`, {
+    response = await fetch(`${ferry.baseUrl()}/v1/try-agent/offer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ offer_sdp: offerSdp }),

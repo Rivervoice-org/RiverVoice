@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, ScrollView } from "react-native";
+import { View, ScrollView, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Plus, ChevronRight, Bot } from "lucide-react-native";
@@ -11,19 +11,16 @@ import { Card } from "@/components/ui/card";
 import { Rise, rowDelay } from "@/components/ui/rise";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
-import { AGENTS } from "./mock";
+import { useAgents } from "@/lib/agents/hooks";
 
 export default function AgentsScreen() {
   const colors = useThemeColors();
   const [search, setSearch] = useState("");
+  const { data: agents, isPending, isError } = useAgents();
 
-  const filtered = search
-    ? AGENTS.filter(
-        (agent) =>
-          agent.name.toLowerCase().includes(search.toLowerCase()) ||
-          agent.purpose.toLowerCase().includes(search.toLowerCase()),
-      )
-    : AGENTS;
+  const filtered = (agents ?? []).filter(
+    (agent) => !search || agent.name.toLowerCase().includes(search.toLowerCase()),
+  );
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
@@ -57,7 +54,22 @@ export default function AgentsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* List */}
-        {filtered.length === 0 ? (
+        {isPending ? (
+          <View className="items-center py-16">
+            <ActivityIndicator color={colors.muted} />
+          </View>
+        ) : isError ? (
+          <Rise index={2}>
+            <View className="items-center py-16">
+              <View className="h-12 w-12 items-center justify-center rounded-full bg-border">
+                <Bot size={22} strokeWidth={1.75} color={colors.faint} />
+              </View>
+              <Text variant="muted" className="mt-3 text-sm">
+                Couldn't load your agents
+              </Text>
+            </View>
+          </Rise>
+        ) : filtered.length === 0 ? (
           <Rise index={2}>
             <View className="items-center py-16">
               <View className="h-12 w-12 items-center justify-center rounded-full bg-border">
@@ -74,9 +86,9 @@ export default function AgentsScreen() {
               {filtered.map((agent, index) => (
                 <Rise key={agent.id} delay={rowDelay(2, index)}>
                   <CallRow
-                    avatar={<Mascot seed={agent.name} size={32} />}
+                    avatar={<Mascot ref={agent.mascot ?? undefined} seed={agent.name} size={32} />}
                     title={agent.name}
-                    subtitle={`${agent.purpose} · ${agent.calls} calls`}
+                    subtitle={`${agent.input_language.toUpperCase()} → ${agent.output_language.toUpperCase()}`}
                     trailing={
                       <ChevronRight size={16} strokeWidth={1.75} color={colors.muted} />
                     }

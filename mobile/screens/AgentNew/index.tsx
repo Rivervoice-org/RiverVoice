@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   View,
   Pressable,
@@ -11,6 +12,7 @@ import {
 } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { useForm, useStore } from "@tanstack/react-form";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Check, PhoneCall } from "lucide-react-native";
 import { MascotPicker } from "@/components/MascotPicker";
 import { Button } from "@/components/ui/button";
@@ -18,7 +20,9 @@ import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
-import { AGENTS } from "@/screens/Agents/mock";
+import { createAgent } from "@/lib/agents/api";
+import { agentsQueryKey, useAgents } from "@/lib/agents/hooks";
+import type { Gender, Language, Mode } from "@/lib/agents/types";
 
 const LANGUAGES = [
   { value: "en", label: "English" },
@@ -164,18 +168,21 @@ export default function AgentNewScreen() {
   const insets = useSafeAreaInsets();
   const colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const editingAgent = id ? AGENTS.find((a) => a.id === id) : undefined;
+  const { data: agents } = useAgents();
+  const editingAgent = id ? agents?.find((a) => a.id === id) : undefined;
   const isEditing = !!editingAgent;
+  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
 
   const form = useForm({
     defaultValues: editingAgent
       ? {
           name: editingAgent.name,
-          inputLang: editingAgent.inputLang,
-          outputLang: editingAgent.outputLang,
+          inputLang: editingAgent.input_language,
+          outputLang: editingAgent.output_language,
           mode: editingAgent.mode,
           gender: editingAgent.gender,
-          mascot: editingAgent.mascot,
+          mascot: editingAgent.mascot ?? undefined,
         }
       : DEFAULT_VALUES,
     validators: {
@@ -187,9 +194,27 @@ export default function AgentNewScreen() {
       },
     },
     onSubmit: async ({ value }) => {
-      // Mock: a real create/update call lands here once the API exists.
-      await new Promise((r) => setTimeout(r, 800));
-      router.back();
+      setError("");
+      if (isEditing) {
+        // No update endpoint on ferry yet — still mocked.
+        await new Promise((r) => setTimeout(r, 800));
+        router.back();
+        return;
+      }
+      try {
+        await createAgent({
+          name: value.name.trim(),
+          input_language: value.inputLang as Language,
+          output_language: value.outputLang as Language,
+          mode: value.mode as Mode | null,
+          gender: value.gender as Gender | null,
+          mascot: value.mascot ?? null,
+        });
+        await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+        router.back();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      }
     },
   });
 
@@ -284,9 +309,15 @@ export default function AgentNewScreen() {
 
         {/* Footer — padded past the home indicator */}
         <View
-          className="flex-row gap-3 border-t border-border bg-canvas px-5 pt-3"
+          className="gap-2 border-t border-border bg-canvas px-5 pt-3"
           style={{ paddingBottom: insets.bottom + 12 }}
         >
+          {error ? (
+            <Text variant="destructive" className="text-center text-[13px]">
+              {error}
+            </Text>
+          ) : null}
+          <View className="flex-row gap-3">
           <Button
             variant="outline"
             size="lg"
@@ -315,6 +346,7 @@ export default function AgentNewScreen() {
               {isEditing ? "Save changes" : "Create agent"}
             </Text>
           </Button>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
