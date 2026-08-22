@@ -1,11 +1,12 @@
 use axum::body::to_bytes;
-use axum::extract::{Path, Request};
+use axum::extract::{Extension, Path, Request};
 use axum::http::StatusCode;
-use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::auth::token::UserSession;
 use crate::db;
 use crate::db::entity::agents::{self, Gender, Language, Mode};
 use crate::http::response::ApiResponse;
@@ -70,11 +71,24 @@ impl From<agents::Model> for AgentResponse {
     }
 }
 
-pub async fn delete_agent(Path(id): Path<String>) -> Result<ApiResponse<()>, ApiResponse<()>> {
+pub async fn delete_agent(
+    Extension(session): Extension<UserSession>,
+    Path(id): Path<String>,
+) -> Result<ApiResponse<()>, ApiResponse<()>> {
     let id = Uuid::parse_str(&id)
         .map_err(|_| ApiResponse::fail(StatusCode::BAD_REQUEST, "invalid agent id"))?;
 
-    let result = agents::Entity::delete_by_id(id)
+    let model = agents::Entity::find_by_id(id)
+        .one(db::get())
+        .await
+        .map_err(|e| {
+            tracing::error!("delete_agent: failed to look up agent {id}: {e}");
+            ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+        })?
+        .filter(|model| model.user_id == session.user_id)
+        .ok_or_else(|| ApiResponse::fail(StatusCode::NOT_FOUND, "agent not found"))?;
+
+    agents::Entity::delete_by_id(model.id)
         .exec(db::get())
         .await
         .map_err(|e| {
@@ -82,14 +96,11 @@ pub async fn delete_agent(Path(id): Path<String>) -> Result<ApiResponse<()>, Api
             ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
         })?;
 
-    if result.rows_affected == 0 {
-        return Err(ApiResponse::fail(StatusCode::NOT_FOUND, "agent not found"));
-    }
-
     Ok(ApiResponse::ok(StatusCode::OK, ()))
 }
 
 pub async fn update_agent(
+    Extension(session): Extension<UserSession>,
     Path(id): Path<String>,
     req: Request,
 ) -> Result<ApiResponse<AgentResponse>, ApiResponse<()>> {
@@ -114,6 +125,7 @@ pub async fn update_agent(
             tracing::error!("update_agent: failed to look up agent {id}: {e}");
             ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
         })?
+        .filter(|model| model.user_id == session.user_id)
         .ok_or_else(|| ApiResponse::fail(StatusCode::NOT_FOUND, "agent not found"))?;
 
     let mut active: agents::ActiveModel = model.into();
@@ -144,7 +156,10 @@ pub async fn update_agent(
     Ok(ApiResponse::ok(StatusCode::OK, model.into()))
 }
 
-pub async fn create_agent(req: Request) -> Result<ApiResponse<AgentResponse>, ApiResponse<()>> {
+pub async fn create_agent(
+    Extension(session): Extension<UserSession>,
+    req: Request,
+) -> Result<ApiResponse<AgentResponse>, ApiResponse<()>> {
     let body = to_bytes(req.into_body(), usize::MAX)
         .await
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid body: {e}")))?;
@@ -158,6 +173,7 @@ pub async fn create_agent(req: Request) -> Result<ApiResponse<AgentResponse>, Ap
 
     let active = agents::ActiveModel {
         id: Set(Uuid::new_v4()),
+        user_id: Set(session.user_id),
         name: Set(payload.name),
         input_language: Set(payload.input_language),
         output_language: Set(payload.output_language),
@@ -174,15 +190,17 @@ pub async fn create_agent(req: Request) -> Result<ApiResponse<AgentResponse>, Ap
     Ok(ApiResponse::ok(StatusCode::CREATED, model.into()))
 }
 
-/// Lists every agent. There's no owner column on `agents` yet, so this is
-/// every agent in the database, not just the caller's — fine for now since
-/// nothing else scopes agents to a user either, but worth knowing before
-/// this is used with more than one real account.
-pub async fn get_agents() -> Result<ApiResponse<Vec<AgentResponse>>, ApiResponse<()>> {
-    let models = agents::Entity::find().all(db::get()).await.map_err(|e| {
-        tracing::error!("get_agents: failed to list agents: {e}");
-        ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
-    })?;
+pub async fn get_agents(
+    Extension(session): Extension<UserSession>,
+) -> Result<ApiResponse<Vec<AgentResponse>>, ApiResponse<()>> {
+    let models = agents::Entity::find()
+        .filter(agents::Column::UserId.eq(session.user_id))
+        .all(db::get())
+        .await
+        .map_err(|e| {
+            tracing::error!("get_agents: failed to list agents: {e}");
+            ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+        })?;
 
     Ok(ApiResponse::ok(
         StatusCode::OK,
