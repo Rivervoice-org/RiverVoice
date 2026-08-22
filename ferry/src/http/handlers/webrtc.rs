@@ -11,6 +11,7 @@ use crate::codec::transport::webrtc_dc::WebRtcSerializer;
 use crate::config;
 use crate::db;
 use crate::db::entity::agents;
+use crate::http::MAX_REQUEST_BODY_SIZE;
 use crate::http::response::ApiResponse;
 use crate::pipeline::{NUM_CHANNELS, SAMPLE_RATE, build_translation_pipeline};
 use crate::transport::base::BaseTransport;
@@ -41,7 +42,7 @@ pub async fn webrtc_offer(
 ) -> Result<ApiResponse<WebrtcOfferResponse>, ApiResponse<()>> {
     tracing::info!(user_id = %session.user_id, "webrtc_offer: request from authenticated user");
 
-    let body = to_bytes(req.into_body(), usize::MAX)
+    let body = to_bytes(req.into_body(), MAX_REQUEST_BODY_SIZE)
         .await
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid body: {e}")))?;
 

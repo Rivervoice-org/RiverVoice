@@ -6,6 +6,7 @@ use validator::Validate;
 
 use crate::auth::token::UserSession;
 use crate::config;
+use crate::http::MAX_REQUEST_BODY_SIZE;
 use crate::http::response::ApiResponse;
 use crate::services::tts::sarvam::{BulbulV2Voice, BulbulV3Voice, SarvamModel};
 
@@ -48,7 +49,7 @@ pub async fn preview_voice(
     Extension(_session): Extension<UserSession>,
     req: Request,
 ) -> Result<ApiResponse<PreviewVoiceResponse>, ApiResponse<()>> {
-    let body = to_bytes(req.into_body(), usize::MAX)
+    let body = to_bytes(req.into_body(), MAX_REQUEST_BODY_SIZE)
         .await
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid body: {e}")))?;
 
