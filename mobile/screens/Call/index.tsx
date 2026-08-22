@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
-import { View, SectionList, RefreshControl, type SectionListRenderItem } from "react-native";
+import {
+  View,
+  SectionList,
+  RefreshControl,
+  type SectionListRenderItem,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Phone, Users } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
@@ -10,7 +15,8 @@ import { Rise } from "@/components/ui/rise";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
-import { startCallWith } from "@/lib/start-call";
+import { useAgentPicker } from "@/hooks/use-agent-picker";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 import { useContacts, type Contact } from "@/state/contacts";
 
 type Section = {
@@ -45,13 +51,20 @@ const ContactRow = memo(function ContactRow({
   showDivider: boolean;
 }) {
   const colors = useThemeColors();
+  const { pickAgentForCall } = useAgentPicker();
+  const { requireAuth } = useRequireAuth();
   return (
     <View className="px-5">
       <CallRow
         avatar={<Mascot seed={contact.name} size={32} />}
         title={contact.name}
         subtitle={
-          <Text font="mono" variant="muted" className="text-[11px]" numberOfLines={1}>
+          <Text
+            font="mono"
+            variant="muted"
+            className="text-[11px]"
+            numberOfLines={1}
+          >
             {contact.phone}
           </Text>
         }
@@ -61,7 +74,7 @@ const ContactRow = memo(function ContactRow({
           </View>
         }
         showDivider={showDivider}
-        onPress={() => startCallWith(contact)}
+        onPress={() => requireAuth(() => pickAgentForCall(contact))}
       />
     </View>
   );
@@ -70,7 +83,10 @@ const ContactRow = memo(function ContactRow({
 function SectionHeader({ title }: { title: string }) {
   return (
     <View className="bg-canvas px-5 pt-4 pb-1.5">
-      <Text variant="muted" className="text-[11px] font-medium uppercase tracking-[0.14em]">
+      <Text
+        variant="muted"
+        className="text-[11px] font-medium uppercase tracking-[0.14em]"
+      >
         {title}
       </Text>
     </View>
@@ -87,20 +103,30 @@ export default function CallScreen() {
   // Debounced so typing doesn't re-filter/re-sort hundreds of contacts on
   // every keystroke — only once input settles.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleSearchChange = useCallback((text: string) => {
     setSearch(text);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedSearch(text), SEARCH_DEBOUNCE_MS);
+    debounceRef.current = setTimeout(
+      () => setDebouncedSearch(text),
+      SEARCH_DEBOUNCE_MS,
+    );
   }, []);
-  useEffect(() => () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-  }, []);
+
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    },
+    [],
+  );
 
   const filtered = useMemo(() => {
     const query = debouncedSearch.toLowerCase();
     return debouncedSearch
       ? contacts.filter(
-          (c) => c.name.toLowerCase().includes(query) || c.phone.includes(debouncedSearch)
+          (c) =>
+            c.name.toLowerCase().includes(query) ||
+            c.phone.includes(debouncedSearch),
         )
       : contacts;
   }, [contacts, debouncedSearch]);
@@ -110,15 +136,20 @@ export default function CallScreen() {
   const keyExtractor = useCallback((item: Contact) => item.id, []);
 
   const renderSectionHeader = useCallback(
-    ({ section }: { section: Section }) => <SectionHeader title={section.title} />,
-    []
+    ({ section }: { section: Section }) => (
+      <SectionHeader title={section.title} />
+    ),
+    [],
   );
 
   const renderItem: SectionListRenderItem<Contact, Section> = useCallback(
     ({ item, index, section }) => (
-      <ContactRow contact={item} showDivider={index < section.data.length - 1} />
+      <ContactRow
+        contact={item}
+        showDivider={index < section.data.length - 1}
+      />
     ),
-    []
+    [],
   );
 
   return (
@@ -140,7 +171,11 @@ export default function CallScreen() {
       {/* Search */}
       <Rise index={1}>
         <View className="px-5 pt-2 pb-2">
-          <SearchInput value={search} onChangeText={handleSearchChange} placeholder="Search" />
+          <SearchInput
+            value={search}
+            onChangeText={handleSearchChange}
+            placeholder="Search"
+          />
         </View>
       </Rise>
 
@@ -176,7 +211,11 @@ export default function CallScreen() {
           windowSize={7}
           removeClippedSubviews
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.muted} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refresh}
+              tintColor={colors.muted}
+            />
           }
         />
       )}

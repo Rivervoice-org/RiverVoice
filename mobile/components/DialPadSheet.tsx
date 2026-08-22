@@ -11,7 +11,8 @@ import { Phone } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
-import { startCallWith } from "@/lib/start-call";
+import { useAgentPicker } from "@/hooks/use-agent-picker";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 
 const KEYS: { digit: string; letters?: string }[] = [
   { digit: "1" },
@@ -50,7 +51,10 @@ function Key({
     >
       <Text className="text-xl font-medium leading-none">{digit}</Text>
       {letters ? (
-        <Text variant="muted" className="mt-1 text-[9px] font-medium tracking-[0.08em]">
+        <Text
+          variant="muted"
+          className="mt-1 text-[9px] font-medium tracking-[0.08em]"
+        >
           {letters}
         </Text>
       ) : (
@@ -66,20 +70,70 @@ function Key({
  * backdrop press, snap behavior, and keyboard interplay are the library's
  * battle-tested implementation instead of ours to debug.
  */
-export function DialPadSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export function DialPadSheet({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
   const [digits, setDigits] = useState("");
+  const { pickAgentForCall } = useAgentPicker();
+  const { requireAuth } = useRequireAuth();
+  // A sheet's first-ever mount gets torn down by React StrictMode's dev-only
+  // double-invoked effects — @gorhom/bottom-sheet's internal Portal fires its
+  // real onDismiss as part of that simulated unmount, closing the sheet
+  // immediately after present(), before the user could have dismissed it.
+  // Track "we just asked it to open" so that spurious dismiss can be told
+  // apart from a real one and recovered from, instead of dropping the sheet.
+  const justPresentedRef = useRef(false);
+  // Latest `visible`, readable from the deferred present() below — by the
+  // time that timeout fires, `visible` may have already flipped back to
+  // false (sheet closed for real in the meantime), and it shouldn't reopen.
+  const visibleRef = useRef(visible);
+  const presentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    visibleRef.current = visible;
     if (visible) {
       setDigits("");
+      justPresentedRef.current = true;
       sheetRef.current?.present();
     } else {
       sheetRef.current?.dismiss();
     }
   }, [visible]);
+
+  useEffect(
+    () => () => {
+      if (presentTimeoutRef.current) clearTimeout(presentTimeoutRef.current);
+    },
+    [],
+  );
+
+  const handleChange = useCallback((index: number) => {
+    if (index >= 0) justPresentedRef.current = false;
+  }, []);
+
+  const handleDismiss = useCallback(() => {
+    if (justPresentedRef.current) {
+      justPresentedRef.current = false;
+      // Deferred: this fires from inside React's own StrictMode double-invoke
+      // commit pass, so re-presenting synchronously here would reenter React
+      // mid-commit, before providers above (e.g. ThemeProvider) are fully
+      // restored — letting content rendered by the re-present crash on
+      // missing context. Let that commit finish first.
+      presentTimeoutRef.current = setTimeout(() => {
+        presentTimeoutRef.current = null;
+        if (visibleRef.current) sheetRef.current?.present();
+      }, 0);
+      return;
+    }
+    onClose();
+  }, [onClose]);
 
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
@@ -91,7 +145,7 @@ export function DialPadSheet({ visible, onClose }: { visible: boolean; onClose: 
         pressBehavior="close"
       />
     ),
-    []
+    [],
   );
 
   function press(digit: string) {
@@ -101,19 +155,23 @@ export function DialPadSheet({ visible, onClose }: { visible: boolean; onClose: 
   function call() {
     if (!digits) return;
     onClose();
-    startCallWith({ phone: digits });
+    requireAuth(() => pickAgentForCall({ phone: digits }));
   }
 
   return (
     <BottomSheetModal
       ref={sheetRef}
       enableDynamicSizing
-      onDismiss={onClose}
+      onChange={handleChange}
+      onDismiss={handleDismiss}
       backdropComponent={renderBackdrop}
       backgroundStyle={{ backgroundColor: colors.canvas }}
       handleIndicatorStyle={{ backgroundColor: colors.border }}
     >
-      <BottomSheetView style={{ paddingBottom: insets.bottom + 14 }} className="px-5 pt-1">
+      <BottomSheetView
+        style={{ paddingBottom: insets.bottom + 14 }}
+        className="px-5 pt-1"
+      >
         {/* Keypad */}
         <View className="items-center gap-2.5">
           {[0, 1, 2, 3].map((row) => (
@@ -134,7 +192,9 @@ export function DialPadSheet({ visible, onClose }: { visible: boolean; onClose: 
         <View className="mt-4">
           <Button size="lg" disabled={!digits} onPress={call}>
             <Phone size={16} strokeWidth={1.75} color={colors.onInk} />
-            <Text className="text-sm font-medium text-primary-foreground">Call</Text>
+            <Text className="text-sm font-medium text-primary-foreground">
+              Call
+            </Text>
           </Button>
         </View>
       </BottomSheetView>
