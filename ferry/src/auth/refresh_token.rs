@@ -135,6 +135,31 @@ pub async fn rotate_refresh_token(
     Ok(RotatedRefreshToken { user_id, issued })
 }
 
+/// Ends the session `raw_token` belongs to by revoking its whole family, so
+/// neither it nor any token it was already rotated into can be redeemed
+/// again. Succeeds even if the token is unknown or already revoked —
+/// signing out should never fail from the client's point of view, and this
+/// avoids leaking whether a given token was ever valid.
+pub async fn sign_out(raw_token: &str) {
+    let db = db::get();
+    let hash = hash_token(raw_token);
+
+    let row = match refresh_tokens::Entity::find()
+        .filter(refresh_tokens::Column::TokenHash.eq(hash))
+        .one(db)
+        .await
+    {
+        Ok(Some(row)) => row,
+        Ok(None) => return,
+        Err(e) => {
+            tracing::error!("sign_out: lookup failed: {e}");
+            return;
+        }
+    };
+
+    revoke_family(row.family_id).await;
+}
+
 /// Revokes every not-yet-revoked token in a family — the response to a
 /// detected reuse, since the family may include tokens further down the
 /// chain that a stolen copy could still redeem.

@@ -1,78 +1,121 @@
-import { View, Pressable, ScrollView } from "react-native";
+import { useState } from "react";
+import { View, Pressable, ScrollView, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
-import { ChevronLeft, Phone, Clock, Hash, Pencil } from "lucide-react-native";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Bot, ChevronLeft, Pencil, Trash2 } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
-import { CallListItem } from "@/components/CallRow";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Rise, rowDelay } from "@/components/ui/rise";
+import { DeleteAlert } from "@/components/delete-alert";
+import { SignInPrompt } from "@/components/SignInPrompt";
+import { Rise } from "@/components/ui/rise";
 import { Text } from "@/components/ui/text";
-import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
-import { AGENTS } from "@/screens/Agents/mock";
-import { AGENT_CALLS } from "./mock";
+import { deleteAgent } from "@/lib/agents/api";
+import { agentsQueryKey, useAgents } from "@/lib/agents/hooks";
+import { useAuth } from "@/hooks/use-auth";
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  caption,
-  className,
-}: {
-  icon: typeof Clock;
-  label: string;
-  value: string;
-  caption: string;
-  className?: string;
-}) {
-  const colors = useThemeColors();
+const LANGUAGE_LABELS: Record<string, string> = {
+  en: "English",
+  hi: "Hindi",
+  te: "Telugu",
+  ta: "Tamil",
+  kn: "Kannada",
+};
+
+const MODE_LABELS: Record<string, string> = {
+  formal: "Formal",
+  "modern-colloquial": "Modern Colloquial",
+  "classic-colloquial": "Classic Colloquial",
+  "code-mixed": "Code Mixed",
+};
+
+const GENDER_LABELS: Record<string, string> = {
+  female: "Female",
+  male: "Male",
+  neutral: "Neutral",
+};
+
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <Card className={cn("p-3", className)}>
-      <View className="h-7 w-7 items-center justify-center rounded-lg bg-secondary">
-        <Icon size={13} strokeWidth={1.75} color={colors.ink} />
-      </View>
-      <Text variant="muted" className="mt-2.5 text-[11px] font-medium uppercase tracking-[0.12em]">
+    <View className="flex-row items-center justify-between px-4 py-3">
+      <Text variant="muted" className="text-sm">
         {label}
       </Text>
-      <Text font="mono" className="mt-0.5 text-lg font-semibold" numberOfLines={1} adjustsFontSizeToFit>
-        {value}
-      </Text>
-      <Text variant="muted" className="mt-0.5 text-[11px]" numberOfLines={1}>
-        {caption}
-      </Text>
-    </Card>
+      <Text className="text-sm font-medium">{value}</Text>
+    </View>
   );
-}
-
-function avgDuration(durations: string[]) {
-  if (durations.length === 0) return "0:00";
-  const totalSeconds = durations.reduce((sum, d) => {
-    const [m, s] = d.split(":").map(Number);
-    return sum + (m || 0) * 60 + (s || 0);
-  }, 0);
-  const avg = Math.round(totalSeconds / durations.length);
-  return `${Math.floor(avg / 60)}:${(avg % 60).toString().padStart(2, "0")}`;
 }
 
 export default function AgentDetailScreen() {
   const colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const agent = AGENTS.find((a) => a.id === id) ?? AGENTS[0];
+  const { isAuthenticated, isBootstrapping } = useAuth();
+  const { data: agents, isPending } = useAgents();
+  const agent = agents?.find((a) => a.id === id);
+  const queryClient = useQueryClient();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  if (!agent) {
+  const deleteMutation = useMutation({
+    mutationFn: deleteAgent,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+      router.back();
+    },
+  });
+
+  // useAgents() disables its query while signed out, which leaves
+  // react-query's isPending stuck at true forever — it never actually
+  // fetches, so that alone can't be used to tell "still loading" apart
+  // from "signed out". Check auth first: isBootstrapping keeps the normal
+  // spinner (session restore is still in flight), a confirmed signed-out
+  // state gets its own prompt instead of hanging on a spinner or falling
+  // through to a false "Agent not found", and only once authenticated does
+  // isPending mean what it normally means.
+  if (isBootstrapping) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["top"]}>
-        <Text variant="muted">Agent not found</Text>
+      <SafeAreaView
+        className="flex-1 items-center justify-center bg-canvas"
+        edges={["top"]}
+      >
+        <ActivityIndicator color={colors.muted} />
       </SafeAreaView>
     );
   }
 
-  const recentCalls = AGENT_CALLS[agent.id] ?? [];
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["top"]}>
+        <SignInPrompt
+          icon={<Bot size={22} strokeWidth={1.75} color={colors.faint} />}
+          message="Sign in to see this agent"
+        />
+      </SafeAreaView>
+    );
+  }
 
-  const numberUsage = agent.numbers.map((number) => ({
-    number,
-    count: recentCalls.filter((call) => call.fromNumber === number).length,
-  }));
+  if (isPending) {
+    return (
+      <SafeAreaView
+        className="flex-1 items-center justify-center bg-canvas"
+        edges={["top"]}
+      >
+        <ActivityIndicator color={colors.muted} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!agent) {
+    return (
+      <SafeAreaView
+        className="flex-1 items-center justify-center bg-canvas"
+        edges={["top"]}
+      >
+        <Text variant="muted">Agent not found</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
@@ -85,7 +128,9 @@ export default function AgentDetailScreen() {
         >
           <ChevronLeft size={22} strokeWidth={1.75} color={colors.ink} />
         </Pressable>
-        <Text className="flex-1 text-center text-[17px] font-semibold">Agent</Text>
+        <Text className="flex-1 text-center text-[17px] font-semibold">
+          Agent
+        </Text>
         <Pressable
           onPress={() =>
             router.push({ pathname: "/agent-new", params: { id: agent.id } })
@@ -106,135 +151,97 @@ export default function AgentDetailScreen() {
         <Rise index={0}>
           <Card className="mx-5 items-center p-6">
             <View className="h-16 w-16 overflow-hidden rounded-full bg-secondary">
-              <Mascot seed={agent.name} size={64} />
+              <Mascot
+                ref={agent.mascot ?? undefined}
+                seed={agent.name}
+                size={64}
+              />
             </View>
 
             <Text className="mt-3 text-[20px] font-semibold">{agent.name}</Text>
             <Text variant="muted" className="mt-1 text-center text-sm">
-              {agent.purpose}
-            </Text>
-
-            <Text variant="muted" className="mt-4 text-xs">
-              Edited {agent.editedAt}
+              {LANGUAGE_LABELS[agent.input_language] ?? agent.input_language} →{" "}
+              {LANGUAGE_LABELS[agent.output_language] ?? agent.output_language}
             </Text>
           </Card>
         </Rise>
 
-        {/* Stats */}
-        <Rise index={1}>
-          <View className="mx-5 mt-4 flex-row flex-wrap gap-3">
-            <StatCard
-              className="w-[47.5%]"
-              icon={Phone}
-              label="Calls answered"
-              value={String(agent.calls)}
-              caption="All time"
+        {/* Settings */}
+        <View className="mt-8">
+          <Rise index={1}>
+            <View className="px-5">
+              <Text
+                variant="muted"
+                className="text-[11px] font-medium uppercase tracking-[0.14em]"
+              >
+                Settings
+              </Text>
+            </View>
+          </Rise>
+
+          <Card className="mx-5 mt-3 divide-y divide-border overflow-hidden">
+            <InfoRow
+              label="Input language"
+              value={
+                LANGUAGE_LABELS[agent.input_language] ?? agent.input_language
+              }
             />
-            <StatCard
-              className="w-[47.5%]"
-              icon={Clock}
-              label="Avg. duration"
-              value={avgDuration(recentCalls.map((c) => c.duration))}
-              caption="Recent calls"
+            <InfoRow
+              label="Output language"
+              value={
+                LANGUAGE_LABELS[agent.output_language] ?? agent.output_language
+              }
             />
+            {agent.mode ? (
+              <InfoRow
+                label="Mode"
+                value={MODE_LABELS[agent.mode] ?? agent.mode}
+              />
+            ) : null}
+            {agent.gender ? (
+              <InfoRow
+                label="Voice gender"
+                value={GENDER_LABELS[agent.gender] ?? agent.gender}
+              />
+            ) : null}
+          </Card>
+        </View>
+
+        <Rise index={2}>
+          <View className="items-center pt-8">
+            <Button
+              variant="outline"
+              className="px-5"
+              loading={deleteMutation.isPending}
+              onPress={() => setConfirmingDelete(true)}
+            >
+              <Trash2 size={16} strokeWidth={1.75} color={colors.destructive} />
+              <Text variant="destructive" className="text-sm font-medium">
+                Delete agent
+              </Text>
+            </Button>
+            {deleteMutation.isError ? (
+              <Text
+                variant="destructive"
+                className="mt-2 text-center text-[13px]"
+              >
+                {deleteMutation.error instanceof Error
+                  ? deleteMutation.error.message
+                  : "Couldn't delete agent. Please try again."}
+              </Text>
+            ) : null}
           </View>
         </Rise>
-
-        {/* Numbers in use */}
-        <View className="mt-8">
-          <Rise index={2}>
-            <View className="px-5">
-              <Text variant="muted" className="text-[11px] font-medium uppercase tracking-[0.14em]">
-                Numbers in use
-              </Text>
-            </View>
-          </Rise>
-
-          {numberUsage.length === 0 ? (
-            <Rise index={2}>
-              <View className="mx-5 mt-3 items-center rounded-xl border border-dashed border-border py-6">
-                <Hash size={18} strokeWidth={1.75} color={colors.faint} />
-                <Text variant="muted" className="mt-2 text-xs">
-                  No number assigned yet
-                </Text>
-              </View>
-            </Rise>
-          ) : (
-            <Card className="mx-5 mt-3 overflow-hidden">
-              {numberUsage.map((entry, index) => (
-                <Rise key={entry.number} delay={rowDelay(2, index)}>
-                  <View
-                    className={cn(
-                      "flex-row items-center gap-3 px-4 py-3",
-                      index < numberUsage.length - 1 && "border-b border-border"
-                    )}
-                  >
-                    <View className="h-8 w-8 items-center justify-center rounded-lg bg-secondary">
-                      <Phone size={14} strokeWidth={1.75} color={colors.ink} />
-                    </View>
-                    <View className="min-w-0 flex-1">
-                      <Text font="mono" className="text-sm font-medium">
-                        {entry.number}
-                      </Text>
-                      <Text variant="muted" className="mt-0.5 text-[11px]">
-                        {entry.count} {entry.count === 1 ? "call" : "calls"} answered on this number
-                      </Text>
-                    </View>
-                  </View>
-                </Rise>
-              ))}
-            </Card>
-          )}
-        </View>
-
-        {/* Recent calls */}
-        <View className="mt-8">
-          <Rise index={3}>
-            <View className="flex-row items-center justify-between px-5">
-              <Text variant="muted" className="text-[11px] font-medium uppercase tracking-[0.14em]">
-                Recent calls
-              </Text>
-            </View>
-          </Rise>
-
-          {recentCalls.length === 0 ? (
-            <Rise index={3}>
-              <View className="mx-5 mt-3 items-center rounded-xl border border-dashed border-border py-8">
-                <Phone size={18} strokeWidth={1.75} color={colors.faint} />
-                <Text variant="muted" className="mt-2 text-xs">
-                  No calls answered yet
-                </Text>
-              </View>
-            </Rise>
-          ) : (
-            <Card className="mx-5 mt-3 overflow-hidden">
-              {recentCalls.map((call, index) => (
-                <Rise key={call.id} delay={rowDelay(3, index)}>
-                  <CallListItem
-                    call={call}
-                    showDivider={index < recentCalls.length - 1}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/call-detail",
-                        params: {
-                          name: call.name,
-                          number: call.number,
-                          fromNumber: call.fromNumber,
-                          agent: call.agent || "",
-                          language: call.language,
-                          duration: call.duration,
-                          outcome: call.outcome,
-                          time: call.time,
-                        },
-                      })
-                    }
-                  />
-                </Rise>
-              ))}
-            </Card>
-          )}
-        </View>
       </ScrollView>
+
+      <DeleteAlert
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title="Delete agent"
+        description={`Delete "${agent.name}"? This can't be undone.`}
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleteMutation.mutate(agent.id)}
+      />
     </SafeAreaView>
   );
 }

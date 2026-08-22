@@ -1,7 +1,9 @@
+import { useState } from "react";
 import {
   View,
   Pressable,
   ScrollView,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
@@ -11,6 +13,7 @@ import {
 } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { useForm, useStore } from "@tanstack/react-form";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Check, PhoneCall } from "lucide-react-native";
 import { MascotPicker } from "@/components/MascotPicker";
 import { Button } from "@/components/ui/button";
@@ -18,7 +21,17 @@ import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
-import { AGENTS } from "@/screens/Agents/mock";
+import { createAgent, updateAgent } from "@/lib/agents/api";
+import { agentsQueryKey, useAgents } from "@/lib/agents/hooks";
+import type {
+  AgentResponse,
+  Gender,
+  Language,
+  Mode,
+  UpdateAgentRequest,
+} from "@/lib/agents/types";
+import { useAuth } from "@/hooks/use-auth";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 
 const LANGUAGES = [
   { value: "en", label: "English" },
@@ -161,35 +174,133 @@ function ModeList({
 }
 
 export default function AgentNewScreen() {
-  const insets = useSafeAreaInsets();
   const colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const editingAgent = id ? AGENTS.find((a) => a.id === id) : undefined;
+  const { data: agents, isPending } = useAgents();
+
+  // Editing an existing agent depends on data useForm only reads once, at
+  // mount — defaultValues isn't reactive, so mounting the form before the
+  // agents query resolves would freeze it on DEFAULT_VALUES even after the
+  // real data arrives. An unrecognized id would also silently fall through
+  // to the create path instead of erroring. Gate on the query settling
+  // before mounting AgentForm at all, so it's only ever constructed once
+  // with the right editingAgent already known.
+  if (id && isPending) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["top"]}>
+        <ActivityIndicator color={colors.muted} />
+      </SafeAreaView>
+    );
+  }
+
+  const editingAgent = id ? agents?.find((a) => a.id === id) : undefined;
+
+  if (id && !editingAgent) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["top"]}>
+        <Text variant="muted">Agent not found</Text>
+      </SafeAreaView>
+    );
+  }
+
+  return <AgentForm editingAgent={editingAgent} />;
+}
+
+function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }) {
+  const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const isEditing = !!editingAgent;
+  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
+  const { requireAuth } = useRequireAuth();
 
   const form = useForm({
     defaultValues: editingAgent
       ? {
           name: editingAgent.name,
-          inputLang: editingAgent.inputLang,
-          outputLang: editingAgent.outputLang,
+          inputLang: editingAgent.input_language,
+          outputLang: editingAgent.output_language,
           mode: editingAgent.mode,
           gender: editingAgent.gender,
-          mascot: editingAgent.mascot,
+          mascot: editingAgent.mascot ?? undefined,
         }
       : DEFAULT_VALUES,
     validators: {
+      onMount: ({ value }) => {
+        if (!value.name.trim()) return "Give your agent a name";
+        if (!value.inputLang) return "Pick an input language";
+        if (!value.outputLang) return "Pick an output language";
+        if (!value.mode) return "Pick a mode";
+        if (!value.gender) return "Pick a voice gender";
+        return undefined;
+      },
       onChange: ({ value }) => {
         if (!value.name.trim()) return "Give your agent a name";
         if (!value.inputLang) return "Pick an input language";
         if (!value.outputLang) return "Pick an output language";
+        if (!value.mode) return "Pick a mode";
+        if (!value.gender) return "Pick a voice gender";
         return undefined;
       },
     },
     onSubmit: async ({ value }) => {
-      // Mock: a real create/update call lands here once the API exists.
-      await new Promise((r) => setTimeout(r, 800));
-      router.back();
+      setError("");
+      if (isEditing && editingAgent) {
+        const patch: UpdateAgentRequest = {};
+        if (value.name.trim() !== editingAgent.name) {
+          patch.name = value.name.trim();
+        }
+        if (value.inputLang !== editingAgent.input_language) {
+          patch.input_language = value.inputLang as Language;
+        }
+        if (value.outputLang !== editingAgent.output_language) {
+          patch.output_language = value.outputLang as Language;
+        }
+        if (value.mode !== editingAgent.mode) {
+          patch.mode = value.mode as Mode | null;
+        }
+        if (value.gender !== editingAgent.gender) {
+          patch.gender = value.gender as Gender | null;
+        }
+        if ((value.mascot ?? null) !== editingAgent.mascot) {
+          patch.mascot = value.mascot ?? null;
+        }
+
+        if (Object.keys(patch).length === 0) {
+          router.back();
+          return;
+        }
+
+        try {
+          await updateAgent(editingAgent.id, patch);
+          await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+          router.back();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+        }
+        return;
+      }
+      // Backstop for the New button's own requireAuth gate — a direct
+      // deep link to /agent-new skips that check entirely.
+      if (!isAuthenticated) {
+        requireAuth(() => {});
+        return;
+      }
+      try {
+        await createAgent({
+          name: value.name.trim(),
+          input_language: value.inputLang as Language,
+          output_language: value.outputLang as Language,
+          mode: value.mode as Mode | null,
+          gender: value.gender as Gender | null,
+          mascot: value.mascot ?? null,
+        });
+        await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+        router.back();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      }
     },
   });
 
@@ -231,7 +342,7 @@ export default function AgentNewScreen() {
               onSelect={(ref) => form.setFieldValue("mascot", ref)}
             />
             <Input
-              className="mt-4 h-12 min-w-[140px] max-w-full border-0 bg-transparent px-0 text-[22px] font-semibold"
+              className="mt-4 h-12 min-w-[140px] max-w-full border-0 bg-transparent px-0 text-center text-[22px] font-semibold"
               placeholder="Untitled agent"
               placeholderTextColor={colors.faint}
               value={values.name}
@@ -284,9 +395,15 @@ export default function AgentNewScreen() {
 
         {/* Footer — padded past the home indicator */}
         <View
-          className="flex-row gap-3 border-t border-border bg-canvas px-5 pt-3"
+          className="gap-2 border-t border-border bg-canvas px-5 pt-3"
           style={{ paddingBottom: insets.bottom + 12 }}
         >
+          {error ? (
+            <Text variant="destructive" className="text-center text-[13px]">
+              {error}
+            </Text>
+          ) : null}
+          <View className="flex-row gap-3">
           <Button
             variant="outline"
             size="lg"
@@ -315,6 +432,7 @@ export default function AgentNewScreen() {
               {isEditing ? "Save changes" : "Create agent"}
             </Text>
           </Button>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

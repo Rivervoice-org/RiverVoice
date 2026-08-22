@@ -1,13 +1,16 @@
 use std::sync::LazyLock;
 
 use axum::body::to_bytes;
-use axum::extract::Request;
+use axum::extract::{Extension, Request};
 use axum::http::StatusCode;
 use regex::Regex;
-use sea_orm::{ActiveModelTrait, Set, SqlErr, TransactionTrait};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, SqlErr, TransactionTrait,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::auth::token::UserSession;
 use crate::auth::{refresh_token, token};
 use crate::config;
 use crate::db;
@@ -54,6 +57,25 @@ pub struct CreateUserResponse {
     pub refresh_token: String,
 }
 
+#[derive(Serialize)]
+pub struct UserResponse {
+    pub id: String,
+    pub mobile_number: String,
+    pub name: String,
+    pub mascot: String,
+}
+
+impl From<users::Model> for UserResponse {
+    fn from(model: users::Model) -> Self {
+        Self {
+            id: model.id.to_string(),
+            mobile_number: model.mobile_number,
+            name: model.name,
+            mascot: model.mascot,
+        }
+    }
+}
+
 pub async fn create_user(req: Request) -> Result<ApiResponse<CreateUserResponse>, ApiResponse<()>> {
     let body = to_bytes(req.into_body(), usize::MAX)
         .await
@@ -64,6 +86,52 @@ pub async fn create_user(req: Request) -> Result<ApiResponse<CreateUserResponse>
 
     let mobile_number = canonicalize_mobile_number(&payload.mobile_number)
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, e))?;
+
+    let existing = users::Entity::find()
+        .filter(users::Column::MobileNumber.eq(&mobile_number))
+        .one(db::get())
+        .await
+        .map_err(|e| {
+            tracing::error!("create_user: failed to look up user: {e}");
+            ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+        })?;
+
+    // A known number: no new row, just a fresh token pair for the account
+    // that already owns it — this is what makes continueWithNumber work as
+    // a real login for a returning user instead of erroring forever on
+    // the unique constraint.
+    if let Some(model) = existing {
+        let secret = &config::get()
+            .map_err(|e| {
+                tracing::error!("create_user: {e}");
+                ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+            })?
+            .jwt_secret;
+
+        let access_token = token::generate_access_token(model.id, secret).map_err(|e| {
+            tracing::error!("create_user: failed to issue access token: {e}");
+            ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+        })?;
+
+        let refresh = refresh_token::create_refresh_token(db::get(), model.id, None)
+            .await
+            .map_err(|e| {
+                tracing::error!("create_user: failed to issue refresh token: {e}");
+                ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+            })?;
+
+        return Ok(ApiResponse::ok(
+            StatusCode::OK,
+            CreateUserResponse {
+                id: model.id.to_string(),
+                mobile_number: model.mobile_number,
+                name: model.name,
+                mascot: model.mascot,
+                access_token,
+                refresh_token: refresh.token,
+            },
+        ));
+    }
 
     // The user row and its first refresh token either both land or neither
     // does — otherwise a failure between the two (e.g. the second insert
@@ -128,4 +196,24 @@ pub async fn create_user(req: Request) -> Result<ApiResponse<CreateUserResponse>
             refresh_token: refresh.token,
         },
     ))
+}
+
+/// Returns the caller's own profile, resolved from the access token's
+/// `sub` (put on the request by `require_user`) rather than anything the
+/// client sends — this is the source of truth clients should re-fetch
+/// from on launch instead of trusting a locally cached name/mascot that
+/// could go stale.
+pub async fn get_me(
+    Extension(session): Extension<UserSession>,
+) -> Result<ApiResponse<UserResponse>, ApiResponse<()>> {
+    let model = users::Entity::find_by_id(session.user_id)
+        .one(db::get())
+        .await
+        .map_err(|e| {
+            tracing::error!("get_me: failed to look up user: {e}");
+            ApiResponse::fail(StatusCode::INTERNAL_SERVER_ERROR, GENERIC_SERVER_ERROR)
+        })?
+        .ok_or_else(|| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
+
+    Ok(ApiResponse::ok(StatusCode::OK, model.into()))
 }

@@ -1,29 +1,29 @@
 import { useState } from "react";
-import { View, ScrollView } from "react-native";
+import { View, ScrollView, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Plus, ChevronRight, Bot } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { CallRow } from "@/components/CallRow";
 import { SearchInput } from "@/components/SearchInput";
+import { SignInPrompt } from "@/components/SignInPrompt";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Rise, rowDelay } from "@/components/ui/rise";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
-import { AGENTS } from "./mock";
+import { useAgents } from "@/lib/agents/hooks";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 
 export default function AgentsScreen() {
   const colors = useThemeColors();
   const [search, setSearch] = useState("");
+  const { data: agents, isPending, isError } = useAgents();
+  const { requireAuth, isAuthenticated } = useRequireAuth();
 
-  const filtered = search
-    ? AGENTS.filter(
-        (agent) =>
-          agent.name.toLowerCase().includes(search.toLowerCase()) ||
-          agent.purpose.toLowerCase().includes(search.toLowerCase()),
-      )
-    : AGENTS;
+  const filtered = (agents ?? []).filter(
+    (agent) => !search || agent.name.toLowerCase().includes(search.toLowerCase()),
+  );
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
@@ -35,7 +35,7 @@ export default function AgentsScreen() {
               Agents
             </Text>
           </View>
-          <Button size="sm" onPress={() => router.push("/agent-new")}>
+          <Button size="sm" onPress={() => requireAuth(() => router.push("/agent-new"))}>
             <Plus size={14} strokeWidth={2} color={colors.onInk} />
             <Text className="text-xs font-medium text-primary-foreground">
               New
@@ -57,7 +57,29 @@ export default function AgentsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* List */}
-        {filtered.length === 0 ? (
+        {!isAuthenticated ? (
+          <Rise index={2}>
+            <SignInPrompt
+              icon={<Bot size={22} strokeWidth={1.75} color={colors.faint} />}
+              message="Sign in to see your agents"
+            />
+          </Rise>
+        ) : isPending ? (
+          <View className="items-center py-16">
+            <ActivityIndicator color={colors.muted} />
+          </View>
+        ) : isError ? (
+          <Rise index={2}>
+            <View className="items-center py-16">
+              <View className="h-12 w-12 items-center justify-center rounded-full bg-border">
+                <Bot size={22} strokeWidth={1.75} color={colors.faint} />
+              </View>
+              <Text variant="muted" className="mt-3 text-sm">
+                Couldn't load your agents
+              </Text>
+            </View>
+          </Rise>
+        ) : filtered.length === 0 ? (
           <Rise index={2}>
             <View className="items-center py-16">
               <View className="h-12 w-12 items-center justify-center rounded-full bg-border">
@@ -74,9 +96,9 @@ export default function AgentsScreen() {
               {filtered.map((agent, index) => (
                 <Rise key={agent.id} delay={rowDelay(2, index)}>
                   <CallRow
-                    avatar={<Mascot seed={agent.name} size={32} />}
+                    avatar={<Mascot ref={agent.mascot ?? undefined} seed={agent.name} size={32} />}
                     title={agent.name}
-                    subtitle={`${agent.purpose} · ${agent.calls} calls`}
+                    subtitle={`${agent.input_language.toUpperCase()} → ${agent.output_language.toUpperCase()}`}
                     trailing={
                       <ChevronRight size={16} strokeWidth={1.75} color={colors.muted} />
                     }

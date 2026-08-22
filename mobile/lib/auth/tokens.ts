@@ -35,3 +35,8 @@ export async function clearTokens(): Promise<void> {
   accessToken = null;
   await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
 }
+
+/** Headers for a request to a protected ferry route. Empty if signed out. */
+export function authHeader(): Record<string, string> {
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+}
