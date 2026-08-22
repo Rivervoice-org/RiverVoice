@@ -7,7 +7,7 @@ use axum::{
     middleware,
     middleware::Next,
     response::Response,
-    routing::{delete, get, patch, post},
+    routing::{get, patch, post},
 };
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -90,7 +90,9 @@ fn agent_routes() -> Router<AppState> {
 }
 
 fn auth_routes() -> Router<AppState> {
-    Router::new().route("/v1/auth/refresh", post(handlers::refresh))
+    Router::new()
+        .route("/v1/auth/refresh", post(handlers::refresh))
+        .route("/v1/auth/signout", post(handlers::sign_out))
 }
 
 pub async fn start_server() -> anyhow::Result<()> {

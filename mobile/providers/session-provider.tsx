@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { createUser, getMe } from "@/lib/auth/api";
+import { createUser, getMe, signOutRequest } from "@/lib/auth/api";
 import { ferry } from "@/lib/ferry";
 import { clearTokens, getRefreshToken, saveTokens } from "@/lib/auth/tokens";
 import { SessionContext, type SessionUser } from "@/state/session/context";
@@ -73,7 +73,19 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(() => {
     setUser(null);
     setIsAuthenticated(false);
-    void clearTokens();
+    void (async () => {
+      const refreshToken = await getRefreshToken();
+      await clearTokens();
+      if (refreshToken) {
+        try {
+          await signOutRequest(refreshToken);
+        } catch {
+          // Best-effort — the local session is already cleared either way,
+          // so a network failure here just leaves the old refresh token
+          // valid server-side until it naturally expires.
+        }
+      }
+    })();
   }, []);
 
   return (

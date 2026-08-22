@@ -56,3 +56,24 @@ pub async fn refresh(req: Request) -> Result<ApiResponse<RefreshResponse>, ApiRe
         },
     ))
 }
+
+#[derive(Deserialize)]
+pub struct SignOutRequest {
+    pub refresh_token: String,
+}
+
+/// Revokes the session a refresh token belongs to server-side, so it can't
+/// be redeemed again even if it leaks after the client discards it. Always
+/// succeeds — sign-out isn't something a client should have to retry.
+pub async fn sign_out(req: Request) -> Result<ApiResponse<()>, ApiResponse<()>> {
+    let body = to_bytes(req.into_body(), usize::MAX)
+        .await
+        .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid body: {e}")))?;
+
+    let payload: SignOutRequest = serde_json::from_slice(&body)
+        .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid json: {e}")))?;
+
+    refresh_token::sign_out(&payload.refresh_token).await;
+
+    Ok(ApiResponse::ok(StatusCode::OK, ()))
+}
