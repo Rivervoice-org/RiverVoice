@@ -3,6 +3,7 @@ import {
   View,
   Pressable,
   ScrollView,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
@@ -22,7 +23,13 @@ import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
 import { createAgent, updateAgent } from "@/lib/agents/api";
 import { agentsQueryKey, useAgents } from "@/lib/agents/hooks";
-import type { Gender, Language, Mode, UpdateAgentRequest } from "@/lib/agents/types";
+import type {
+  AgentResponse,
+  Gender,
+  Language,
+  Mode,
+  UpdateAgentRequest,
+} from "@/lib/agents/types";
 import { useAuth } from "@/hooks/use-auth";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 
@@ -167,11 +174,41 @@ function ModeList({
 }
 
 export default function AgentNewScreen() {
-  const insets = useSafeAreaInsets();
   const colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { data: agents } = useAgents();
+  const { data: agents, isPending } = useAgents();
+
+  // Editing an existing agent depends on data useForm only reads once, at
+  // mount — defaultValues isn't reactive, so mounting the form before the
+  // agents query resolves would freeze it on DEFAULT_VALUES even after the
+  // real data arrives. An unrecognized id would also silently fall through
+  // to the create path instead of erroring. Gate on the query settling
+  // before mounting AgentForm at all, so it's only ever constructed once
+  // with the right editingAgent already known.
+  if (id && isPending) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["top"]}>
+        <ActivityIndicator color={colors.muted} />
+      </SafeAreaView>
+    );
+  }
+
   const editingAgent = id ? agents?.find((a) => a.id === id) : undefined;
+
+  if (id && !editingAgent) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["top"]}>
+        <Text variant="muted">Agent not found</Text>
+      </SafeAreaView>
+    );
+  }
+
+  return <AgentForm editingAgent={editingAgent} />;
+}
+
+function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }) {
+  const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const isEditing = !!editingAgent;
   const [error, setError] = useState("");
   const queryClient = useQueryClient();
