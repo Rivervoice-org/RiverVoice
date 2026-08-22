@@ -17,6 +17,15 @@ pub enum TranslateModel {
     SarvamTranslateV1,
 }
 
+impl TranslateModel {
+    pub fn slug(self) -> &'static str {
+        match self {
+            Self::MayuraV1 => "mayura:v1",
+            Self::SarvamTranslateV1 => "sarvam-translate:v1",
+        }
+    }
+}
+
 /// https://docs.sarvam.ai/api-reference/text/translate-text — default `formal`
 /// when omitted; agents::Mode's string_values were chosen to match these
 /// exactly, so mapping from it elsewhere is just a type-level bridge.
@@ -70,6 +79,20 @@ impl SarvamMtProvider {
             client: reqwest::Client::new(),
         }
     }
+
+    /// The model `send()` will actually pick for this provider's `mode` —
+    /// exposed so callers (e.g. the transcript logger) can attribute output
+    /// to the real model instead of guessing.
+    pub fn model(&self) -> TranslateModel {
+        // sarvam-translate:v1 only accepts `formal` — anything else 400s.
+        // mayura:v1 supports the full mode range, so any non-formal mode
+        // has to go through it instead.
+        // https://docs.sarvam.ai/api-reference/text/translate-text
+        match self.mode {
+            Some(TranslateMode::Formal) | None => TranslateModel::SarvamTranslateV1,
+            Some(_) => TranslateModel::MayuraV1,
+        }
+    }
 }
 
 #[async_trait]
@@ -79,14 +102,7 @@ impl MtProvider for SarvamMtProvider {
     }
 
     async fn send(&self, text: &str) -> Result<(MtTextFrame, MtUsageFrame), MtError> {
-        // sarvam-translate:v1 only accepts `formal` — anything else 400s.
-        // mayura:v1 supports the full mode range, so any non-formal mode
-        // has to go through it instead.
-        // https://docs.sarvam.ai/api-reference/text/translate-text
-        let model = match self.mode {
-            Some(TranslateMode::Formal) | None => TranslateModel::SarvamTranslateV1,
-            Some(_) => TranslateModel::MayuraV1,
-        };
+        let model = self.model();
 
         let response = self
             .client

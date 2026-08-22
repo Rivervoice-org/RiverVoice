@@ -16,7 +16,6 @@ use crate::observer::stage_latency_observer::StageLatencyObserver;
 use crate::observer::transcript_log_observer::TranscriptLogObserver;
 use crate::observer::usage_observer::UsageObserver;
 use crate::processor::{FrameIo, FrameProcessor};
-use crate::services::mt::openrouter::{DeepSeekModel, MtModel};
 use crate::services::mt::sarvam::{SarvamMtProvider, SpeakerGender, TranslateMode};
 use crate::services::stt::deepgram::{DeepgramSttConfig, DeepgramSttProvider};
 use crate::services::stt::language::Language;
@@ -73,12 +72,11 @@ fn to_sarvam_mode(mode: &agents::Mode) -> TranslateMode {
 /// (`http::handlers::webrtc::webrtc_offer`, called once).
 ///
 /// `agent` supplies the source/target languages via its input/output
-/// language pair, plus MT gender/mode — `reversed` picks which direction
-/// this call is (A->B uses input->output, B->A is the mirror; irrelevant
-/// for a one-way caller, which should always pass `false`). `None` falls
-/// back to a hardcoded Te<->En default with no gender/mode override rather
-/// than failing outright — there's no per-agent voice field yet, so
-/// `tts_voice` is always the same default regardless of `agent`.
+/// language pair, plus MT gender/mode and the TTS voice — `reversed` picks
+/// which direction this call is (A->B uses input->output, B->A is the
+/// mirror; irrelevant for a one-way caller, which should always pass
+/// `false`). `None` falls back to a hardcoded Te<->En default with no
+/// gender/mode/voice override rather than failing outright.
 pub fn build_translation_pipeline(
     config: &Config,
     agent: Option<&agents::Model>,
@@ -103,13 +101,11 @@ pub fn build_translation_pipeline(
             }
         }
     };
-    let tts_voice = DEFAULT_TTS_VOICE;
-    let speaker_gender = agent
-        .and_then(|agent| agent.gender.as_ref())
-        .and_then(to_sarvam_gender);
-    let mode = agent
-        .and_then(|agent| agent.mode.as_ref())
-        .map(to_sarvam_mode);
+    let tts_voice = agent
+        .map(|agent| agent.voice.as_str())
+        .unwrap_or(DEFAULT_TTS_VOICE);
+    let speaker_gender = agent.and_then(|agent| to_sarvam_gender(&agent.gender));
+    let mode = agent.map(|agent| to_sarvam_mode(&agent.mode));
 
     let stt_serializer: Arc<
         dyn crate::codec::frame_serializer::FrameSerializer<
@@ -136,6 +132,7 @@ pub fn build_translation_pipeline(
         speaker_gender,
         mode,
     );
+    let mt_model_slug = mt_provider.model().slug();
 
     let tts_provider =
         SarvamTtsProvider::new(config.sarvam_tts_api_key.to_string(), SarvamModel::BulbulV3);
@@ -168,9 +165,7 @@ pub fn build_translation_pipeline(
         Arc::new(LatencyObserver::new()),
         Arc::new(MetricsLogObserver),
         Arc::new(StageLatencyObserver::new()),
-        Arc::new(TranscriptLogObserver::new(
-            MtModel::DeepSeek(DeepSeekModel::V4Flash).slug(),
-        )),
+        Arc::new(TranscriptLogObserver::new(mt_model_slug)),
     ];
 
     Pipeline::spawn(stages, observers, call_span)

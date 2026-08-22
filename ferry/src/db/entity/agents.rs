@@ -73,9 +73,10 @@ pub struct Model {
     pub name: String,
     pub input_language: Language,
     pub output_language: Language,
-    pub mode: Option<Mode>,
-    pub gender: Option<Gender>,
-    pub mascot: Option<String>,
+    pub mode: Mode,
+    pub gender: Gender,
+    pub mascot: String,
+    pub voice: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

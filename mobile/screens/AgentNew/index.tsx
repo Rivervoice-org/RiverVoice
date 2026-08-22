@@ -74,9 +74,11 @@ const GENDERS = [
 /**
  * A curated subset of Sarvam's bulbul:v3 voice names
  * (https://docs.sarvam.ai — Text to Speech), keyed by the same values as
- * GENDERS. Sarvam doesn't publish gender/tone tags for bulbul:v3 voices, so
- * this grouping — "Neutral" included — is a UI-only curation choice, not a
- * documented Sarvam mapping.
+ * GENDERS. The female/male voices here match Sarvam's documented gender for
+ * each (see ferry's BulbulV3Voice::gender, which the create/update agent
+ * endpoints validate against) — Sarvam has no neutral voices at all, so the
+ * "neutral" group is just a curated pick from the full list, and ferry
+ * doesn't enforce a gender match for it.
  */
 const VOICES_BY_GENDER: Record<string, string[]> = {
   female: ["priya", "neha", "pooja", "kavya", "shreya", "ishita"],
@@ -91,8 +93,6 @@ type AgentValues = {
   mode: string | null;
   gender: string | null;
   mascot: string | undefined;
-  // UI-only for now — ferry's agents table has no voice column yet, so
-  // this isn't sent to createAgent/updateAgent.
   voice: string | null;
 };
 
@@ -309,14 +309,17 @@ function buildPatch(value: AgentValues, editingAgent: AgentResponse): UpdateAgen
   if (value.outputLang !== editingAgent.output_language) {
     patch.output_language = value.outputLang as Language;
   }
-  if (value.mode !== editingAgent.mode) {
-    patch.mode = value.mode as Mode | null;
+  if (value.mode && value.mode !== editingAgent.mode) {
+    patch.mode = value.mode as Mode;
   }
-  if (value.gender !== editingAgent.gender) {
-    patch.gender = value.gender as Gender | null;
+  if (value.gender && value.gender !== editingAgent.gender) {
+    patch.gender = value.gender as Gender;
   }
-  if ((value.mascot ?? null) !== editingAgent.mascot) {
-    patch.mascot = value.mascot ?? null;
+  if (value.mascot && value.mascot !== editingAgent.mascot) {
+    patch.mascot = value.mascot;
+  }
+  if (value.voice && value.voice !== editingAgent.voice) {
+    patch.voice = value.voice;
   }
   return patch;
 }
@@ -329,6 +332,14 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
   const [isSavingForTry, setIsSavingForTry] = useState(false);
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
   const previewPlayerRef = useRef<AudioPlayer | null>(null);
+  // Save and Try-agent both end up calling createAgent/updateAgent on the
+  // same agent — without a shared guard, tapping both in quick succession
+  // (before either button's own loading state re-renders) fires both
+  // requests concurrently. A ref is checked/set synchronously, unlike
+  // state, so the second tap sees it immediately rather than one render
+  // late. `isSaving` just mirrors it for the `disabled` props below.
+  const savingRef = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
   const { requireAuth } = useRequireAuth();
@@ -364,7 +375,7 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
           mode: editingAgent.mode,
           gender: editingAgent.gender,
           mascot: editingAgent.mascot ?? undefined,
-          voice: null,
+          voice: editingAgent.voice,
         }
       : DEFAULT_VALUES,
     validators: {
@@ -374,6 +385,8 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
         if (!value.outputLang) return "Pick an output language";
         if (!value.mode) return "Pick a mode";
         if (!value.gender) return "Pick a voice gender";
+        if (!value.mascot) return "Pick a mascot";
+        if (!value.voice) return "Pick a voice";
         return undefined;
       },
       onChange: ({ value }) => {
@@ -382,47 +395,55 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
         if (!value.outputLang) return "Pick an output language";
         if (!value.mode) return "Pick a mode";
         if (!value.gender) return "Pick a voice gender";
+        if (!value.mascot) return "Pick a mascot";
+        if (!value.voice) return "Pick a voice";
         return undefined;
       },
     },
     onSubmit: async ({ value }) => {
+      if (savingRef.current) return;
+      savingRef.current = true;
+      setIsSaving(true);
       setError("");
-      if (isEditing && editingAgent) {
-        const patch = buildPatch(value, editingAgent);
+      try {
+        if (isEditing && editingAgent) {
+          const patch = buildPatch(value, editingAgent);
 
-        if (Object.keys(patch).length === 0) {
-          router.back();
-          return;
-        }
+          if (Object.keys(patch).length === 0) {
+            router.back();
+            return;
+          }
 
-        try {
           await updateAgent(editingAgent.id, patch);
           await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
           router.back();
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+          return;
         }
-        return;
-      }
-      // Backstop for the New button's own requireAuth gate — a direct
-      // deep link to /agent-new skips that check entirely.
-      if (!isAuthenticated) {
-        requireAuth(() => {});
-        return;
-      }
-      try {
+        // Backstop for the New button's own requireAuth gate — a direct
+        // deep link to /agent-new skips that check entirely.
+        if (!isAuthenticated) {
+          requireAuth(() => {});
+          return;
+        }
+        // Guaranteed non-null by the form's onMount/onChange validators,
+        // which block canSubmit (and thus this handler) until every one of
+        // these is picked — see CreateAgentRequest's required fields.
         await createAgent({
           name: value.name.trim(),
           input_language: value.inputLang as Language,
           output_language: value.outputLang as Language,
-          mode: value.mode as Mode | null,
-          gender: value.gender as Gender | null,
-          mascot: value.mascot ?? null,
+          mode: value.mode as Mode,
+          gender: value.gender as Gender,
+          mascot: value.mascot as string,
+          voice: value.voice as string,
         });
         await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
         router.back();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      } finally {
+        savingRef.current = false;
+        setIsSaving(false);
       }
     },
   });
@@ -432,9 +453,14 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
   // means saving it first — create it if it's new, or push through any
   // pending edits if it already exists, then navigate with the real id.
   async function handleTryAgent() {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setIsSaving(true);
     setError("");
     if (!isAuthenticated) {
       requireAuth(() => {});
+      savingRef.current = false;
+      setIsSaving(false);
       return;
     }
 
@@ -449,13 +475,16 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
             ? editingAgent.id
             : (await updateAgent(editingAgent.id, patch)).id;
       } else {
+        // Same guarantee as onSubmit above — canSubmit blocks this button
+        // until name/languages/mode/gender/mascot/voice are all picked.
         const created = await createAgent({
           name: value.name.trim(),
           input_language: value.inputLang as Language,
           output_language: value.outputLang as Language,
-          mode: value.mode as Mode | null,
-          gender: value.gender as Gender | null,
-          mascot: value.mascot ?? null,
+          mode: value.mode as Mode,
+          gender: value.gender as Gender,
+          mascot: value.mascot as string,
+          voice: value.voice as string,
         });
         agentId = created.id;
       }
@@ -468,6 +497,8 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setIsSavingForTry(false);
+      savingRef.current = false;
+      setIsSaving(false);
     }
   }
 
@@ -597,7 +628,7 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
             variant="outline"
             size="lg"
             className="flex-1"
-            disabled={!canSubmit}
+            disabled={!canSubmit || isSaving}
             loading={isSavingForTry}
             onPress={handleTryAgent}
           >
@@ -609,7 +640,7 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
           <Button
             size="lg"
             className="flex-1"
-            disabled={!canSubmit || !hasChanges}
+            disabled={!canSubmit || !hasChanges || isSaving}
             loading={isSubmitting}
             onPress={() => form.handleSubmit()}
           >
