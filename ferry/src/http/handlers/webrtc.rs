@@ -1,43 +1,30 @@
-use std::sync::Arc;
-
-use axum::{Json, http::StatusCode};
+use axum::body::to_bytes;
+use axum::extract::{Extension, Request};
+use axum::http::StatusCode;
+use sea_orm::EntityTrait;
 use serde::{Deserialize, Serialize};
+use validator::Validate;
 
+use crate::auth::token::UserSession;
 use crate::call::call_span;
-use crate::codec::stt::deepgram::DeepgramSerializer;
 use crate::codec::transport::webrtc_dc::WebRtcSerializer;
-use crate::codec::tts::sarvam::SarvamSerializer;
-use crate::config::{self, Config};
+use crate::config;
+use crate::db;
+use crate::db::entity::agents;
 use crate::http::response::ApiResponse;
-use crate::observer::latency_observer::LatencyObserver;
-use crate::observer::log_observer::LogObserver;
-use crate::observer::metrics_log_observer::MetricsLogObserver;
-use crate::observer::stage_latency_observer::StageLatencyObserver;
-use crate::observer::transcript_log_observer::TranscriptLogObserver;
-use crate::observer::usage_observer::UsageObserver;
-use crate::pipeline::Pipeline;
-use crate::processor::FrameIo;
-use crate::services::mt::openrouter::{DeepSeekModel, MtModel};
-use crate::services::mt::sarvam::SarvamMtProvider;
-use crate::services::stt::deepgram::{DeepgramSttConfig, DeepgramSttProvider};
-use crate::services::stt::language::Language;
-use crate::services::stt::provider::{SttConfig, SttConfigKind};
-use crate::services::tts::provider::TtsConfigKind;
-use crate::services::tts::sarvam::{SarvamModel, SarvamTtsConfig, SarvamTtsProvider};
-use crate::stages::mt::MtStage;
-use crate::stages::stt::SttStage;
-use crate::stages::tts::TtsStage;
+use crate::pipeline::{NUM_CHANNELS, SAMPLE_RATE, build_translation_pipeline};
 use crate::transport::base::BaseTransport;
 use crate::transport::webrtc::transport::WebRtcClient;
 use tracing::Instrument;
 use uuid::Uuid;
 
-const SAMPLE_RATE: u32 = 16_000;
-const NUM_CHANNELS: u16 = 1;
-
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 pub struct WebrtcOfferRequest {
+    #[validate(length(min = 1, message = "offer_sdp is required"))]
     pub offer_sdp: String,
+
+    #[validate(length(min = 1, message = "agent_id is required"))]
+    pub agent_id: String,
 }
 
 #[derive(Serialize)]
@@ -49,8 +36,40 @@ pub struct WebrtcOfferResponse {
 /// what the try-agent screen talks to, not the two-leg (WebRTC + Twilio)
 /// call flow, so there's no `CallRegistry`/orchestration involved here.
 pub async fn webrtc_offer(
-    Json(req): Json<WebrtcOfferRequest>,
+    Extension(session): Extension<UserSession>,
+    req: Request,
 ) -> Result<ApiResponse<WebrtcOfferResponse>, ApiResponse<()>> {
+    tracing::info!(user_id = %session.user_id, "webrtc_offer: request from authenticated user");
+
+    let body = to_bytes(req.into_body(), usize::MAX)
+        .await
+        .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid body: {e}")))?;
+
+    let req: WebrtcOfferRequest = serde_json::from_slice(&body)
+        .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid json: {e}")))?;
+
+    req.validate()
+        .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    let agent_id = Uuid::parse_str(&req.agent_id)
+        .map_err(|_| ApiResponse::fail(StatusCode::BAD_REQUEST, "invalid agent id"))?;
+
+    let agent = agents::Entity::find_by_id(agent_id)
+        .one(db::get())
+        .await
+        .map_err(|e| {
+            tracing::error!("webrtc_offer: failed to look up agent {agent_id}: {e}");
+            ApiResponse::fail(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Something went wrong. Please try again.",
+            )
+        })?
+        .ok_or_else(|| ApiResponse::fail(StatusCode::NOT_FOUND, "agent not found"))?;
+
+    if agent.user_id != session.user_id {
+        return Err(ApiResponse::fail(StatusCode::FORBIDDEN, "not authorized"));
+    }
+
     let config = config::get().map_err(|e| {
         ApiResponse::fail(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -58,13 +77,10 @@ pub async fn webrtc_offer(
         )
     })?;
 
-    // Not exposed to the client — try-agent has no registry/CallId of its
-    // own, this exists purely so log lines from this one-way demo call can
-    // be told apart from each other (and from real two-leg calls).
     let call_id = Uuid::new_v4();
     let span = call_span(call_id, "solo");
 
-    let frame_io = build_pipeline(config, span.clone());
+    let frame_io = build_translation_pipeline(config, Some(&agent), false, span.clone());
     let serializer = WebRtcSerializer::new(SAMPLE_RATE, NUM_CHANNELS);
     let base = BaseTransport::new(frame_io, serializer);
 
@@ -83,68 +99,4 @@ pub async fn webrtc_offer(
         StatusCode::OK,
         WebrtcOfferResponse { answer_sdp },
     ))
-}
-
-fn build_pipeline(config: &Config, call_span: tracing::Span) -> FrameIo {
-    let stt_serializer: Arc<
-        dyn crate::codec::frame_serializer::FrameSerializer<
-                Message = tokio_tungstenite::tungstenite::Message,
-            >,
-    > = Arc::new(DeepgramSerializer::new(SAMPLE_RATE));
-    let tts_serializer: Arc<
-        dyn crate::codec::frame_serializer::FrameSerializer<
-                Message = tokio_tungstenite::tungstenite::Message,
-            >,
-    > = Arc::new(SarvamSerializer::new(SAMPLE_RATE));
-
-    let stt_provider = DeepgramSttProvider::new(config.deepgram_stt_api_key.to_string());
-    let stt_config = SttConfig::new(
-        SAMPLE_RATE,
-        vec![Language::Te],
-        SttConfigKind::DeepgramSttConfig(DeepgramSttConfig::new()),
-    );
-
-    let mt_provider = SarvamMtProvider::new(
-        config.sarvam_tts_api_key.to_string(),
-        Language::Te,
-        Language::En,
-    );
-
-    let tts_provider =
-        SarvamTtsProvider::new(config.sarvam_tts_api_key.to_string(), SarvamModel::BulbulV3);
-    let tts_config = crate::services::tts::provider::TtsConfig::new(
-        SAMPLE_RATE,
-        "shubh".to_string(),
-        Language::En,
-        TtsConfigKind::SarvamTtsConfig(SarvamTtsConfig::new()),
-    );
-
-    let stages: Vec<Box<dyn crate::processor::FrameProcessor>> = vec![
-        Box::new(SttStage::new(
-            Box::new(stt_provider),
-            stt_config,
-            stt_serializer,
-        )),
-        Box::new(MtStage::new(Box::new(mt_provider))),
-        Box::new(TtsStage::new(
-            Box::new(tts_provider),
-            tts_config,
-            tts_serializer,
-        )),
-    ];
-
-    let usage_observer = Arc::new(UsageObserver::new());
-
-    let observers: Vec<Arc<dyn crate::observer::frame_observer::FrameObserver>> = vec![
-        usage_observer,
-        Arc::new(LogObserver),
-        Arc::new(LatencyObserver::new()),
-        Arc::new(MetricsLogObserver),
-        Arc::new(StageLatencyObserver::new()),
-        Arc::new(TranscriptLogObserver::new(
-            MtModel::DeepSeek(DeepSeekModel::V4Flash).slug(),
-        )),
-    ];
-
-    Pipeline::spawn(stages, observers, call_span)
 }

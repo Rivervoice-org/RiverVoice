@@ -8,19 +8,65 @@ use crate::services::stt::language::Language;
 const ENDPOINT: &str = "https://api.sarvam.ai/translate";
 const API_KEY_HEADER: &str = "api-subscription-key";
 
+/// https://docs.sarvam.ai/api-reference/text/translate-text
+#[derive(Clone, Copy, Debug, Serialize)]
+pub enum TranslateModel {
+    #[serde(rename = "mayura:v1")]
+    MayuraV1,
+    #[serde(rename = "sarvam-translate:v1")]
+    SarvamTranslateV1,
+}
+
+/// https://docs.sarvam.ai/api-reference/text/translate-text — default `formal`
+/// when omitted; agents::Mode's string_values were chosen to match these
+/// exactly, so mapping from it elsewhere is just a type-level bridge.
+#[derive(Clone, Copy, Debug, Serialize)]
+pub enum TranslateMode {
+    #[serde(rename = "formal")]
+    Formal,
+    #[serde(rename = "modern-colloquial")]
+    ModernColloquial,
+    #[serde(rename = "classic-colloquial")]
+    ClassicColloquial,
+    #[serde(rename = "code-mixed")]
+    CodeMixed,
+}
+
+/// https://docs.sarvam.ai/api-reference/text/translate-text — Sarvam has no
+/// third option for a caller who doesn't specify a gender, unlike
+/// agents::Gender's `Neutral`.
+#[derive(Clone, Copy, Debug, Serialize)]
+pub enum SpeakerGender {
+    Male,
+    Female,
+}
+
 pub struct SarvamMtProvider {
     api_key: String,
     source_language: Language,
     target_language: Language,
+    /// `None` omits the field from the request entirely (see the
+    /// `#[serde(skip...)]` on `TranslateRequest`), which is Sarvam's own
+    /// default behavior.
+    speaker_gender: Option<SpeakerGender>,
+    mode: Option<TranslateMode>,
     client: reqwest::Client,
 }
 
 impl SarvamMtProvider {
-    pub fn new(api_key: String, source_language: Language, target_language: Language) -> Self {
+    pub fn new(
+        api_key: String,
+        source_language: Language,
+        target_language: Language,
+        speaker_gender: Option<SpeakerGender>,
+        mode: Option<TranslateMode>,
+    ) -> Self {
         Self {
             api_key,
             source_language,
             target_language,
+            speaker_gender,
+            mode,
             client: reqwest::Client::new(),
         }
     }
@@ -41,9 +87,9 @@ impl MtProvider for SarvamMtProvider {
                 input: text.to_string(),
                 source_language_code: self.source_language.code().to_string(),
                 target_language_code: self.target_language.code().to_string(),
-                model: Some("sarvam-translate:v1".to_string()),
-                speaker_gender: None,
-                mode: None,
+                model: Some(TranslateModel::SarvamTranslateV1),
+                speaker_gender: self.speaker_gender,
+                mode: self.mode,
                 output_script: None,
                 numerals_format: None,
             })
@@ -76,11 +122,11 @@ struct TranslateRequest {
     input: String,
     source_language_code: String,
     target_language_code: String,
-    model: Option<String>,
+    model: Option<TranslateModel>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    speaker_gender: Option<String>,
+    speaker_gender: Option<SpeakerGender>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mode: Option<String>,
+    mode: Option<TranslateMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     output_script: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

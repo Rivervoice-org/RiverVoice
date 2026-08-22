@@ -54,10 +54,11 @@ fn http_routes() -> Router<AppState> {
     Router::new().route("/health", get(axum::Json("OK")))
 }
 
-fn call_routes() -> Router<AppState> {
+fn protected_call_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/try-agent/offer", post(handlers::webrtc_offer))
         .route("/v1/call/start", post(handlers::start_call))
+        .route_layer(middleware::from_fn(require_user))
 }
 
 fn twilio_routes() -> Router<AppState> {
@@ -107,7 +108,7 @@ pub async fn start_server() -> anyhow::Result<()> {
     };
 
     let router = http_routes()
-        .merge(call_routes())
+        .merge(protected_call_routes())
         .merge(twilio_routes())
         .merge(user_routes())
         .merge(protected_user_routes())
