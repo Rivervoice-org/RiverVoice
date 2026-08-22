@@ -79,6 +79,15 @@ impl MtProvider for SarvamMtProvider {
     }
 
     async fn send(&self, text: &str) -> Result<(MtTextFrame, MtUsageFrame), MtError> {
+        // sarvam-translate:v1 only accepts `formal` — anything else 400s.
+        // mayura:v1 supports the full mode range, so any non-formal mode
+        // has to go through it instead.
+        // https://docs.sarvam.ai/api-reference/text/translate-text
+        let model = match self.mode {
+            Some(TranslateMode::Formal) | None => TranslateModel::SarvamTranslateV1,
+            Some(_) => TranslateModel::MayuraV1,
+        };
+
         let response = self
             .client
             .post(ENDPOINT)
@@ -87,7 +96,7 @@ impl MtProvider for SarvamMtProvider {
                 input: text.to_string(),
                 source_language_code: self.source_language.code().to_string(),
                 target_language_code: self.target_language.code().to_string(),
-                model: Some(TranslateModel::SarvamTranslateV1),
+                model: Some(model),
                 speaker_gender: self.speaker_gender,
                 mode: self.mode,
                 output_script: None,
