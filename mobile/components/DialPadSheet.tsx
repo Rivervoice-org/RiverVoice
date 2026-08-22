@@ -90,8 +90,14 @@ export function DialPadSheet({
   // Track "we just asked it to open" so that spurious dismiss can be told
   // apart from a real one and recovered from, instead of dropping the sheet.
   const justPresentedRef = useRef(false);
+  // Latest `visible`, readable from the deferred present() below — by the
+  // time that timeout fires, `visible` may have already flipped back to
+  // false (sheet closed for real in the meantime), and it shouldn't reopen.
+  const visibleRef = useRef(visible);
+  const presentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    visibleRef.current = visible;
     if (visible) {
       setDigits("");
       justPresentedRef.current = true;
@@ -100,6 +106,13 @@ export function DialPadSheet({
       sheetRef.current?.dismiss();
     }
   }, [visible]);
+
+  useEffect(
+    () => () => {
+      if (presentTimeoutRef.current) clearTimeout(presentTimeoutRef.current);
+    },
+    [],
+  );
 
   const handleChange = useCallback((index: number) => {
     if (index >= 0) justPresentedRef.current = false;
@@ -113,7 +126,10 @@ export function DialPadSheet({
       // mid-commit, before providers above (e.g. ThemeProvider) are fully
       // restored — letting content rendered by the re-present crash on
       // missing context. Let that commit finish first.
-      setTimeout(() => sheetRef.current?.present(), 0);
+      presentTimeoutRef.current = setTimeout(() => {
+        presentTimeoutRef.current = null;
+        if (visibleRef.current) sheetRef.current?.present();
+      }, 0);
       return;
     }
     onClose();
