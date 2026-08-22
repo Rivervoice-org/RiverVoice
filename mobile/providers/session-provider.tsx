@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { createUser, getMe, signOutRequest } from "@/lib/auth/api";
 import { ferry } from "@/lib/ferry";
-import { clearTokens, getRefreshToken, saveTokens } from "@/lib/auth/tokens";
+import { clearTokens, getRefreshToken, saveTokens, setAccessToken } from "@/lib/auth/tokens";
 import { SessionContext, type SessionUser } from "@/state/session/context";
 
 const COUNTRY_CODE = "+91";
@@ -73,6 +73,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(() => {
     setUser(null);
     setIsAuthenticated(false);
+    // Invalidate the in-memory access token synchronously, before any
+    // await — otherwise a request fired in the gap while this function is
+    // still reading SecureStore would go out with the old token and
+    // authenticate as the user that's in the middle of signing out.
+    setAccessToken(null);
     void (async () => {
       const refreshToken = await getRefreshToken();
       await clearTokens();

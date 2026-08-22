@@ -91,6 +91,13 @@ class FerryClient {
           body: JSON.stringify({ refresh_token: refreshToken }),
         },
       );
+      // Something else (sign-out) may have cleared the session while this
+      // refresh was in flight — if the refresh token on disk no longer
+      // matches the one this call started with, don't resurrect the
+      // session by writing the new pair back over a deliberate clear.
+      if ((await getRefreshToken()) !== refreshToken) {
+        return;
+      }
       await saveTokens(result);
     } catch (err) {
       // Only a definitive 401 from ferry means the refresh token itself is
