@@ -5,51 +5,28 @@
  * same as the server does on its side (ferry/src/transport/webrtc/transport.rs).
  */
 
-import type { ApiResponse } from "@/lib/api-types";
-import { ferry } from "@/lib/ferry";
-
-const SIGNALING_TIMEOUT_MS = 15_000;
+import { authHeader } from "@/lib/auth/tokens";
+import { ferry, FerryApiError } from "@/lib/ferry";
 
 export class SignalingError extends Error {}
 
-/** Posts our SDP offer, returns ferry's SDP answer. */
-export async function postOffer(offerSdp: string): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), SIGNALING_TIMEOUT_MS);
-
-  let response: Response;
+/** Posts our SDP offer for `agentId` (a persisted agent — the endpoint is
+ * require_user-protected and looks the agent up server-side), returns
+ * ferry's SDP answer. */
+export async function postOffer(offerSdp: string, agentId: string): Promise<string> {
   try {
-    console.log(
-      "[ferry] posting offer to",
-      `${ferry.baseUrl()}/v1/try-agent/offer`,
+    const result = await ferry.post<{ answer_sdp: string }>(
+      "/v1/try-agent/offer",
+      { offer_sdp: offerSdp, agent_id: agentId },
+      authHeader(),
     );
-    response = await fetch(`${ferry.baseUrl()}/v1/try-agent/offer`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ offer_sdp: offerSdp }),
-      signal: controller.signal,
-    });
+    return result.answer_sdp;
   } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new SignalingError("Timed out reaching the call server");
+    if (err instanceof FerryApiError) {
+      throw new SignalingError(err.message);
     }
     throw new SignalingError(
       `Could not reach the call server: ${err instanceof Error ? err.message : String(err)}`,
     );
-  } finally {
-    clearTimeout(timeout);
   }
-
-  const body = (await response.json()) as ApiResponse<{ answer_sdp: string }>;
-
-  if (!response.ok || body.error) {
-    throw new SignalingError(
-      body.error?.message ?? `Call server returned ${response.status}`,
-    );
-  }
-  if (!body.data) {
-    throw new SignalingError("Call server returned no answer");
-  }
-
-  return body.data.answer_sdp;
 }
