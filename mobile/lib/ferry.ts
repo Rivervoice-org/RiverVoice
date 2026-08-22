@@ -93,9 +93,14 @@ class FerryClient {
       );
       await saveTokens(result);
     } catch (err) {
-      // The refresh token itself is invalid/expired/revoked — nothing left
-      // to try. Clear it so the app doesn't keep presenting a dead token.
-      await clearTokens();
+      // Only a definitive 401 from ferry means the refresh token itself is
+      // invalid/expired/revoked — clear it then, since nothing left to try.
+      // A network error, timeout, or 5xx is transient: the token on disk
+      // might still be perfectly valid, so don't wipe it out from under a
+      // user who just has flaky connectivity on a cold start.
+      if (err instanceof FerryApiError && err.status === 401) {
+        await clearTokens();
+      }
       throw err;
     }
   }
@@ -107,6 +112,16 @@ class FerryClient {
       });
     }
     return this.refreshPromise;
+  }
+
+  /**
+   * Forces a token refresh — used on app launch to confirm a stored
+   * refresh token is still valid (and get a fresh access token) before
+   * restoring the session, rather than waiting for the first protected
+   * request to 401.
+   */
+  refreshSession(): Promise<void> {
+    return this.ensureRefreshed();
   }
 
   /**

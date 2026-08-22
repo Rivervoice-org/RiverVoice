@@ -14,3 +14,11 @@ export type CreateUserResponse = {
   access_token: string;
   refresh_token: string;
 };
+
+/** Mirrors ferry/src/http/handlers/user.rs UserResponse. */
+export type UserResponse = {
+  id: string;
+  mobile_number: string;
+  name: string;
+  mascot: string;
+};

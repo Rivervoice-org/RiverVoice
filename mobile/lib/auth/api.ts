@@ -1,5 +1,6 @@
+import { authHeader } from "@/lib/auth/tokens";
 import { ferry } from "@/lib/ferry";
-import type { CreateUserRequest, CreateUserResponse } from "@/lib/auth/types";
+import type { CreateUserRequest, CreateUserResponse, UserResponse } from "@/lib/auth/types";
 
 /**
  * Hits ferry's `POST /v1/users` (see ferry/src/http/handlers/user.rs).
@@ -8,4 +9,14 @@ import type { CreateUserRequest, CreateUserResponse } from "@/lib/auth/types";
  */
 export function createUser(payload: CreateUserRequest): Promise<CreateUserResponse> {
   return ferry.post<CreateUserResponse>("/v1/users", payload);
+}
+
+/**
+ * Hits ferry's `GET /v1/users/me`. Protected — resolves the caller from
+ * their access token, not anything the client claims. The source of truth
+ * for the signed-in user's profile; never cache this locally as a
+ * substitute for calling it.
+ */
+export function getMe(): Promise<UserResponse> {
+  return ferry.get<UserResponse>("/v1/users/me", authHeader());
 }
