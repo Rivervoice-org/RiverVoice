@@ -31,6 +31,15 @@ pub const PEER_CONNECTED_TAG: u8 = 0x04;
 /// server round-trip needed for that one.
 pub const CALL_RINGING_TAG: u8 = 0x05;
 
+/// Sent (with no payload) the moment `WebRtcClient::run` sees the call's
+/// `CallStatus` flip to `Ended`, right before it closes the peer connection.
+/// The client's own connection-state teardown (ICE noticing the far end went
+/// away) can lag well behind an explicit hangup — Twilio can reject a dial
+/// in under a second, far faster than ICE disconnect detection — so this is
+/// the fast, explicit "hang up now" signal instead of making the client wait
+/// on that.
+pub const CALL_ENDED_TAG: u8 = 0x06;
+
 #[derive(Serialize)]
 struct TranscriptPayload<'a> {
     text: &'a str,

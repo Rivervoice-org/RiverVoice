@@ -9,10 +9,11 @@ export enum Speaker {
 export type ConversationLine = { speaker: Speaker; text: string };
 
 /**
- * React wrapper around `FerryCall` — a real WebRTC call against ferry's
- * /v1/webrtc/offer endpoint. The call object itself lives in a ref so it
- * survives re-renders untouched; this hook only mirrors its events into
- * state and guarantees teardown on unmount.
+ * React wrapper around `FerryCall` — a real WebRTC call against ferry, via
+ * either `startTryAgent` (the one-way /v1/try-agent/offer demo) or
+ * `startCall` (a real two-leg /v1/call/start PSTN call). The call object
+ * itself lives in a ref so it survives re-renders untouched; this hook only
+ * mirrors its events into state and guarantees teardown on unmount.
  *
  * Caller captions and agent translations arrive as two separate wire message
  * kinds but in one true chronological order (both come off the same data
@@ -37,9 +38,12 @@ export function useFerryCall() {
     };
   }, []);
 
-  const start = useCallback((agentId: string) => {
+  // Shared by both start entrypoints below — resets per-call state and
+  // constructs the FerryCall instance; the only thing that differs between
+  // a try-agent demo and a real call is which of its methods gets invoked.
+  const createCall = useCallback((): FerryCall | null => {
     if (callRef.current) {
-      return;
+      return null;
     }
     setConversation([]);
     setInterimCaption("");
@@ -66,8 +70,24 @@ export function useFerryCall() {
       onError: setError,
     });
     callRef.current = call;
-    void call.start(agentId);
+    return call;
   }, []);
+
+  const startTryAgent = useCallback(
+    (agentId: string) => {
+      const call = createCall();
+      if (call) void call.startTryAgent(agentId);
+    },
+    [createCall],
+  );
+
+  const startCall = useCallback(
+    (agentId: string, toNumber: string) => {
+      const call = createCall();
+      if (call) void call.startCall(agentId, toNumber);
+    },
+    [createCall],
+  );
 
   const end = useCallback(() => {
     callRef.current?.end();
@@ -97,7 +117,8 @@ export function useFerryCall() {
     error,
     isMuted,
     isSpeakerOn,
-    start,
+    startTryAgent,
+    startCall,
     end,
     toggleMute,
     toggleSpeaker,

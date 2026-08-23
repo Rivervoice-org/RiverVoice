@@ -15,8 +15,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { createAudioPlayer, type AudioPlayer } from "expo-audio";
-import { ChevronLeft, Check, PhoneCall, Play } from "lucide-react-native";
+import { ChevronLeft, Check, PhoneCall, Play, Pause } from "lucide-react-native";
 import { MascotPicker } from "@/components/MascotPicker";
+import { SaveChangesAlert } from "@/components/save-changes-alert";
+import { DEFAULT_MASCOT_REF } from "@/lib/mascots";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
@@ -102,7 +104,11 @@ const DEFAULT_VALUES: AgentValues = {
   outputLang: null,
   mode: null,
   gender: null,
-  mascot: undefined,
+  // Matches MascotPicker's own fallback face — the picker shows this by
+  // default regardless, so the form should already consider it "picked"
+  // rather than silently blocking submission until the user reopens the
+  // same picker just to choose what's already on screen.
+  mascot: DEFAULT_MASCOT_REF,
   voice: null,
 };
 
@@ -202,12 +208,14 @@ function VoiceGroupPicker({
   onChange,
   onPreview,
   previewingVoice,
+  playingVoice,
 }: {
   gender: string | null;
   value: string | null;
   onChange: (value: string | null) => void;
   onPreview: (voice: string) => void;
   previewingVoice: string | null;
+  playingVoice: string | null;
 }) {
   const colors = useThemeColors();
 
@@ -228,6 +236,7 @@ function VoiceGroupPicker({
       {voices.map((voice) => {
         const selected = voice === value;
         const isLoadingPreview = previewingVoice === voice;
+        const isPlayingPreview = playingVoice === voice;
         return (
           <Pressable
             key={voice}
@@ -248,6 +257,8 @@ function VoiceGroupPicker({
             >
               {isLoadingPreview ? (
                 <ActivityIndicator size="small" color={colors.ink} />
+              ) : isPlayingPreview ? (
+                <Pause size={14} strokeWidth={1.75} color={colors.ink} fill={colors.ink} />
               ) : (
                 <Play size={14} strokeWidth={1.75} color={colors.ink} fill={colors.ink} />
               )}
@@ -329,15 +340,15 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
   const colors = useThemeColors();
   const isEditing = !!editingAgent;
   const [error, setError] = useState("");
-  const [isSavingForTry, setIsSavingForTry] = useState(false);
+  const [showSaveFirst, setShowSaveFirst] = useState(false);
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
+  const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const previewPlayerRef = useRef<AudioPlayer | null>(null);
-  // Save and Try-agent both end up calling createAgent/updateAgent on the
-  // same agent — without a shared guard, tapping both in quick succession
-  // (before either button's own loading state re-renders) fires both
-  // requests concurrently. A ref is checked/set synchronously, unlike
-  // state, so the second tap sees it immediately rather than one render
-  // late. `isSaving` just mirrors it for the `disabled` props below.
+  // Guards Save/Create against double-submission from a fast double-tap —
+  // a ref is checked/set synchronously, unlike state, so the second tap
+  // sees it immediately rather than one render late. `isSaving` just
+  // mirrors it for the `disabled` prop below. Try-agent no longer writes
+  // anything itself (see handleTryAgent), so it doesn't need this guard.
   const savingRef = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
   const queryClient = useQueryClient();
@@ -352,13 +363,27 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
 
   async function handlePreviewVoice(voice: string) {
     if (previewingVoice) return;
+    // Tapping the currently-playing voice again stops it, rather than
+    // re-fetching and layering a second playback on top.
+    if (playingVoice === voice) {
+      previewPlayerRef.current?.release();
+      previewPlayerRef.current = null;
+      setPlayingVoice(null);
+      return;
+    }
     setPreviewingVoice(voice);
     try {
       const { audio_base64 } = await previewVoice(voice);
       previewPlayerRef.current?.release();
       const player = createAudioPlayer(`data:audio/wav;base64,${audio_base64}`);
       previewPlayerRef.current = player;
+      player.addListener("playbackStatusUpdate", (status) => {
+        if (status.didJustFinish) {
+          setPlayingVoice((current) => (current === voice ? null : current));
+        }
+      });
       player.play();
+      setPlayingVoice(voice);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't play that voice. Please try again.");
     } finally {
@@ -448,58 +473,26 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
     },
   });
 
-  // The try-agent call now requires a persisted agent (ferry looks it up
-  // server-side for languages/mode/gender), so trying an unsaved draft
-  // means saving it first — create it if it's new, or push through any
-  // pending edits if it already exists, then navigate with the real id.
-  async function handleTryAgent() {
-    if (savingRef.current) return;
-    savingRef.current = true;
-    setIsSaving(true);
-    setError("");
+  // The try-agent call requires a real, persisted, up-to-date agent (ferry
+  // looks it up server-side for languages/mode/gender/voice) — rather than
+  // silently saving a draft/edit on your behalf (surprising on an
+  // accidental tap, see SaveChangesAlert below), this only ever navigates
+  // using an agent that's already saved with no pending edits. A brand-new
+  // agent has no id at all yet, and an edited one might have changes that
+  // were never explicitly saved — both cases just prompt to go save first.
+  function handleTryAgent() {
     if (!isAuthenticated) {
       requireAuth(() => {});
-      savingRef.current = false;
-      setIsSaving(false);
       return;
     }
-
-    const value = form.state.values;
-    setIsSavingForTry(true);
-    try {
-      let agentId: string;
-      if (isEditing && editingAgent) {
-        const patch = buildPatch(value, editingAgent);
-        agentId =
-          Object.keys(patch).length === 0
-            ? editingAgent.id
-            : (await updateAgent(editingAgent.id, patch)).id;
-      } else {
-        // Same guarantee as onSubmit above — canSubmit blocks this button
-        // until name/languages/mode/gender/mascot/voice are all picked.
-        const created = await createAgent({
-          name: value.name.trim(),
-          input_language: value.inputLang as Language,
-          output_language: value.outputLang as Language,
-          mode: value.mode as Mode,
-          gender: value.gender as Gender,
-          mascot: value.mascot as string,
-          voice: value.voice as string,
-        });
-        agentId = created.id;
-      }
-      await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
-      router.push({
-        pathname: "/try-agent",
-        params: { id: agentId, name: value.name, mascot: value.mascot ?? "" },
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
-    } finally {
-      setIsSavingForTry(false);
-      savingRef.current = false;
-      setIsSaving(false);
+    if (!isEditing || !editingAgent || hasChanges) {
+      setShowSaveFirst(true);
+      return;
     }
+    router.push({
+      pathname: "/try-agent",
+      params: { id: editingAgent.id, name: editingAgent.name, mascot: editingAgent.mascot },
+    });
   }
 
   const values = useStore(form.store, (state) => state.values);
@@ -608,6 +601,7 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
                 onChange={(v) => form.setFieldValue("voice", v)}
                 onPreview={handlePreviewVoice}
                 previewingVoice={previewingVoice}
+                playingVoice={playingVoice}
               />
             </View>
           </View>
@@ -628,8 +622,7 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
             variant="outline"
             size="lg"
             className="flex-1"
-            disabled={!canSubmit || isSaving}
-            loading={isSavingForTry}
+            disabled={isSaving}
             onPress={handleTryAgent}
           >
             <PhoneCall size={16} strokeWidth={1.75} color={colors.ink} />
@@ -651,6 +644,16 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <SaveChangesAlert
+        open={showSaveFirst}
+        onOpenChange={setShowSaveFirst}
+        description={
+          isEditing
+            ? "Save your changes before trying the agent."
+            : "Save the agent before trying it."
+        }
+      />
     </SafeAreaView>
   );
 }

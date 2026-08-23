@@ -32,7 +32,7 @@ export default function TryAgentScreen() {
     error,
     isMuted,
     isSpeakerOn,
-    start,
+    startTryAgent,
     end,
     toggleMute,
     toggleSpeaker,
@@ -50,9 +50,9 @@ export default function TryAgentScreen() {
   // not a normal state to silently recover from.
   useEffect(() => {
     if (params.id) {
-      start(params.id);
+      startTryAgent(params.id);
     }
-  }, [start, params.id]);
+  }, [startTryAgent, params.id]);
 
   useEffect(() => {
     if (status !== CallStatus.Connected) return;

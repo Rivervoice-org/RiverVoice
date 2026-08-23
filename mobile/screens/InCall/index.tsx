@@ -16,7 +16,7 @@ import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { CallStatus } from "@/lib/webrtc/ferry-call";
 import { formatDuration, callStatusToPhase } from "@/lib/call-status";
-import { useMockCall } from "@/hooks/use-mock-call";
+import { useFerryCall } from "@/hooks/use-ferry-call";
 
 /**
  * Owns the once-a-second tick itself, in its own state, so a running call
@@ -26,9 +26,11 @@ import { useMockCall } from "@/hooks/use-mock-call";
 const CallStatusLine = memo(function CallStatusLine({
   status,
   error,
+  missingAgent,
 }: {
   status: CallStatus;
   error: string | null;
+  missingAgent: boolean;
 }) {
   const [duration, setDuration] = useState(0);
 
@@ -37,6 +39,14 @@ const CallStatusLine = memo(function CallStatusLine({
     const interval = setInterval(() => setDuration((d) => d + 1), 1000);
     return () => clearInterval(interval);
   }, [status]);
+
+  if (missingAgent) {
+    return (
+      <Text variant="destructive" className="mt-3 text-[16px]">
+        Missing agent — go back and try again.
+      </Text>
+    );
+  }
 
   const label =
     status === CallStatus.Idle || status === CallStatus.Connecting
@@ -164,6 +174,7 @@ export default function InCallScreen() {
     name?: string;
     phone: string;
     mascot?: string;
+    agentId?: string;
     agentName: string;
     agentMascot?: string;
   }>();
@@ -171,6 +182,10 @@ export default function InCallScreen() {
   const colors = useThemeColors();
   const contactName = params.name || undefined;
   const agentName = params.agentName || "Agent";
+  // Only startCallWith (lib/start-call.ts) navigates here, and it always
+  // includes the agent that's placing the call — a missing id means a
+  // broken link, not a normal state to silently recover from.
+  const missingAgent = !params.agentId;
 
   const {
     status,
@@ -179,11 +194,11 @@ export default function InCallScreen() {
     error,
     isMuted,
     isSpeakerOn,
-    start,
+    startCall,
     end,
     toggleMute,
     toggleSpeaker,
-  } = useMockCall();
+  } = useFerryCall();
   const phase = callStatusToPhase(status);
   // "In progress" for every purpose on this screen — pulsing avatar, enabled
   // controls — covers both the ringing/"Calling…" phase and once connected.
@@ -192,19 +207,47 @@ export default function InCallScreen() {
 
   const scrollRef = useRef<ScrollView>(null);
   const captionsSheetRef = useRef<BottomSheetModal>(null);
+  // Guards against double-navigating back — both the manual end-call button
+  // and the status-watching effect below can each try to leave the screen
+  // for the same hangup (button press flips `status` too).
+  const leavingRef = useRef(false);
 
   useEffect(() => {
-    start();
-  }, [start]);
+    if (params.agentId) {
+      startCall(params.agentId, params.phone);
+    }
+  }, [startCall, params.agentId, params.phone]);
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [conversation, interimCaption]);
 
+  const leaveScreen = useCallback(() => {
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+    // Dismiss first and defer the nav-triggered unmount to the next frame —
+    // ending the call flips `status` (a re-render) in the same tick as
+    // `router.back()` otherwise, and Fabric can race that re-render against
+    // the navigator tearing down this screen (which still holds the
+    // BottomSheetModal's portal content), throwing "addViewAt: failed to
+    // insert view... already has a parent".
+    captionsSheetRef.current?.dismiss();
+    requestAnimationFrame(() => router.back());
+  }, []);
+
   const endCall = useCallback(() => {
     end();
-    router.back();
-  }, [end]);
+    leaveScreen();
+  }, [end, leaveScreen]);
+
+  // Covers a remotely-ended call (e.g. the other leg hanging up or a dial
+  // failure, delivered via CALL_ENDED_TAG) — not just the local end-call
+  // button, which already routes through `endCall` above.
+  useEffect(() => {
+    if (status === CallStatus.Ended) {
+      leaveScreen();
+    }
+  }, [status, leaveScreen]);
 
   const openCaptions = useCallback(() => {
     captionsSheetRef.current?.present();
@@ -248,7 +291,7 @@ export default function InCallScreen() {
             ringing={callInProgress}
           />
 
-          <CallStatusLine status={status} error={error} />
+          <CallStatusLine status={status} error={error} missingAgent={missingAgent} />
 
           <HandledByStrip agentName={agentName} agentMascot={params.agentMascot} />
         </View>

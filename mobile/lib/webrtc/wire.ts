@@ -8,10 +8,12 @@
 
 export const TRANSCRIPT_TAG = 0x02;
 export const TRANSLATION_TAG = 0x03;
+export const CALL_ENDED_TAG = 0x06;
 
 export enum WireMessageKind {
   Transcript = "transcript",
   Translation = "translation",
+  CallEnded = "call_ended",
   Unknown = "unknown",
 }
 
@@ -27,6 +29,7 @@ export type TranslationMessage = {
 export type WireMessage =
   | { kind: WireMessageKind.Transcript; transcript: TranscriptMessage }
   | { kind: WireMessageKind.Translation; translation: TranslationMessage }
+  | { kind: WireMessageKind.CallEnded }
   | { kind: WireMessageKind.Unknown; tag: number };
 
 /** Decodes one inbound data-channel binary message by its leading tag byte. */
@@ -51,6 +54,10 @@ export function decodeWireMessage(data: ArrayBuffer): WireMessage {
     const json = new TextDecoder().decode(rest);
     const parsed = JSON.parse(json) as { text: string };
     return { kind: WireMessageKind.Translation, translation: { text: parsed.text } };
+  }
+
+  if (tag === CALL_ENDED_TAG) {
+    return { kind: WireMessageKind.CallEnded };
   }
 
   return { kind: WireMessageKind.Unknown, tag: tag ?? -1 };

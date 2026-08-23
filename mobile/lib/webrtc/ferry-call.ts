@@ -7,7 +7,7 @@ import {
   mediaDevices,
 } from "react-native-webrtc";
 
-import { postOffer, SignalingError } from "./signaling";
+import { postCallOffer, postTryAgentOffer, SignalingError } from "./signaling";
 import {
   decodeWireMessage,
   WireMessageKind,
@@ -39,10 +39,12 @@ const ICE_GATHERING_TIMEOUT_MS = 5_000;
 
 /**
  * Owns one WebRTC call's imperative lifecycle end to end: mic capture,
- * signaling against ferry's /v1/try-agent/offer, the data channel (transcripts
- * only — audio is a real Opus track in both directions, negotiated by the
- * server), and teardown. Kept independent of React so it can't be caught up
- * in stale-closure/re-render bugs; `useFerryCall` is the thin React wrapper.
+ * signaling against ferry (via `startTryAgent`'s /v1/try-agent/offer or
+ * `startCall`'s /v1/call/start — see signaling.ts), the data channel
+ * (transcripts only — audio is a real Opus track in both directions,
+ * negotiated by the server), and teardown. Kept independent of React so it
+ * can't be caught up in stale-closure/re-render bugs; `useFerryCall` is the
+ * thin React wrapper.
  */
 export class FerryCall {
   private pc: RTCPeerConnection | null = null;
@@ -66,7 +68,21 @@ export class FerryCall {
     return this.status;
   }
 
-  async start(agentId: string): Promise<void> {
+  /** One-way try-agent demo — self-looped, no real PSTN leg. */
+  startTryAgent(agentId: string): Promise<void> {
+    return this.negotiate((sdp) => postTryAgentOffer(sdp, agentId));
+  }
+
+  /** A real two-leg call — ferry dials `toNumber` out over Twilio for the
+   * other leg. */
+  startCall(agentId: string, toNumber: string): Promise<void> {
+    return this.negotiate((sdp) => postCallOffer(sdp, agentId, toNumber));
+  }
+
+  /** Shared WebRTC negotiation (mic capture, peer connection, data channel,
+   * ICE gathering) for both call flows above — `signal` is the only thing
+   * that differs between them: which ferry endpoint the local offer goes to. */
+  private async negotiate(signal: (offerSdp: string) => Promise<string>): Promise<void> {
     if (this.status === CallStatus.Connecting || this.status === CallStatus.Connected) {
       return;
     }
@@ -164,6 +180,13 @@ export class FerryCall {
             this.events.onTranscript(message.transcript);
           } else if (message.kind === WireMessageKind.Translation) {
             this.events.onTranslation(message.translation);
+          } else if (message.kind === WireMessageKind.CallEnded) {
+            // Explicit "hang up now" from ferry — don't wait on
+            // onconnectionstatechange, which can lag well behind this (ICE
+            // disconnect detection isn't instant, and the other leg — e.g.
+            // Twilio rejecting a dial — can fail in well under a second).
+            this.teardown();
+            this.setStatus(CallStatus.Ended);
           }
         } catch (e) {
           console.warn("[ferry] failed to decode data-channel message:", e);
@@ -184,7 +207,7 @@ export class FerryCall {
         throw new Error("No local SDP after ICE gathering");
       }
 
-      const answerSdp = await postOffer(localDescription.sdp, agentId);
+      const answerSdp = await signal(localDescription.sdp);
       if (this.aborted) {
         this.teardown();
         return;
