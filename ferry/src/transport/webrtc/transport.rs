@@ -23,7 +23,7 @@ use webrtc::runtime::default_runtime;
 use crate::audio::opus::{OpusDecoder, OpusEncoder, SAMPLE_RATE};
 use crate::call::CallStatus;
 use crate::codec::frame_serializer::FrameSerializer;
-use crate::codec::transport::webrtc_dc::{CALL_RINGING_TAG, PEER_CONNECTED_TAG};
+use crate::codec::transport::webrtc_dc::{CALL_ENDED_TAG, CALL_RINGING_TAG, PEER_CONNECTED_TAG};
 use crate::frames::{Frame, FrameKind, RawAudioFrame};
 use crate::transport::base::BaseTransport;
 use crate::transport::pacing::FramePacer;
@@ -362,10 +362,61 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
     /// either side closes or the pipeline is torn down — plus the Opus
     /// encode/decode plumbing for the audio track in both directions.
     pub async fn run(mut self) {
-        let Ok(data_channel) = (&mut self.data_channel_rx).await else {
-            tracing::warn!("webrtc: no data channel opened, dropping connection");
-            let _ = self.peer_connection.close().await;
-            return;
+        // Raced against `status_rx`, not just awaited on its own — the other
+        // leg (e.g. Twilio) can fail well before ICE/data-channel setup with
+        // the browser finishes (a dial rejection is near-instant; that
+        // handshake isn't). Without this, a status change to `Ended` sits
+        // unnoticed until the data channel happens to open (if it ever
+        // does), leaving this connection — and the pipeline tasks whose
+        // teardown depends on it eventually returning — hanging indefinitely.
+        let data_channel = tokio::select! {
+            result = &mut self.data_channel_rx => {
+                match result {
+                    Ok(dc) => dc,
+                    Err(_) => {
+                        tracing::warn!("webrtc: no data channel opened, dropping connection");
+                        let _ = self.peer_connection.close().await;
+                        return;
+                    }
+                }
+            }
+            _ = async {
+                let rx = self.status_rx.as_mut().expect("guarded by `if` below");
+                loop {
+                    if rx.changed().await.is_err() {
+                        return;
+                    }
+                    if matches!(*rx.borrow(), CallStatus::Ended(_)) {
+                        return;
+                    }
+                }
+            }, if self.status_rx.is_some() => {
+                // The data channel may still be mid-handshake (ICE/DTLS/SCTP)
+                // when the other leg fails fast — e.g. Twilio can reject a
+                // dial in well under a second, faster than a LAN peer's data
+                // channel finishes opening. Give it a short grace period to
+                // arrive so CALL_ENDED_TAG can still be delivered; without
+                // this, the hangup signal is silently dropped and the client
+                // is left watching a live call timer until its own, much
+                // slower, ICE-failure detection eventually notices.
+                tracing::info!(
+                    "webrtc: call ended before data channel opened, waiting briefly to deliver hangup signal"
+                );
+                if let Ok(Ok(dc)) = tokio::time::timeout(
+                    std::time::Duration::from_secs(3),
+                    &mut self.data_channel_rx,
+                )
+                .await
+                {
+                    let _ = dc.send(BytesMut::from(&[CALL_ENDED_TAG][..])).await;
+                    // `send` only queues the message — closing the peer
+                    // connection right after can tear down the SCTP
+                    // association before it's actually flushed to the wire.
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                }
+                let _ = self.peer_connection.close().await;
+                return;
+            }
         };
 
         loop {
@@ -393,6 +444,16 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                     match status {
                         CallStatus::Ended(_) => {
                             tracing::info!("webrtc: call ended (other leg), hanging up");
+                            // Best-effort — we're closing either way, and the
+                            // client's own connection-state teardown is the
+                            // fallback if this send fails or never arrives.
+                            let _ = data_channel
+                                .send(BytesMut::from(&[CALL_ENDED_TAG][..]))
+                                .await;
+                            // Same flush concern as the early-exit branch
+                            // above — `run`'s cleanup closes the peer
+                            // connection right after this loop breaks.
+                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                             break;
                         }
                         // The other leg (e.g. Twilio) just answered — tell

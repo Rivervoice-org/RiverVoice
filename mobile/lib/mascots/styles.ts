@@ -16,6 +16,11 @@ export function mascotRef(style: MascotStyleId, seed: string) {
   return style === DEFAULT_STYLE ? seed : `${style}:${seed}`;
 }
 
+/** What a new agent gets before anyone picks a face — MascotPicker falls
+ * back to this visually, so form defaults use the same ref rather than
+ * leaving the field empty while the UI already shows it as filled in. */
+export const DEFAULT_MASCOT_REF = mascotRef(DEFAULT_STYLE, "new-agent");
+
 export const MASCOT_STYLE_IDS: MascotStyleId[] = ["notionists", "lorelei"];
 
 /** Annotated so the per-style literal types widen to one shape at the call site. */

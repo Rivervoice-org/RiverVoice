@@ -13,6 +13,7 @@ import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
 import {
+  DEFAULT_MASCOT_REF,
   MASCOT_STYLE_IDS,
   SEEDS,
   avatarUrl,
@@ -31,8 +32,6 @@ function faceRefs(style: MascotStyleId) {
 function warmFaces(style: MascotStyleId) {
   for (const ref of faceRefs(style)) Image.prefetch(avatarUrl(ref, FACE_SIZE));
 }
-
-const DEFAULT_SEED = "new-agent";
 
 interface MascotPickerProps {
   /** A mascot ref ("style:seed"), or undefined for the default face. */
@@ -81,7 +80,7 @@ export function MascotPicker({ value, onSelect, size = 96 }: MascotPickerProps) 
           className="relative active:opacity-80"
           hitSlop={8}
         >
-          <Mascot ref={value ?? mascotRef("notionists", DEFAULT_SEED)} size={size} />
+          <Mascot ref={value ?? DEFAULT_MASCOT_REF} size={size} />
           <View className="absolute right-0 bottom-0 h-8 w-8 items-center justify-center rounded-full border-2 border-canvas bg-foreground">
             <Pencil size={13} strokeWidth={2} color={colors.onInk} />
           </View>

@@ -10,6 +10,7 @@ export function startCallWith(
     params: {
       name: contact.name ?? "",
       phone: contact.phone,
+      agentId: agent.id,
       agentName: agent.name,
       agentMascot: agent.mascot ?? "",
     },

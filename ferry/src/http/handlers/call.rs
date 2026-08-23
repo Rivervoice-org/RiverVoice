@@ -31,12 +31,32 @@ pub struct WebrtcOfferRequest {
     pub offer_sdp: String,
     #[validate(length(min = 1, message = "agent_id is required"))]
     pub agent_id: String,
+    #[validate(length(min = 1, message = "to_number is required"))]
+    pub to_number: String,
 }
 
 #[derive(Serialize)]
 pub struct WebrtcOfferResponse {
     pub answer_sdp: String,
     pub call_id: String,
+}
+
+/// Normalizes a caller-supplied number to E.164 for Twilio, which requires
+/// it exactly — `services/twilio/client.rs` passes `to` straight through
+/// with no formatting of its own. India-only for now: the core number must
+/// be exactly 10 digits, either bare ("9491913651"), already prefixed
+/// ("+919491913651"), or prefixed with a space before the digits
+/// ("+91 9491913651") — whitespace is stripped before checking either way,
+/// so all three collapse to the same check.
+fn normalize_to_number(raw: &str) -> Result<String, &'static str> {
+    let compact: String = raw.chars().filter(|c| !c.is_whitespace()).collect();
+    let digits = compact.strip_prefix("+91").unwrap_or(compact.as_str());
+
+    if digits.len() != 10 || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return Err("to_number must be a 10-digit number, optionally prefixed with +91");
+    }
+
+    Ok(format!("+91{digits}"))
 }
 
 /// The real two-leg call flow: A connects over WebRTC, we register the call,
@@ -59,6 +79,9 @@ pub async fn start_call(
 
     req.validate()
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    let to_number = normalize_to_number(&req.to_number)
+        .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, e))?;
 
     let agent_id = Uuid::parse_str(&req.agent_id)
         .map_err(|_| ApiResponse::fail(StatusCode::BAD_REQUEST, "invalid agent id"))?;
@@ -148,7 +171,7 @@ pub async fn start_call(
         );
     }
 
-    spawn_twilio_dial(app.clone(), call_id, handle.clone(), config);
+    spawn_twilio_dial(app.clone(), call_id, handle.clone(), config, to_number);
 
     Ok(ApiResponse::ok(
         StatusCode::OK,
@@ -172,6 +195,7 @@ fn spawn_twilio_dial(
     call_id: CallId,
     handle: Arc<CallHandle>,
     config: &'static Config,
+    to_number: String,
 ) {
     tokio::spawn(
         async move {
@@ -180,7 +204,7 @@ fn spawn_twilio_dial(
                 .call_twilio(
                     call_id,
                     &config.twilio_from_number,
-                    &config.twilio_to_number,
+                    &to_number,
                     &config.public_base_url,
                 )
                 .await
@@ -212,4 +236,85 @@ fn spawn_twilio_dial(
 
 fn observers() -> Vec<Arc<dyn FrameObserver>> {
     vec![Arc::new(LogObserver)]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bare_ten_digits_gets_prefixed() {
+        assert_eq!(
+            normalize_to_number("9491913651"),
+            Ok("+919491913651".to_string())
+        );
+    }
+
+    #[test]
+    fn already_prefixed_is_kept_as_is() {
+        assert_eq!(
+            normalize_to_number("+919491913651"),
+            Ok("+919491913651".to_string())
+        );
+    }
+
+    #[test]
+    fn prefix_with_a_space_before_the_digits() {
+        assert_eq!(
+            normalize_to_number("+91 9491913651"),
+            Ok("+919491913651".to_string())
+        );
+    }
+
+    #[test]
+    fn surrounding_whitespace_is_stripped() {
+        assert_eq!(
+            normalize_to_number("  9491913651  "),
+            Ok("+919491913651".to_string())
+        );
+    }
+
+    #[test]
+    fn whitespace_in_the_middle_of_bare_digits_is_stripped() {
+        assert_eq!(
+            normalize_to_number("949 191 3651"),
+            Ok("+919491913651".to_string())
+        );
+    }
+
+    #[test]
+    fn too_few_digits_is_rejected() {
+        assert!(normalize_to_number("94919136").is_err());
+    }
+
+    #[test]
+    fn too_many_digits_is_rejected() {
+        assert!(normalize_to_number("949191365112").is_err());
+    }
+
+    #[test]
+    fn twelve_digits_starting_with_91_but_no_plus_is_rejected() {
+        // Must not be confused with a real +91-prefixed number — "91" here
+        // is just the start of an (invalid, too-long) bare number, not a
+        // country code, since there's no `+`.
+        assert!(normalize_to_number("919491913651").is_err());
+    }
+
+    #[test]
+    fn non_digit_characters_are_rejected() {
+        assert!(normalize_to_number("94919abcde").is_err());
+    }
+
+    #[test]
+    fn empty_string_is_rejected() {
+        assert!(normalize_to_number("").is_err());
+    }
+
+    #[test]
+    fn wrong_country_code_prefix_is_rejected() {
+        // "+1" is a valid E.164 prefix in general, but this function is
+        // India-only for now — the leading "+1" just becomes part of an
+        // (invalid, too-long) digit run since it isn't stripped.
+        assert!(normalize_to_number("+19491913651").is_err());
+    }
 }

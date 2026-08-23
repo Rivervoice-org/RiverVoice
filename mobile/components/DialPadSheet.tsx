@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -7,7 +7,7 @@ import {
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from "@gorhom/bottom-sheet";
-import { Phone } from "lucide-react-native";
+import { Phone, Delete } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
@@ -35,18 +35,18 @@ const KEYS: { digit: string; letters?: string }[] = [
  * on press. A dial pad drawn as a table of touching cells read as broken —
  * this is the pattern the app already uses for "pick one of several".
  */
-function Key({
+const Key = memo(function Key({
   digit,
   letters,
   onPress,
 }: {
   digit: string;
   letters?: string;
-  onPress: () => void;
+  onPress: (digit: string) => void;
 }) {
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => onPress(digit)}
       className="h-16 w-16 items-center justify-center rounded-xl border border-border bg-card active:opacity-70"
     >
       <Text className="text-xl font-medium leading-none">{digit}</Text>
@@ -62,7 +62,7 @@ function Key({
       )}
     </Pressable>
   );
-}
+});
 
 /**
  * A dial pad that floats over the Call screen — built on @gorhom/bottom-sheet
@@ -148,15 +148,21 @@ export function DialPadSheet({
     [],
   );
 
-  function press(digit: string) {
+  // Stable references so <Key>'s memo actually skips re-rendering on every
+  // keystroke — inline arrow functions per key would defeat that.
+  const press = useCallback((digit: string) => {
     setDigits((d) => d + digit);
-  }
+  }, []);
 
-  function call() {
+  const backspace = useCallback(() => {
+    setDigits((d) => d.slice(0, -1));
+  }, []);
+
+  const call = useCallback(() => {
     if (!digits) return;
     onClose();
     requireAuth(() => pickAgentForCall({ phone: digits }));
-  }
+  }, [digits, onClose, requireAuth, pickAgentForCall]);
 
   return (
     <BottomSheetModal
@@ -172,8 +178,30 @@ export function DialPadSheet({
         style={{ paddingBottom: insets.bottom + 14 }}
         className="px-5 pt-1"
       >
+        {/* Number being dialed — fixed height so it never grows into the
+            keypad below and forces a resize animation mid-typing. */}
+        <View className="h-12 flex-row items-center justify-center px-8">
+          <Text
+            font="mono"
+            numberOfLines={1}
+            className="flex-1 text-center text-2xl font-medium"
+            style={digits ? undefined : { opacity: 0.35 }}
+          >
+            {digits || "Enter a number"}
+          </Text>
+          {digits ? (
+            <Pressable
+              onPress={backspace}
+              hitSlop={10}
+              className="absolute right-0 h-9 w-9 items-center justify-center rounded-full active:bg-secondary"
+            >
+              <Delete size={18} strokeWidth={1.75} color={colors.muted} />
+            </Pressable>
+          ) : null}
+        </View>
+
         {/* Keypad */}
-        <View className="items-center gap-2.5">
+        <View className="mt-3 items-center gap-2.5">
           {[0, 1, 2, 3].map((row) => (
             <View key={row} className="flex-row gap-2.5">
               {KEYS.slice(row * 3, row * 3 + 3).map((key) => (
@@ -181,7 +209,7 @@ export function DialPadSheet({
                   key={key.digit}
                   digit={key.digit}
                   letters={key.letters}
-                  onPress={() => press(key.digit)}
+                  onPress={press}
                 />
               ))}
             </View>
