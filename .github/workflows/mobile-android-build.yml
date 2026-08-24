@@ -46,7 +46,7 @@ jobs:
         run: npm ci
 
       # Generates the android/ project from app.json (expo-router,
-      # expo-dev-client, @mykin-ai/expo-audio-stream) — this repo
+      # expo-dev-client, @config-plugins/react-native-webrtc) — this repo
       # is a managed Expo project, so android/ doesn't exist until this runs.
       - name: Prebuild native Android project
         run: npx expo prebuild --platform android --non-interactive

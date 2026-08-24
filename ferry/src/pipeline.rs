@@ -69,7 +69,7 @@ fn to_sarvam_mode(mode: &agents::Mode) -> TranslateMode {
 /// Builds one direction of an STT->MT->TTS pipeline. Shared by the two-leg
 /// call flow (`http::handlers::call::start_call`, called twice — once per
 /// direction, via `reversed`) and the one-way try-agent demo
-/// (`http::handlers::try_agent::try_agent_ws`, called once).
+/// (`http::handlers::webrtc::webrtc_offer`, called once).
 ///
 /// `agent` supplies the source/target languages via its input/output
 /// language pair, plus MT gender/mode and the TTS voice — `reversed` picks

@@ -1,7 +1,7 @@
 # RiverVoice
 
 Voice agents that answer the phone in Indian languages. You describe an agent in
-a browser, give it a voice, and it takes calls — over WebSocket from the mobile app,
+a browser, give it a voice, and it takes calls — over WebRTC from the mobile app,
 or as a real phone call bridged through Twilio.
 
 Three services, two languages:
@@ -9,14 +9,8 @@ Three services, two languages:
 |            | what it does                                              | stack                |
 | ---------- | ---------------------------------------------------------- | --------------------- |
 | **web**    | the builder and dashboard                                   | Next.js, TypeScript   |
-| **ferry**  | the live call: WebSocket, Twilio, speech, translation, audio | Rust, axum, tokio   |
+| **ferry**  | the live call: WebRTC, Twilio, speech, translation, audio   | Rust, axum, tokio     |
 | **mobile** | the calling client — one of two things that talk to ferry   | Expo, React Native    |
-
-> **Known broken:** web's own try-agent/call preview (`web/src/lib/webrtc/`)
-> still POSTs to ferry's old `/v1/try-agent/offer` and `/v1/call/start`
-> WebRTC-signaling routes, which no longer exist — only mobile's transport
-> has been migrated to WebSocket so far. web's preview 404s until it's
-> migrated too.
 
 There used to be a fourth service (Go, Postgres) — accounts, agents,
 tools, everything that persisted. It's gone. web now runs on mock data
@@ -45,25 +39,24 @@ the next real backend work; nothing in this repo does it yet.
    browser ────────▶  web       :3000    Next.js — builder, dashboard
                                           (mock data, no backend yet)
 
-   mobile ──WebSocket─▶  ferry     :8085    Rust — STT, MT, TTS, call bridging
-   Twilio  ──PSTN─────▶
+   mobile ──WebRTC─▶  ferry     :8085    Rust — STT, MT, TTS, call bridging
+   Twilio  ──PSTN───▶
 ```
 
 web and ferry don't talk to each other in production use — web is a design-time
 tool for building an agent's config; ferry is the run-time engine that answers
-a call. The one place they're meant to meet is ferry's try-agent route, a
-one-way demo web's builder can open directly in the browser to preview an
-agent without going through mobile or Twilio at all — currently broken for
-web, see the callout above.
+a call. The one place they meet is ferry's `/v1/try-agent/offer` route, a
+one-way WebRTC demo web's builder can open directly in the browser to preview
+an agent without going through mobile or Twilio at all.
 
 A real, two-leg call, end to end:
 
 ```
-mobile places a call ──GET /v1/call/ws (upgrade)──▶ ferry
+mobile places a call ──POST /v1/call/start──▶ ferry
                                                  │
                           ┌──────────────────────┴──────────────────────┐
                           │                                              │
-               leg A: WebSocket (mobile)                       leg B: Twilio (PSTN)
+                 leg A: WebRTC (mobile)                       leg B: Twilio (PSTN)
                           │                                              │
                           └──────────two independent pipelines──────────┘
                                  pipeline a2b: STT(A) → MT → TTS(B)   → what B hears
@@ -72,7 +65,7 @@ mobile places a call ──GET /v1/call/ws (upgrade)──▶ ferry
 
 Twilio's leg connects back to ferry over its own Media Streams websocket
 (`GET /v1/twilio/ws/{call_id}`) and status webhook
-(`POST /v1/twilio/status/{call_id}`), correlated to the mobile leg by the
+(`POST /v1/twilio/status/{call_id}`), correlated to the WebRTC leg by the
 `call_id` ferry mints when the call starts. See [ferry](#ferry) for how the
 two pipelines get cross-wired.
 
@@ -103,7 +96,8 @@ cd mobile  && npm install && npx expo run:android   # or run:ios — needs a dev
 
 mobile needs `EXPO_PUBLIC_FERRY_URL` pointing at ferry — `http://127.0.0.1:8085`
 works from an emulator on the same machine; a physical device needs ferry's LAN
-IP so it can actually reach the WebSocket.
+IP, and `WEBRTC_BIND_IP` set to that same address so the media actually
+connects.
 
 ---
 
@@ -166,25 +160,25 @@ in a script that uploads an avatar. `mascots/parts.ts` is path data;
 
 Rust, axum, tokio. Holds a call's sockets open for its whole duration and runs
 the pipeline that turns what someone says into translated speech, frame by
-frame, in real time — for a WebSocket connection, a Twilio phone call, or both
-at once, bridged.
+frame, in real time — for a WebRTC connection, a Twilio phone call, or both at
+once, bridged.
 
 ```
 ferry/src/
   main.rs
-  config.rs           env vars — API keys, PUBLIC_BASE_URL
+  config.rs           env vars — API keys, PUBLIC_BASE_URL, WEBRTC_BIND_IP
   logging.rs           ColorEventFormatter — [call_id=... leg=...] prefixes, per-stage colors
   pricing.rs            per-vendor cost tables, for the billing/usage observers
   auth/                 session token verification (unused today — see router.rs)
   call/
     mod.rs                call_span(call_id, leg) — the tracing correlation helper
-    registry.rs           CallRegistry / CallHandle — correlates the mobile leg with
+    registry.rs           CallRegistry / CallHandle — correlates a WebRTC leg with
                            Twilio's later, otherwise-unrelated WS connection
   http/
     router.rs             axum Router, routes, CORS, request-id middleware
     handlers/
-      try_agent.rs           GET /v1/try-agent/ws — one-way demo, no registry
-      call.rs                GET /v1/call/ws — the real two-leg call
+      webrtc.rs              POST /v1/try-agent/offer — one-way demo, no registry
+      call.rs                POST /v1/call/start — the real two-leg call
       twilio.rs              GET /v1/twilio/ws/{id}, POST /v1/twilio/status/{id}
     state.rs
   frames.rs            Frame / FrameKind — the value every stage passes on
@@ -197,26 +191,27 @@ ferry/src/
     ws_client.rs            reconnecting websocket client shared by STT/TTS
   codec/                FrameSerializer impls — Frame ⇄ wire bytes, one per protocol
     frame_serializer.rs    the FrameSerializer trait
-    transport/               mobile_ws.rs, telephony/twilio.rs (mu-law, resampling)
+    transport/               webrtc_dc.rs, telephony/twilio.rs (mu-law, resampling)
     stt/, tts/                vendors' own wire framing (Deepgram JSON, Sarvam stream)
   transport/            holds a call's sockets open
     base.rs               BaseTransport<S: FrameSerializer>
     pacing.rs              FramePacer — steady wall-clock cadence, no bursts
-    websockets/             WebSocketClient — generic WS loop, used by both mobile and Twilio
+    webrtc/                WebRtcClient — SDP offer/answer, real Opus RTP track
+    websockets/             WebSocketClient — generic WS loop, used by Twilio
   observer/             read-only taps on the frame stream
     billing_observer.rs, usage_observer.rs, latency_observer.rs, log_observer.rs
-  audio/                 resampling (rubato, sinc — not naive decimation), VAD
+  audio/                 opus, resampling (rubato, sinc — not naive decimation), VAD
 ```
 
-There is no `db/` — ferry doesn't persist anything. `GET /v1/call/ws`
-takes the call's configuration as query params; nothing is looked up by agent
+There is no `db/` — ferry doesn't persist anything. `POST /v1/call/start`
+takes the call's configuration in the request; nothing is looked up by agent
 id. See [ferry/AGENTS.md](ferry/AGENTS.md) for the full internals doc this
 section summarizes.
 
 ```
 GET  /health
-GET  /v1/try-agent/ws             WebSocket upgrade — one-way demo
-GET  /v1/call/ws                  WebSocket upgrade — starts a real two-leg call (mobile + Twilio)
+POST /v1/try-agent/offer          SDP offer in, SDP answer out — one-way demo
+POST /v1/call/start               starts a real two-leg call (WebRTC + Twilio)
 GET  /v1/twilio/ws/{call_id}      Twilio's Media Streams websocket
 POST /v1/twilio/status/{call_id}  Twilio's call-status webhook
 ```
@@ -249,16 +244,16 @@ pipeline_b2a: STT(B's lang) → MT → TTS(A's lang)   // what A hears
 
 `FrameIo::into_parts()` splits each pipeline into raw `(Receiver, Sender)`
 halves, and those halves are paired into the *other* leg's transport at
-construction time — A's WebSocket transport reads `b2a`'s output and feeds
+construction time — A's WebRTC transport reads `b2a`'s output and feeds
 `a2b`'s input; Twilio's transport is the mirror. Nothing is moved "in flight"
 later; the wiring at construction is the whole mechanism.
 
 `CallRegistry`/`CallHandle` (`call/registry.rs`) is what lets Twilio's later,
 otherwise-unrelated websocket connection and status webhook find the call A
 already started — both only carry the `call_id` embedded in the URLs ferry
-handed Twilio. `/v1/try-agent/ws` deliberately skips all of this: one
+handed Twilio. `/v1/try-agent/offer` deliberately skips all of this: one
 pipeline, self-looped, no registry, no Twilio — a way to hear an agent from a
-browser tab (once web is migrated — see the callout at the top).
+browser tab.
 
 ### Providers are traits, codec is the wire format — two different jobs
 
@@ -276,7 +271,7 @@ rather than just aliasing it.
 
 ### Why Rust
 
-A call is a WebSocket connection or a Twilio phone call held open for minutes,
+A call is a WebRTC connection or a Twilio phone call held open for minutes,
 with a second socket to the STT provider and a third to TTS, per leg. The work
 is IO-bound with hard latency limits and no room for a GC pause during
 someone's sentence.
@@ -302,22 +297,18 @@ mobile/
   components/
     ui/                      rn-primitives wrappers — button, dialog, select, toast
   lib/
-    ws/
-      ferry-call.ts            WebSocket + mic capture/playback lifecycle for one call
+    webrtc/
+      signaling.ts            POSTs to ferry (/v1/call/start or /v1/try-agent/offer)
+      ferry-call.ts            RTCPeerConnection lifecycle for one call
       wire.ts                  the mobile-side frame wire format
-      base64.ts                 hand-rolled base64 <-> bytes (no atob/Buffer dependency)
     mascots/                 shared with web's avatar system, kept in sync by hand
     theme.tsx
   providers/, state/session/  auth session — mirrors web's session handling
 ```
 
-**mobile calls ferry directly** — web only does for its try-agent preview
-(currently broken, see the callout at the top). `lib/ws/ferry-call.ts` opens a
-`WebSocket` straight to ferry's `/v1/try-agent/ws` or `/v1/call/ws`, carrying
-the JWT via RN's WebSocket `options.headers` (a RN-only extension the browser
-WebSocket API doesn't have) instead of an HTTP `Authorization` header on a
-separate signaling request — there's no SDP offer/answer step at all, since
-this is a plain client-to-server socket, not a peer connection needing ICE.
+**mobile calls ferry directly** — web only does for its try-agent preview.
+`lib/webrtc/signaling.ts` posts to ferry, gets back an SDP answer, and
+`ferry-call.ts` drives the `RTCPeerConnection` from there:
 
 ```ts
 const DEFAULT_FERRY_URL = "http://127.0.0.1:8085";
@@ -325,24 +316,25 @@ process.env["EXPO_PUBLIC_FERRY_URL"] ?? DEFAULT_FERRY_URL;
 ```
 
 The default only works from an emulator on the same machine as ferry. A
-physical device needs `EXPO_PUBLIC_FERRY_URL` set to ferry's LAN address so it
-can reach the WebSocket at all.
+physical device needs `EXPO_PUBLIC_FERRY_URL` set to ferry's LAN address, and
+ferry's own `WEBRTC_BIND_IP` set to that same address — otherwise the SDP
+negotiates fine and no audio ever arrives.
 
-**`lib/ws/wire.ts` no longer mirrors web's `lib/webrtc/wire.ts`** — they're not
-even the same kind of protocol anymore. web's copy is WebRTC data-channel tags
-for transcript/translation/control only (audio rides a separate Opus RTP
-track); mobile's covers audio too (tag `0x00`, raw PCM16), since everything
-now travels one WebSocket. Don't assume the two are interchangeable, or that
-fixing one keeps the other in sync — they're two genuinely different wire
-formats today, not two copies of one format.
+**`lib/webrtc/wire.ts` mirrors web's `lib/webrtc/wire.ts` by hand**, the same
+way `components/ui/` and `lib/mascots/` mirror web's — there's no shared
+package between the two clients, so a change to ferry's data-channel tag
+bytes needs the same edit made twice. They are currently out of sync: web's
+copy has two tag kinds (`PeerConnected`, `Ringing`) mobile's doesn't yet have.
+Check both before assuming ferry's wire format is fully documented in either
+one.
 
 ```bash
 cd mobile && npm install
 npx expo run:android   # or run:ios
 ```
 
-Native modules (`@mykin-ai/expo-audio-stream`, `react-native-incall-manager`)
-mean Expo Go can't run this app — use `run:android`/`run:ios` to build a dev
+Native modules (`react-native-webrtc`, `react-native-incall-manager`) mean
+Expo Go can't run this app — use `run:android`/`run:ios` to build a dev
 client, or `expo-dev-client` if one's already installed on the device.
 
 ---

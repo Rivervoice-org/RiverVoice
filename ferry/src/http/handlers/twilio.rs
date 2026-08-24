@@ -41,7 +41,7 @@ pub async fn twilio_ws(
         async move {
             client.on_connect(socket).await;
             // B's leg ended (Twilio closed the stream, callee hung up, ...) —
-            // tear down A's leg too: A's WebSocketClient is watching this same
+            // tear down A's leg too: A's WebRtcClient is watching this same
             // status and will hang up once it sees `Ended`.
             if !handle.is_ended() {
                 handle.set_status(CallStatus::Ended(EndReason::HungUpByB));
