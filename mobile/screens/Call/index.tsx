@@ -7,9 +7,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Phone, Users } from "lucide-react-native";
-import { Mascot } from "@/components/Mascot";
 import { SearchInput } from "@/components/SearchInput";
 import { CallRow } from "@/components/CallRow";
+import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { DialFab } from "@/components/DialFab";
 import { Rise } from "@/components/ui/rise";
 import { Spinner } from "@/components/ui/spinner";
@@ -56,7 +56,7 @@ const ContactRow = memo(function ContactRow({
   return (
     <View className="px-5">
       <CallRow
-        avatar={<Mascot seed={contact.name} size={32} />}
+        avatar={<InitialsAvatar name={contact.name} size={32} />}
         title={contact.name}
         subtitle={
           <Text

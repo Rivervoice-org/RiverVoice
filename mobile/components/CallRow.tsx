@@ -7,7 +7,7 @@ import {
   PhoneMissed,
   ChevronRight,
 } from "lucide-react-native";
-import { Mascot } from "./Mascot";
+import { InitialsAvatar } from "./InitialsAvatar";
 import { Text } from "./ui/text";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
@@ -86,8 +86,8 @@ export function CallListItem({
   return (
     <CallRow
       avatar={
-        call.agent ? (
-          <Mascot seed={call.agent} size={32} />
+        call.name ? (
+          <InitialsAvatar name={call.name} size={32} />
         ) : (
           <CallOutcomeAvatar outcome={call.outcome} />
         )

@@ -20,6 +20,7 @@ import {
 } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { CallListItem } from "@/components/CallRow";
+import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -143,10 +144,8 @@ export default function CallDetailScreen() {
         {/* Hero card */}
         <Rise index={0}>
           <Card className="mx-5 items-center p-6">
-            {params.name || params.agent ? (
-              <View className="h-16 w-16 overflow-hidden rounded-full bg-secondary">
-                <Mascot seed={params.name || params.agent} size={64} />
-              </View>
+            {params.name ? (
+              <InitialsAvatar name={params.name} size={64} />
             ) : (
               <View className="h-16 w-16 items-center justify-center rounded-full bg-secondary">
                 <Phone size={24} strokeWidth={1.75} color={colors.muted} />
