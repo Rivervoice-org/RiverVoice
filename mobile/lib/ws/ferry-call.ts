@@ -185,7 +185,15 @@ export class FerryCall {
       };
 
       ws.onclose = () => {
-        if (this.aborted || this.status === CallStatus.Ended) {
+        // `Error` included alongside `Ended`: `ws.onerror` sets `Error` and
+        // closes the socket itself (without setting `aborted`), so this
+        // fires right after — without this check it would overwrite that
+        // `Error` status with `Ended`.
+        if (
+          this.aborted ||
+          this.status === CallStatus.Ended ||
+          this.status === CallStatus.Error
+        ) {
           return;
         }
         void this.teardown();
@@ -229,6 +237,18 @@ export class FerryCall {
       this.micSubscription = subscription ?? null;
     } catch (e) {
       console.warn("[ferry] failed to start microphone:", e);
+      this.micActive = false;
+      this.micSubscription = null;
+      if (this.aborted) {
+        return;
+      }
+      // Set before teardown() closes the socket — `ws.onclose`'s guard
+      // only checks `aborted`/`Ended`, so without this it would fire after
+      // and overwrite the `Error` status set below back to `Ended`.
+      this.aborted = true;
+      await this.teardown();
+      this.setStatus(CallStatus.Error);
+      this.events.onError(e instanceof Error ? e.message : "Failed to start the microphone");
     }
   }
 

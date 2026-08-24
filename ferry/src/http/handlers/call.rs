@@ -125,7 +125,14 @@ pub async fn start_call(
     let app_for_close = app.clone();
     let handle_for_close = handle.clone();
 
+    // Signaled the moment axum's upgrade actually succeeds (see the
+    // `on_upgrade` closure below) — raced against `CONNECT_TIMEOUT` by the
+    // watchdog spawned further down, which is the only thing that can
+    // detect "leg A never connected at all" and still needs to run.
+    let (connected_tx, connected_rx) = tokio::sync::oneshot::channel::<()>();
+
     let response = ws.on_upgrade(move |socket| {
+        let _ = connected_tx.send(());
         async move {
             client.on_connect(socket).await;
             // A's leg ended (hangup, socket error, ...) — tear down B's leg
@@ -143,9 +150,56 @@ pub async fn start_call(
         .instrument(span)
     });
 
-    spawn_twilio_dial(app, call_id, handle, config, to_number);
+    spawn_twilio_dial(app.clone(), call_id, handle.clone(), config, to_number);
+    spawn_connect_watchdog(app, call_id, handle, connected_rx);
 
     Ok(response)
+}
+
+/// If leg A's client disconnects before the WebSocket upgrade actually
+/// completes, axum's `on_upgrade` never invokes our callback at all (see
+/// its source: a failed `hyper::upgrade::on` just logs and returns) — none
+/// of that closure's cleanup runs, leaking the registry entry and, if
+/// Twilio has already answered, leaving a billable PSTN call nobody ever
+/// hangs up. This is the only place left that can catch that: if
+/// `connected_rx` hasn't fired within `CONNECT_TIMEOUT`, leg A is never
+/// coming, so tear the call down the same way the `on_upgrade` closure
+/// would have. Reusing `is_ended()`/`remove()` (idempotent) means a late,
+/// losing race against the real connection can't double up in a harmful
+/// way — worst case is one extra best-effort `hangup_call` call.
+const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
+fn spawn_connect_watchdog(
+    app: AppState,
+    call_id: CallId,
+    handle: Arc<CallHandle>,
+    connected_rx: tokio::sync::oneshot::Receiver<()>,
+) {
+    tokio::spawn(
+        async move {
+            if tokio::time::timeout(CONNECT_TIMEOUT, connected_rx)
+                .await
+                .is_ok()
+            {
+                // Leg A connected in time — its own `on_upgrade` closure
+                // owns cleanup from here.
+                return;
+            }
+            tracing::warn!("call {call_id}: leg A never connected, tearing down");
+            if !handle.is_ended() {
+                handle.set_status(CallStatus::Ended(EndReason::Failed));
+            }
+            if let Some(sid) = handle.twilio_call_sid.lock().await.clone() {
+                if let Err(e) = app.twilio.hangup_call(&sid).await {
+                    tracing::warn!(
+                        "twilio: failed to hang up {sid} after leg A never connected: {e}"
+                    );
+                }
+            }
+            app.call_registry.remove(&call_id);
+        }
+        .instrument(call_span(call_id, "connect-watchdog")),
+    );
 }
 
 /// Fire-and-forget: the outcome (answered / busy / no-answer / failed)

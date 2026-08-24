@@ -159,7 +159,21 @@ impl FrameSerializer for MobileWsSerializer {
 
         match tag {
             AUDIO_TAG => {
-                let num_frames = payload.len() as u32 / 2 / u32::from(self.num_channels);
+                // `payload` is client-controlled network input, not
+                // trustworthy by construction — a partial trailing PCM16
+                // sample wouldn't crash anything today (`num_frames` has no
+                // reader), but the bytes themselves go on to Deepgram as
+                // one continuous raw PCM stream, where an odd byte would
+                // misalign every sample after it for the rest of the call:
+                // silent, structured corruption, not an error.
+                let bytes_per_frame = 2 * usize::from(self.num_channels);
+                if bytes_per_frame == 0 || payload.len() % bytes_per_frame != 0 {
+                    anyhow::bail!(
+                        "mobile_ws: audio payload ({} bytes) is not a whole number of PCM16 frames",
+                        payload.len()
+                    );
+                }
+                let num_frames = (payload.len() / bytes_per_frame) as u32;
                 Ok(Some(Frame::new(FrameKind::RawAudio(RawAudioFrame {
                     audio: payload.to_vec(),
                     sample_rate: self.sample_rate,

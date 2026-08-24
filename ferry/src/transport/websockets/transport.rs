@@ -83,6 +83,21 @@ impl<S: FrameSerializer<Message = Message> + 'static> WebSocketClient<S> {
             };
 
             match event {
+                // Axum answers an incoming `Ping` with a `Pong` on the wire
+                // automatically, but — unlike that auto-reply — it does not
+                // filter `Ping`/`Pong`/`Close` out of this stream; each
+                // `FrameSerializer::deserialize` impl only understands
+                // audio/text data, so without this they'd hit that `other
+                // => bail!` branch and get logged as a spurious
+                // "dropping undeserializable message" warning on every
+                // keepalive ping. `Close` gets its own arm so the loop
+                // exits the moment the peer signals it's done, rather than
+                // waiting for the stream to separately end afterward.
+                Event::Incoming(Some(Ok(Message::Ping(_) | Message::Pong(_)))) => {}
+                Event::Incoming(Some(Ok(Message::Close(_)))) => {
+                    tracing::info!("ws: peer sent a close frame");
+                    break;
+                }
                 Event::Incoming(Some(Ok(msg))) => {
                     if !self.base.push_wire_message(msg).await {
                         tracing::info!("ws: loop exiting, pipeline gone");
@@ -131,8 +146,14 @@ impl<S: FrameSerializer<Message = Message> + 'static> WebSocketClient<S> {
 
                 // `sender` dropped without the call ever reaching `Ended`
                 // cleanly — nothing more to watch, but not itself a reason
-                // to hang up (the other branches still govern that).
-                Event::StatusChanged(Err(())) => {}
+                // to hang up (the other branches still govern that). Clears
+                // `status_rx` to disarm the branch's `if` guard: a dropped
+                // `watch::Sender` makes `changed()` return `Err` immediately
+                // on every call, so leaving it armed would spin this branch
+                // in a busy loop for the rest of the connection.
+                Event::StatusChanged(Err(())) => {
+                    self.status_rx = None;
+                }
 
                 Event::StatusChanged(Ok(())) => {
                     // Copied out (`CallStatus` is `Copy`) so the borrow on
