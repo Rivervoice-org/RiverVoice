@@ -8,8 +8,9 @@ import {
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from "@gorhom/bottom-sheet";
-import { ChevronDown, PhoneOff, Mic, MicOff, Volume2, VolumeX, Captions } from "lucide-react-native";
+import { ChevronDown, PhoneOff, Phone, Mic, MicOff, Volume2, VolumeX, Captions } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
+import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { PulsingRing } from "@/components/PulsingRing";
 import { LiveTranscript } from "@/components/LiveTranscript";
 import { Text } from "@/components/ui/text";
@@ -73,19 +74,22 @@ const CallStatusLine = memo(function CallStatusLine({
 const CallerIdentity = memo(function CallerIdentity({
   contactName,
   phone,
-  mascot,
   ringing,
 }: {
   contactName?: string;
   phone: string;
-  mascot?: string;
   ringing: boolean;
 }) {
+  const colors = useThemeColors();
   return (
     <>
       <PulsingRing active={ringing}>
         <View className="h-36 w-36 items-center justify-center rounded-full bg-secondary">
-          <Mascot ref={mascot || undefined} seed={contactName ?? phone} size={128} />
+          {contactName ? (
+            <InitialsAvatar name={contactName} size={128} />
+          ) : (
+            <Phone size={48} strokeWidth={1.75} color={colors.muted} />
+          )}
         </View>
       </PulsingRing>
 
@@ -160,7 +164,6 @@ export default function InCallScreen() {
   const params = useLocalSearchParams<{
     name?: string;
     phone: string;
-    mascot?: string;
     agentId?: string;
     agentName: string;
     agentMascot?: string;
@@ -267,7 +270,6 @@ export default function InCallScreen() {
           <CallerIdentity
             contactName={contactName}
             phone={params.phone}
-            mascot={params.mascot}
             ringing={callInProgress}
           />
 
