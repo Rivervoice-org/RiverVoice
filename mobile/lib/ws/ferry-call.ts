@@ -258,7 +258,18 @@ export class FerryCall {
           this.ws?.send(encodeAudioMessage(pcm).buffer);
         },
       );
-      await recorder.start();
+      const result = await recorder.start();
+      if (result.status === "error") {
+        throw new Error(result.message);
+      }
+      // A hangup can land while `start()` is still in flight — `teardown()`
+      // would have already run against `this.recorder` still `null` at
+      // that point, so without this the now-live recorder would never get
+      // `.stop()`'d and the mic would keep recording after the call ended.
+      if (this.aborted) {
+        await recorder.stop();
+        return;
+      }
       this.recorder = recorder;
     } catch (e) {
       console.warn("[ferry] failed to start microphone:", e);
