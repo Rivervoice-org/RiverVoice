@@ -4,11 +4,19 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 
+use crate::call::CallStatus;
 use crate::codec::frame_serializer::FrameSerializer;
+use crate::codec::transport::mobile_ws::{CALL_ENDED_TAG, CALL_RINGING_TAG, PEER_CONNECTED_TAG};
 use crate::transport::base::BaseTransport;
 
 pub struct WebSocketClient<S: FrameSerializer<Message = Message>> {
     base: BaseTransport<S>,
+    /// Fires when the call's `CallRegistry` entry changes — e.g. Twilio
+    /// answering/ringing/ending on the other leg — so this side can tell the
+    /// client via a bare control byte instead of leaving it to infer status
+    /// from the socket eventually closing. `None` for legs with no other
+    /// side to watch (Twilio's own leg, the one-way try-agent demo).
+    status_rx: Option<tokio::sync::watch::Receiver<CallStatus>>,
 }
 
 enum Event {
@@ -18,11 +26,27 @@ enum Event {
     /// ever fires when the serializer opted into pacing; otherwise this
     /// branch's `if` guard keeps it from being polled at all.
     Paced,
+    /// `status_rx` changed. `Ok` carries the new status; `Err` means the
+    /// sender was dropped (the registry entry is gone) without the call
+    /// ever reaching `Ended` cleanly.
+    StatusChanged(Result<(), ()>),
 }
 
 impl<S: FrameSerializer<Message = Message> + 'static> WebSocketClient<S> {
     pub fn new(base: BaseTransport<S>) -> Self {
-        Self { base }
+        Self {
+            base,
+            status_rx: None,
+        }
+    }
+
+    /// Like [`new`](Self::new), but also watches `status_rx` for the
+    /// duration of the connection — see the field doc on `status_rx`.
+    pub fn with_status(
+        base: BaseTransport<S>,
+        status_rx: Option<tokio::sync::watch::Receiver<CallStatus>>,
+    ) -> Self {
+        Self { base, status_rx }
     }
 
     pub fn connect(self, ws: WebSocketUpgrade) -> Response {
@@ -53,6 +77,9 @@ impl<S: FrameSerializer<Message = Message> + 'static> WebSocketClient<S> {
                 msg = wire_in.next() => Event::Incoming(msg),
                 msg = self.base.next_wire_message() => Event::Outgoing(msg),
                 _ = tokio::time::sleep_until(pace_deadline), if pace_interval.is_some() => Event::Paced,
+                changed = async {
+                    self.status_rx.as_mut().unwrap().changed().await
+                }, if self.status_rx.is_some() => Event::StatusChanged(changed.map_err(|_| ())),
             };
 
             match event {
@@ -98,6 +125,33 @@ impl<S: FrameSerializer<Message = Message> + 'static> WebSocketClient<S> {
                         && wire_out.send(msg).await.is_err()
                     {
                         tracing::warn!("ws: failed to send paced wire message");
+                        break;
+                    }
+                }
+
+                // `sender` dropped without the call ever reaching `Ended`
+                // cleanly — nothing more to watch, but not itself a reason
+                // to hang up (the other branches still govern that).
+                Event::StatusChanged(Err(())) => {}
+
+                Event::StatusChanged(Ok(())) => {
+                    // Copied out (`CallStatus` is `Copy`) so the borrow on
+                    // `status_rx` drops before the `.await` below.
+                    let status = *self.status_rx.as_ref().unwrap().borrow();
+                    let tag = match status {
+                        CallStatus::Ended(_) => Some(CALL_ENDED_TAG),
+                        CallStatus::Connected => Some(PEER_CONNECTED_TAG),
+                        CallStatus::Ringing => Some(CALL_RINGING_TAG),
+                        CallStatus::Dialing => None,
+                    };
+                    if let Some(tag) = tag {
+                        // Best-effort — if the call is ending either way,
+                        // the client's own socket-close detection is the
+                        // fallback for a failed send.
+                        let _ = wire_out.send(Message::Binary(vec![tag].into())).await;
+                    }
+                    if matches!(status, CallStatus::Ended(_)) {
+                        tracing::info!("ws: call ended (other leg), hanging up");
                         break;
                     }
                 }

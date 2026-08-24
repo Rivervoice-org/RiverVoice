@@ -8,12 +8,12 @@ import { Speaker, type ConversationLine } from "@/hooks/use-ferry-call";
 
 /**
  * Live conversation: your captioned speech ("caller") interleaved with
- * ferry's translated text ("agent") — both come off the same data channel
+ * ferry's translated text ("agent") — both come off the same WebSocket
  * from ferry/src/stages/stt.rs (Transcription frames) and
  * ferry/src/stages/tts.rs (MtText frames), already in true chronological
  * order by the time they reach `conversation`. Only the translated *text*
- * is captioned here; the agent's actual voice comes back separately over
- * the WebRTC audio track, not through this data channel.
+ * is captioned here; the agent's actual voice comes back as tagged audio
+ * messages on the same socket, decoded separately in `lib/ws/ferry-call.ts`.
  *
  * Memoized so a per-second duration tick elsewhere never re-renders the
  * bubbles — this only changes when a new line arrives. Distinct from

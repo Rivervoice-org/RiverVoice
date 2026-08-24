@@ -1,8 +1,8 @@
 /**
  * Talking to ferry directly (mobile calls ferry directly, no web
- * intermediary — see lib/webrtc/signaling.ts for the same pattern applied
- * to the WebRTC offer/answer exchange, which has its own error type and
- * doesn't go through this client).
+ * intermediary — see lib/ws/ferry-call.ts for the WebSocket call
+ * connection, which has its own error type and doesn't go through this
+ * client).
  */
 
 import type { ApiResponse } from "@/lib/api-types";

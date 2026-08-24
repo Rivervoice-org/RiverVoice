@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CallStatus, FerryCall } from "@/lib/webrtc/ferry-call";
+import { CallStatus, FerryCall } from "@/lib/ws/ferry-call";
 
 export enum Speaker {
   Caller = "caller",
@@ -9,15 +9,15 @@ export enum Speaker {
 export type ConversationLine = { speaker: Speaker; text: string };
 
 /**
- * React wrapper around `FerryCall` — a real WebRTC call against ferry, via
- * either `startTryAgent` (the one-way /v1/try-agent/offer demo) or
- * `startCall` (a real two-leg /v1/call/start PSTN call). The call object
+ * React wrapper around `FerryCall` — a real WebSocket call against ferry,
+ * via either `startTryAgent` (the one-way /v1/try-agent/ws demo) or
+ * `startCall` (a real two-leg /v1/call/ws PSTN call). The call object
  * itself lives in a ref so it survives re-renders untouched; this hook only
  * mirrors its events into state and guarantees teardown on unmount.
  *
  * Caller captions and agent translations arrive as two separate wire message
- * kinds but in one true chronological order (both come off the same data
- * channel, in the order ferry sent them) — merged into a single
+ * kinds but in one true chronological order (both come off the same
+ * socket, in the order ferry sent them) — merged into a single
  * `conversation` log here rather than two independent arrays, so the UI
  * doesn't have to guess how to interleave them after the fact.
  */
