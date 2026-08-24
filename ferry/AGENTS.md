@@ -2,7 +2,7 @@
 
 ferry is the Rust/axum voice-translation calling backend. It builds
 STT→MT→TTS pipelines and bridges them to real-time audio transports —
-either a browser/mobile WebRTC connection or a real phone call over Twilio.
+either a mobile WebSocket connection or a real phone call over Twilio.
 This file is what a change needs to respect; the traps below already cost
 an afternoon each.
 
@@ -14,10 +14,11 @@ an afternoon each.
   target_lang, ...)` builds one STT→MT→TTS chain for one language
   direction. A real two-leg call builds **two** of them (`a2b`, `b2a`),
   cross-wired — see "Two-leg calls" below.
-- **`FrameSerializer::serialize` is not always how a frame goes out.**
-  WebRTC's `TtsAudio` bypasses it entirely (real RTP track); Twilio's
-  `TtsAudio` always buffers and bails, relying on `drain_paced` instead. Read
-  the trait doc before assuming `serialize` is the delivery path.
+- **`FrameSerializer::serialize` is not always how a frame goes out.** Both
+  `MobileWsSerializer` and `TwilioSerializer` buffer `TtsAudio` and always
+  return `Err` from `serialize` — `drain_paced` is the only thing that
+  actually produces a wire message for it. Read the trait doc before
+  assuming `serialize` is the delivery path.
 - **TTS silently drops text with no speakable chars for the target
   language** (`stages/tts.rs::has_speakable_chars`) — this is
   language-aware, not English-only. If a whole translation direction goes
@@ -26,8 +27,7 @@ an afternoon each.
   `crate::call::call_span(call_id, leg)` and `.instrument()` it onto the
   task/pipeline that needs it. Every log line inside inherits the fields
   for free; stages/providers never need to know this exists.
-- Verify with `cargo check --message-format=short` — expect only the
-  pre-existing dead-code warnings listed below, nothing new.
+- Verify with `cargo check --message-format=short` — expect zero warnings.
 
 ---
 
@@ -51,20 +51,26 @@ cross-wire two independent pipelines — see below.
 
 ### Transports
 
-`BaseTransport<S: FrameSerializer>` wraps one `FrameIo` + one serializer,
-and is shared plumbing for both transport kinds:
+`BaseTransport<S: FrameSerializer>` wraps one `FrameIo` + one serializer.
+Both call legs now go through the same `transport::websockets::transport::WebSocketClient`
+— a generic WS read/write loop with a `select!` branch for `pace_interval`
+(`Event::Paced`) and an optional fourth branch that watches a
+`watch::Receiver<CallStatus>` (`Event::StatusChanged`), used by the mobile
+leg to learn when Twilio's leg connects/rings/ends and forward that as a
+bare control byte — Twilio's own leg passes `status_rx: None` since there's
+nothing else for it to watch. What differs per leg is only the
+`FrameSerializer`:
 
-- `transport::webrtc::transport::WebRtcClient` — SDP offer/answer
-  (non-trickle ICE), a data channel for transcripts/control bytes only, and
-  a **real Opus RTP track** in both directions for audio. `TtsAudio` frames
-  never go through the serializer — they're paced (`FramePacer`), Opus
-  encoded, and written directly to the RTP track (`send_paced_frame`).
-- `transport::websockets::transport::WebSocketClient` — generic WS
-  read/write loop with a third `select!` branch for `pace_interval`
-  (`Event::Paced`), used by Twilio's mulaw stream. `TwilioSerializer` (the
-  `FrameSerializer` impl) *does* buffer `TtsAudio` through `serialize`, but
-  `serialize` always returns `Err` — it only ever pushes into `send_pacer`;
-  `drain_paced` is the sole path that actually produces a wire message.
+- `codec::transport::mobile_ws::MobileWsSerializer` — tag-byte binary
+  protocol (audio, transcript, translation, call-status control bytes) over
+  one WebSocket, raw PCM16. No SDP, no ICE — a plain client-to-server
+  connection needs neither, since ferry always has a reachable address.
+- `codec::transport::telephony::twilio::TwilioSerializer` — Twilio's mulaw
+  JSON-framed Media Streams protocol, plus the 8kHz↔16kHz resampling.
+
+Both serializers buffer `TtsAudio` through `send_pacer` and always return
+`Err` from `serialize` for it — `drain_paced` is the sole path that actually
+produces a wire message, at a steady cadence instead of a burst.
 
 Both transports share `transport::pacing::FramePacer` — buffer raw bytes,
 dole out fixed-size chunks on a steady wall-clock cadence, "restart from
@@ -90,11 +96,11 @@ let a_transport_io = FrameIo::new("call-a", b2a_exit, a2b_entrance, ...);
 let b_transport_io = FrameIo::new("call-b", a2b_exit, b2a_entrance, ...);
 ```
 
-A's transport (WebRTC) reads **b2a**'s output and feeds **a2b**'s input; B's
-transport (Twilio) is the mirror. Nothing is "in flight" moved between them
-later — the wiring at construction time is the whole mechanism.
+A's transport (WebSocket) reads **b2a**'s output and feeds **a2b**'s input;
+B's transport (Twilio) is the mirror. Nothing is "in flight" moved between
+them later — the wiring at construction time is the whole mechanism.
 
-`CallRegistry`/`CallHandle` (`call/registry.rs`) correlate A's WebRTC
+`CallRegistry`/`CallHandle` (`call/registry.rs`) correlate A's WebSocket
 request (which mints a `CallId` and knows both pipelines) with Twilio's
 later, otherwise-unrelated WS connection and status webhook (which only
 gets the `CallId` embedded in the URLs we hand Twilio). `b_transport_io`
@@ -103,9 +109,10 @@ sits in `CallHandle.pending_b_io` until Twilio's WS connects and
 once, by whichever of "Twilio connects" / "call already ended" gets there
 first. `CallHandle.status_tx: watch::Sender<CallStatus>` is how the two
 legs learn about each other asynchronously (Twilio answered → tell A to
-stop showing "ringing"; either leg hangs up → tear down the other).
+stop showing "ringing"; either leg hangs up → tear down the other) — A's
+`WebSocketClient` watches it via `with_status()`.
 
-`handlers/webrtc.rs::webrtc_offer` (the try-agent demo, `/v1/try-agent/offer`)
+`handlers/try_agent.rs::try_agent_ws` (the try-agent demo, `/v1/try-agent/ws`)
 is deliberately the *one-way* self-looped case — one pipeline, no registry,
 no Twilio. Don't add two-leg concepts to it.
 
@@ -162,8 +169,8 @@ is the way to add "show me what X sends to Y" for a new stage — extend
 `payload_summary()` in `log_observer.rs`, not the stage itself.
 
 **Per-chunk audio logs are TRACE, not DEBUG.** Twilio's inbound/outbound
-mulaw chunks and WebRTC's per-frame `write_sample` calls fire every ~20ms —
-at DEBUG (the default dev level) they drown every other log line in a call
+mulaw chunks and the mobile leg's paced PCM chunks fire every ~20ms — at
+DEBUG (the default dev level) they'd drown every other log line in a call
 within seconds. They're TRACE-only; each side logs one summary line
 instead (frame count + seconds) when streaming starts/stops. Set
 `RUST_LOG=ferry=trace` if you actually need per-chunk detail.

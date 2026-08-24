@@ -56,8 +56,8 @@ fn http_routes() -> Router<AppState> {
 
 fn protected_call_routes() -> Router<AppState> {
     Router::new()
-        .route("/v1/try-agent/offer", post(handlers::webrtc_offer))
-        .route("/v1/call/start", post(handlers::start_call))
+        .route("/v1/try-agent/ws", get(handlers::try_agent_ws))
+        .route("/v1/call/ws", get(handlers::start_call))
         .route_layer(middleware::from_fn(require_user))
 }
 
