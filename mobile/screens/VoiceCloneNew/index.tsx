@@ -15,20 +15,20 @@ const SAMPLE_SCRIPT =
 
 type VoiceCloneValues = {
   name: string;
+  hasSample: boolean;
 };
 
 export default function VoiceCloneNewScreen() {
   const insets = useSafeAreaInsets();
   const colors = useThemeColors();
   const [isRecording, setIsRecording] = useState(false);
-  const [hasSample, setHasSample] = useState(false);
 
   const form = useForm({
-    defaultValues: { name: "" } as VoiceCloneValues,
+    defaultValues: { name: "", hasSample: false } as VoiceCloneValues,
     validators: {
       onChange: ({ value }) => {
         if (!value.name.trim()) return "Give this clone a name";
-        if (!hasSample) return "Record a voice sample";
+        if (!value.hasSample) return "Record a voice sample";
         return undefined;
       },
     },
@@ -46,9 +46,9 @@ export default function VoiceCloneNewScreen() {
   const toggleRecording = () => {
     if (isRecording) {
       setIsRecording(false);
-      setHasSample(true);
+      form.setFieldValue("hasSample", true);
     } else {
-      setHasSample(false);
+      form.setFieldValue("hasSample", false);
       setIsRecording(true);
     }
   };
@@ -95,7 +95,7 @@ export default function VoiceCloneNewScreen() {
               )}
             </Pressable>
             <Text variant="muted" className="mt-3 text-[13px]">
-              {isRecording ? "Recording… tap to stop" : hasSample ? "Sample captured" : "Tap to record a sample"}
+              {isRecording ? "Recording… tap to stop" : values.hasSample ? "Sample captured" : "Tap to record a sample"}
             </Text>
           </View>
 
