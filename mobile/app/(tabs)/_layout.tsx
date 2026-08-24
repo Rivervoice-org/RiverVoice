@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Phone, PhoneOutgoing, Settings, Hash } from "lucide-react-native";
+import { Phone, PhoneOutgoing, Settings, Mic } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { useThemeColors } from "@/lib/theme";
 
@@ -14,7 +14,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
         <PhoneOutgoing size={24} strokeWidth={2} color={colors.onInk} />
       </View>
     ),
-    phonebook: <Hash size={22} strokeWidth={1.75} color={focused ? colors.ink : colors.muted} />,
+    voiceClone: <Mic size={22} strokeWidth={1.75} color={focused ? colors.ink : colors.muted} />,
     agents: <Mascot seed="tab-agents" size={22} />,
     settings: <Settings size={22} strokeWidth={1.75} color={focused ? colors.ink : colors.muted} />,
   };
@@ -78,10 +78,10 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="phonebook"
+        name="voice-clone"
         options={{
-          title: "My numbers",
-          tabBarIcon: ({ focused }) => <TabIcon name="phonebook" focused={focused} />,
+          title: "Voice clone",
+          tabBarIcon: ({ focused }) => <TabIcon name="voiceClone" focused={focused} />,
         }}
       />
       <Tabs.Screen
