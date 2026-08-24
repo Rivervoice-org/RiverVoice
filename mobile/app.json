@@ -11,9 +11,9 @@
       "expo-router",
       "expo-dev-client",
       [
-        "@mykin-ai/expo-audio-stream",
+        "react-native-audio-api",
         {
-          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone to place calls."
+          "iosMicrophonePermission": "Allow $(PRODUCT_NAME) to access your microphone to place calls."
         }
       ],
       "expo-secure-store",

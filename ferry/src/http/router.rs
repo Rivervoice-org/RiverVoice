@@ -8,6 +8,7 @@ use axum::{
     middleware::Next,
     response::Response,
     routing::{get, patch, post},
+    serve::ListenerExt,
 };
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -128,6 +129,18 @@ pub async fn start_server() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8085").await?;
     tracing::info!("listening on http://{}", listener.local_addr()?);
+
+    // Without this, Nagle's algorithm batches/delays our small (641-byte),
+    // fixed-cadence paced audio sends — exactly the write pattern it's
+    // known to add 20-40ms of jitter to — undermining the 20ms real-time
+    // cadence `transport::pacing::FramePacer` is built to guarantee.
+    // Measured directly: paced-send log timestamps showed ~28-34ms actual
+    // gaps instead of the intended 20ms before this was added.
+    let listener = listener.tap_io(|tcp_stream| {
+        if let Err(e) = tcp_stream.set_nodelay(true) {
+            tracing::warn!("failed to set TCP_NODELAY on incoming connection: {e}");
+        }
+    });
 
     axum::serve(listener, router).await?;
 

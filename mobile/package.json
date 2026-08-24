@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",
-    "@mykin-ai/expo-audio-stream": "^0.3.5",
     "@rn-primitives/avatar": "^1.5.2",
     "@rn-primitives/checkbox": "^1.5.2",
     "@rn-primitives/dialog": "^1.5.2",
@@ -47,6 +46,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-audio-api": "^0.13.3",
     "react-native-css-interop": "0.2.6",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-incall-manager": "^4.2.2",
@@ -54,7 +54,7 @@
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "^15.12.1",
-    "react-native-worklets": "^0.5.1",
+    "react-native-worklets": "^0.6.1",
     "tailwind-merge": "^2.6.0",
     "tailwindcss": "^3.4.17"
   },

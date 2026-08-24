@@ -1,15 +1,15 @@
 import InCallManager from "react-native-incall-manager";
 import { DeviceEventEmitter } from "react-native";
 import {
-  ExpoPlayAudioStream,
-  EncodingTypes,
-  PlaybackModes,
-  type Subscription,
-} from "@mykin-ai/expo-audio-stream";
+  AudioContext,
+  AudioRecorder,
+  AudioBuffer,
+  AudioBufferQueueSourceNode,
+  AudioManager,
+} from "react-native-audio-api";
 
 import { authHeader } from "@/lib/auth/tokens";
 import { ferry } from "@/lib/ferry";
-import { base64ToBytes, bytesToBase64 } from "./base64";
 import {
   decodeWireMessage,
   encodeAudioMessage,
@@ -34,15 +34,11 @@ export type FerryCallEvents = {
 };
 
 const SAMPLE_RATE = 16_000;
-/** One continuous TTS stream per call — not "turns" in the multi-response
- * sense the buffered-playback API models, so a single fixed turn id covers
- * the whole call's lifetime. */
-const TURN_ID = "ferry-call";
-
-/** How often the mic hands us a chunk of captured audio. Small enough to
- * keep latency low, large enough not to spam the socket with per-message
- * overhead. */
-const MIC_CHUNK_INTERVAL_MS = 100;
+/** ~20ms of mono 16kHz PCM per mic callback — matches ferry's own paced
+ * send cadence (`ferry/src/codec/transport/mobile_ws.rs`), though the
+ * native side may deliver a different actual size depending on device
+ * capabilities (per `react-native-audio-api`'s own docs on `onAudioReady`). */
+const MIC_CHUNK_SAMPLES = SAMPLE_RATE / 50;
 
 export class SignalingError extends Error {}
 
@@ -66,16 +62,49 @@ function wsUrl(path: string, params: Record<string, string>): string {
   return url.toString();
 }
 
+/** PCM16LE bytes (ferry's wire format) -> Float32 [-1, 1] samples (Web
+ * Audio API's format, what `AudioBuffer` actually holds). */
+function pcm16ToFloat32(bytes: Uint8Array): Float32Array<ArrayBuffer> {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const samples = new Float32Array(bytes.length / 2);
+  for (let i = 0; i < samples.length; i++) {
+    samples[i] = view.getInt16(i * 2, true) / 32768;
+  }
+  return samples;
+}
+
+/** The inverse of `pcm16ToFloat32` — for the mic capture direction, which
+ * `AudioRecorder.onAudioReady` also hands back as Float32 samples. */
+function float32ToPcm16(samples: Float32Array): Uint8Array {
+  const out = new Uint8Array(samples.length * 2);
+  const view = new DataView(out.buffer);
+  for (let i = 0; i < samples.length; i++) {
+    const clamped = Math.max(-1, Math.min(1, samples[i]!));
+    view.setInt16(i * 2, Math.round(clamped * 32767), true);
+  }
+  return out;
+}
+
 /**
  * Owns one call's imperative lifecycle end to end: mic capture, the
  * WebSocket connection against ferry (via `startTryAgent`'s
  * /v1/try-agent/ws or `startCall`'s /v1/call/ws), audio playback, and
  * teardown. Kept independent of React so it can't be caught up in
  * stale-closure/re-render bugs; `useFerryCall` is the thin React wrapper.
+ *
+ * Audio uses `react-native-audio-api` (Web Audio API on native, C++
+ * audio-thread engine) rather than a JS-timer-driven library:
+ * `AudioBufferQueueSourceNode.enqueueBuffer` schedules incoming TTS chunks
+ * back-to-back on the audio thread itself, so playback stays gapless even
+ * if the JS thread stalls — unlike a `setTimeout`-scheduled queue of
+ * discrete one-off sound-effect plays, which glitches under exactly that
+ * condition.
  */
 export class FerryCall {
   private ws: WebSocket | null = null;
-  private micSubscription: Subscription | null = null;
+  private audioContext: AudioContext | null = null;
+  private playbackQueue: AudioBufferQueueSourceNode | null = null;
+  private recorder: AudioRecorder | null = null;
   private micActive = false;
   private status: CallStatus = CallStatus.Idle;
   private muted = false;
@@ -122,22 +151,20 @@ export class FerryCall {
     startInCallManager(() => this.aborted);
 
     try {
-      const permission = await ExpoPlayAudioStream.requestPermissionsAsync();
-      if (!permission.granted) {
+      const permission = await AudioManager.requestRecordingPermissions();
+      if (permission !== "Granted") {
         throw new Error("Microphone permission was not granted");
       }
       if (this.aborted) {
         return;
       }
 
-      await ExpoPlayAudioStream.setSoundConfig({
-        sampleRate: SAMPLE_RATE,
-        playbackMode: PlaybackModes.VOICE_PROCESSING,
-      });
-      await ExpoPlayAudioStream.startBufferedAudioStream({
-        turnId: TURN_ID,
-        encoding: EncodingTypes.PCM_S16LE,
-      });
+      const audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+      const playbackQueue = new AudioBufferQueueSourceNode(audioContext);
+      playbackQueue.connect(audioContext.destination);
+      playbackQueue.start();
+      this.audioContext = audioContext;
+      this.playbackQueue = playbackQueue;
       if (this.aborted) {
         await this.teardown();
         return;
@@ -220,25 +247,23 @@ export class FerryCall {
     }
     this.micActive = true;
     try {
-      const { subscription } = await ExpoPlayAudioStream.startMicrophone({
-        sampleRate: SAMPLE_RATE,
-        channels: 1,
-        encoding: "pcm_16bit",
-        interval: MIC_CHUNK_INTERVAL_MS,
-        enableProcessing: true,
-        onAudioStream: async (event) => {
-          if (this.muted || typeof event.data !== "string") {
+      const recorder = new AudioRecorder();
+      recorder.onAudioReady(
+        { sampleRate: SAMPLE_RATE, bufferLength: MIC_CHUNK_SAMPLES, channelCount: 1 },
+        (event) => {
+          if (this.muted) {
             return;
           }
-          const pcm = base64ToBytes(event.data);
+          const pcm = float32ToPcm16(event.buffer.getChannelData(0));
           this.ws?.send(encodeAudioMessage(pcm).buffer);
         },
-      });
-      this.micSubscription = subscription ?? null;
+      );
+      await recorder.start();
+      this.recorder = recorder;
     } catch (e) {
       console.warn("[ferry] failed to start microphone:", e);
       this.micActive = false;
-      this.micSubscription = null;
+      this.recorder = null;
       if (this.aborted) {
         return;
       }
@@ -255,12 +280,20 @@ export class FerryCall {
   private handleWireMessage(data: ArrayBuffer): void {
     const message = decodeWireMessage(data);
     switch (message.kind) {
-      case WireMessageKind.Audio:
-        void ExpoPlayAudioStream.playAudioBuffered(
-          bytesToBase64(message.audio),
-          TURN_ID,
-        ).catch((e) => console.warn("[ferry] playback failed:", e));
+      case WireMessageKind.Audio: {
+        if (!this.playbackQueue) {
+          break;
+        }
+        const samples = pcm16ToFloat32(message.audio);
+        const buffer = new AudioBuffer({
+          length: samples.length,
+          sampleRate: SAMPLE_RATE,
+          numberOfChannels: 1,
+        });
+        buffer.copyToChannel(samples, 0);
+        this.playbackQueue.enqueueBuffer(buffer);
         break;
+      }
       case WireMessageKind.Transcript:
         this.events.onTranscript(message.transcript);
         break;
@@ -321,18 +354,24 @@ export class FerryCall {
     if (this.micActive) {
       this.micActive = false;
       try {
-        await ExpoPlayAudioStream.stopMicrophone();
+        await this.recorder?.stop();
       } catch (e) {
-        console.warn("[ferry] stopMicrophone failed:", e);
+        console.warn("[ferry] recorder.stop failed:", e);
       }
     }
-    this.micSubscription?.remove();
-    this.micSubscription = null;
+    this.recorder = null;
     try {
-      await ExpoPlayAudioStream.stopBufferedAudioStream(TURN_ID);
+      this.playbackQueue?.stop();
     } catch (e) {
-      console.warn("[ferry] stopBufferedAudioStream failed:", e);
+      console.warn("[ferry] playbackQueue.stop failed:", e);
     }
+    this.playbackQueue = null;
+    try {
+      await this.audioContext?.close();
+    } catch (e) {
+      console.warn("[ferry] audioContext.close failed:", e);
+    }
+    this.audioContext = null;
   }
 }
 
