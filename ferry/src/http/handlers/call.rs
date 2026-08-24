@@ -1,20 +1,20 @@
 use std::sync::Arc;
 
-use axum::extract::ws::WebSocketUpgrade;
-use axum::extract::{Extension, Query, State};
+use axum::body::to_bytes;
+use axum::extract::{Extension, Request, State};
 use axum::http::StatusCode;
-use axum::response::Response;
 use sea_orm::EntityTrait;
-use serde::Deserialize;
-use tracing::Instrument;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::auth::token::UserSession;
 use crate::call::{CallHandle, CallId, CallStatus, EndReason, call_span};
-use crate::codec::transport::mobile_ws::MobileWsSerializer;
+use crate::codec::transport::webrtc_dc::WebRtcSerializer;
 use crate::config::{self, Config};
 use crate::db;
 use crate::db::entity::agents;
+use crate::http::MAX_REQUEST_BODY_SIZE;
 use crate::http::response::ApiResponse;
 use crate::http::state::AppState;
 use crate::observer::frame_observer::FrameObserver;
@@ -22,12 +22,23 @@ use crate::observer::log_observer::LogObserver;
 use crate::pipeline::{NUM_CHANNELS, SAMPLE_RATE, build_translation_pipeline};
 use crate::processor::FrameIo;
 use crate::transport::base::BaseTransport;
-use crate::transport::websockets::transport::WebSocketClient;
+use crate::transport::webrtc::transport::WebRtcClient;
+use tracing::Instrument;
 
-#[derive(Deserialize)]
-pub struct StartCallQuery {
+#[derive(Deserialize, Validate)]
+pub struct WebrtcOfferRequest {
+    #[validate(length(min = 1, message = "offer_sdp is required"))]
+    pub offer_sdp: String,
+    #[validate(length(min = 1, message = "agent_id is required"))]
     pub agent_id: String,
+    #[validate(length(min = 1, message = "to_number is required"))]
     pub to_number: String,
+}
+
+#[derive(Serialize)]
+pub struct WebrtcOfferResponse {
+    pub answer_sdp: String,
+    pub call_id: String,
 }
 
 /// Normalizes a caller-supplied number to E.164 for Twilio, which requires
@@ -48,23 +59,31 @@ fn normalize_to_number(raw: &str) -> Result<String, &'static str> {
     Ok(format!("+91{digits}"))
 }
 
-/// The real two-leg call flow: A connects over WebSocket, we register the
-/// call, build both directional pipelines cross-wired against each other,
-/// and fire the outbound Twilio dial. Distinct from
-/// `handlers::try_agent::try_agent_ws`, which is the one-way try-agent demo
-/// with no registry/Twilio involved.
+/// The real two-leg call flow: A connects over WebRTC, we register the call,
+/// build both directional pipelines cross-wired against each other, and
+/// fire the outbound Twilio dial. Distinct from `handlers::webrtc::webrtc_offer`,
+/// which is the one-way try-agent demo with no registry/Twilio involved.
 pub async fn start_call(
     State(app): State<AppState>,
     Extension(session): Extension<UserSession>,
-    Query(query): Query<StartCallQuery>,
-    ws: WebSocketUpgrade,
-) -> Result<Response, ApiResponse<()>> {
+    req: Request,
+) -> Result<ApiResponse<WebrtcOfferResponse>, ApiResponse<()>> {
     tracing::info!(user_id = %session.user_id, "start_call: request from authenticated user");
 
-    let to_number = normalize_to_number(&query.to_number)
+    let body = to_bytes(req.into_body(), MAX_REQUEST_BODY_SIZE)
+        .await
+        .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid body: {e}")))?;
+
+    let req: WebrtcOfferRequest = serde_json::from_slice(&body)
+        .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid json: {e}")))?;
+
+    req.validate()
+        .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    let to_number = normalize_to_number(&req.to_number)
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, e))?;
 
-    let agent_id = Uuid::parse_str(&query.agent_id)
+    let agent_id = Uuid::parse_str(&req.agent_id)
         .map_err(|_| ApiResponse::fail(StatusCode::BAD_REQUEST, "invalid agent id"))?;
 
     let agent = agents::Entity::find_by_id(agent_id)
@@ -117,89 +136,50 @@ pub async fn start_call(
 
     let handle = app.call_registry.register(call_id, b_transport_io);
 
-    let serializer = MobileWsSerializer::new(SAMPLE_RATE, NUM_CHANNELS);
+    let serializer = WebRtcSerializer::new(SAMPLE_RATE, NUM_CHANNELS);
     let base = BaseTransport::new(a_transport_io, serializer);
-    let client = WebSocketClient::with_status(base, Some(handle.watch_status()));
 
-    let span = call_span(call_id, "a");
-    let app_for_close = app.clone();
-    let handle_for_close = handle.clone();
+    let (client, answer_sdp) =
+        WebRtcClient::accept_offer(base, req.offer_sdp, Some(handle.watch_status()))
+            .await
+            .map_err(|e| {
+                ApiResponse::fail(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("webrtc signaling failed: {e}"),
+                )
+            })?;
 
-    // Signaled the moment axum's upgrade actually succeeds (see the
-    // `on_upgrade` closure below) — raced against `CONNECT_TIMEOUT` by the
-    // watchdog spawned further down, which is the only thing that can
-    // detect "leg A never connected at all" and still needs to run.
-    let (connected_tx, connected_rx) = tokio::sync::oneshot::channel::<()>();
-
-    let response = ws.on_upgrade(move |socket| {
-        let _ = connected_tx.send(());
-        async move {
-            client.on_connect(socket).await;
-            // A's leg ended (hangup, socket error, ...) — tear down B's leg
-            // too, since nothing else will notice A is gone.
-            if !handle_for_close.is_ended() {
-                handle_for_close.set_status(CallStatus::Ended(EndReason::HungUpByA));
-            }
-            if let Some(sid) = handle_for_close.twilio_call_sid.lock().await.clone() {
-                if let Err(e) = app_for_close.twilio.hangup_call(&sid).await {
-                    tracing::warn!("twilio: failed to hang up {sid} after A left: {e}");
+    {
+        let app = app.clone();
+        let handle = handle.clone();
+        tokio::spawn(
+            async move {
+                client.run().await;
+                // A's leg ended (hangup, ICE failure, ...) — tear down B's leg
+                // too, since nothing else will notice A is gone.
+                if !handle.is_ended() {
+                    handle.set_status(CallStatus::Ended(EndReason::HungUpByA));
                 }
+                if let Some(sid) = handle.twilio_call_sid.lock().await.clone() {
+                    if let Err(e) = app.twilio.hangup_call(&sid).await {
+                        tracing::warn!("twilio: failed to hang up {sid} after A left: {e}");
+                    }
+                }
+                app.call_registry.remove(&call_id);
             }
-            app_for_close.call_registry.remove(&call_id);
-        }
-        .instrument(span)
-    });
+            .instrument(call_span(call_id, "a")),
+        );
+    }
 
     spawn_twilio_dial(app.clone(), call_id, handle.clone(), config, to_number);
-    spawn_connect_watchdog(app, call_id, handle, connected_rx);
 
-    Ok(response)
-}
-
-/// If leg A's client disconnects before the WebSocket upgrade actually
-/// completes, axum's `on_upgrade` never invokes our callback at all (see
-/// its source: a failed `hyper::upgrade::on` just logs and returns) — none
-/// of that closure's cleanup runs, leaking the registry entry and, if
-/// Twilio has already answered, leaving a billable PSTN call nobody ever
-/// hangs up. This is the only place left that can catch that: if
-/// `connected_rx` hasn't fired within `CONNECT_TIMEOUT`, leg A is never
-/// coming, so tear the call down the same way the `on_upgrade` closure
-/// would have. Reusing `is_ended()`/`remove()` (idempotent) means a late,
-/// losing race against the real connection can't double up in a harmful
-/// way — worst case is one extra best-effort `hangup_call` call.
-const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
-
-fn spawn_connect_watchdog(
-    app: AppState,
-    call_id: CallId,
-    handle: Arc<CallHandle>,
-    connected_rx: tokio::sync::oneshot::Receiver<()>,
-) {
-    tokio::spawn(
-        async move {
-            if tokio::time::timeout(CONNECT_TIMEOUT, connected_rx)
-                .await
-                .is_ok()
-            {
-                // Leg A connected in time — its own `on_upgrade` closure
-                // owns cleanup from here.
-                return;
-            }
-            tracing::warn!("call {call_id}: leg A never connected, tearing down");
-            if !handle.is_ended() {
-                handle.set_status(CallStatus::Ended(EndReason::Failed));
-            }
-            if let Some(sid) = handle.twilio_call_sid.lock().await.clone() {
-                if let Err(e) = app.twilio.hangup_call(&sid).await {
-                    tracing::warn!(
-                        "twilio: failed to hang up {sid} after leg A never connected: {e}"
-                    );
-                }
-            }
-            app.call_registry.remove(&call_id);
-        }
-        .instrument(call_span(call_id, "connect-watchdog")),
-    );
+    Ok(ApiResponse::ok(
+        StatusCode::OK,
+        WebrtcOfferResponse {
+            answer_sdp,
+            call_id: call_id.to_string(),
+        },
+    ))
 }
 
 /// Fire-and-forget: the outcome (answered / busy / no-answer / failed)

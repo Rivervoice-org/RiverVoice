@@ -11,7 +11,7 @@
       "expo-router",
       "expo-dev-client",
       [
-        "@mykin-ai/expo-audio-stream",
+        "@config-plugins/react-native-webrtc",
         {
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone to place calls."
         }

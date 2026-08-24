@@ -1,5 +1,5 @@
 import { TranscriptPhase } from "@/components/Transcript";
-import { CallStatus } from "@/lib/ws/ferry-call";
+import { CallStatus } from "@/lib/webrtc/ferry-call";
 
 export function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);

@@ -9,7 +9,7 @@ import { LiveTranscript } from "@/components/LiveTranscript";
 import { TranscriptPhase } from "@/components/Transcript";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
-import { CallStatus } from "@/lib/ws/ferry-call";
+import { CallStatus } from "@/lib/webrtc/ferry-call";
 import { formatDuration, callStatusToPhase } from "@/lib/call-status";
 import { useFerryCall } from "@/hooks/use-ferry-call";
 
