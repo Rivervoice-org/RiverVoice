@@ -8,7 +8,7 @@ import {
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from "@gorhom/bottom-sheet";
-import { ChevronDown, PhoneOff, Phone, Mic, MicOff, Volume2, VolumeX, Captions } from "lucide-react-native";
+import { PhoneOff, Phone, Mic, MicOff, Volume2, VolumeX, Captions } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { PulsingRing } from "@/components/PulsingRing";
@@ -256,16 +256,6 @@ export default function InCallScreen() {
   return (
     <View className="flex-1 bg-canvas">
       <SafeAreaView className="flex-1" edges={["top", "bottom"]}>
-        <View className="flex-row items-center px-4 py-3">
-          <Pressable
-            onPress={endCall}
-            className="h-9 w-9 items-center justify-center rounded-full active:bg-secondary"
-            hitSlop={8}
-          >
-            <ChevronDown size={22} strokeWidth={2} color={colors.muted} />
-          </Pressable>
-        </View>
-
         <View className="flex-1 items-center justify-center px-8">
           <CallerIdentity
             contactName={contactName}
