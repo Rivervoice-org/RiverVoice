@@ -42,10 +42,8 @@ interface MascotPickerProps {
 }
 
 /**
- * The style tabs, face grid, and license caption — the only parts of the
- * dialog that actually depend on `style`. Split out so switching tabs only
- * re-renders this, not the Dialog chrome (title/description) or the "use
- * default face" link above/below it.
+ * Isolates style-dependent rendering so switching tabs only re-renders this
+ * component, not unrelated dialog content like the title or description.
  */
 function MascotStyleGrid({
   value,
@@ -153,9 +151,8 @@ function MascotStyleGrid({
 }
 
 /**
- * The web's mascot picker, reworked for touch: a dialog of faces instead of a
- * hover popover. Faces are drawn locally and cached, so the grid warms in the
- * background and every open after the first is instant.
+ * A dialog-based picker for touch. Faces are prefetched in the background so
+ * subsequent opens are instant.
  */
 export function MascotPicker({ value, onSelect, size = 96 }: MascotPickerProps) {
   const colors = useThemeColors();
