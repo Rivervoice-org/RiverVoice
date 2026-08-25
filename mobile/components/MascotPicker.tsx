@@ -42,13 +42,22 @@ interface MascotPickerProps {
 }
 
 /**
- * The web's mascot picker, reworked for touch: a dialog of faces instead of a
- * hover popover. Faces are drawn locally and cached, so the grid warms in the
- * background and every open after the first is instant.
+ * The style tabs, face grid, and license caption — the only parts of the
+ * dialog that actually depend on `style`. Split out so switching tabs only
+ * re-renders this, not the Dialog chrome (title/description) or the "use
+ * default face" link above/below it.
  */
-export function MascotPicker({ value, onSelect, size = 96 }: MascotPickerProps) {
-  const colors = useThemeColors();
-  const [open, setOpen] = useState(false);
+function MascotStyleGrid({
+  value,
+  onSelect,
+  onClose,
+  open,
+}: {
+  value: string | undefined;
+  onSelect: (ref: string | undefined) => void;
+  onClose: () => void;
+  open: boolean;
+}) {
   const [style, setStyle] = useState<MascotStyleId>("notionists");
 
   // Defer the grid's prefetch until the dialog has animated in, so the first
@@ -70,6 +79,87 @@ export function MascotPicker({ value, onSelect, size = 96 }: MascotPickerProps) 
   }, [style]);
 
   const meta = mascotStyle(style).meta;
+
+  return (
+    <>
+      <View className="flex-row gap-2">
+        {MASCOT_STYLE_IDS.map((id) => {
+          const selected = id === style;
+          return (
+            <Pressable
+              key={id}
+              onPress={() => setStyle(id)}
+              className={cn(
+                "rounded-full border px-3.5 py-1.5 active:opacity-80",
+                selected ? "border-foreground bg-foreground" : "border-border bg-card"
+              )}
+            >
+              <Text
+                className={cn(
+                  "text-[13px] font-medium",
+                  selected ? "text-primary-foreground" : "text-foreground"
+                )}
+              >
+                {mascotStyle(id).label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View className="flex-row flex-wrap gap-2.5">
+        {SEEDS.map((seed) => {
+          const ref = mascotRef(style, seed);
+          const selected = value === ref;
+          return (
+            <Pressable
+              key={ref}
+              onPress={() => {
+                onSelect(ref);
+                onClose();
+              }}
+              accessibilityLabel={seed}
+              className={cn(
+                "rounded-full p-0.5",
+                selected && "border border-foreground"
+              )}
+            >
+              <Mascot ref={ref} size={FACE_SIZE} />
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {value && (
+        <Pressable
+          onPress={() => {
+            onSelect(undefined);
+            onClose();
+          }}
+          className="items-start"
+        >
+          <Text variant="muted" className="text-[13px] underline">
+            Use the default face
+          </Text>
+        </Pressable>
+      )}
+
+      <Text variant="muted" className="text-[11px]">
+        {meta.title}
+        {meta.license ? ` · ${meta.license.name}` : ""}
+      </Text>
+    </>
+  );
+}
+
+/**
+ * The web's mascot picker, reworked for touch: a dialog of faces instead of a
+ * hover popover. Faces are drawn locally and cached, so the grid warms in the
+ * background and every open after the first is instant.
+ */
+export function MascotPicker({ value, onSelect, size = 96 }: MascotPickerProps) {
+  const colors = useThemeColors();
+  const [open, setOpen] = useState(false);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -96,72 +186,12 @@ export function MascotPicker({ value, onSelect, size = 96 }: MascotPickerProps) 
             </DialogDescription>
           </View>
 
-          <View className="flex-row gap-2">
-            {MASCOT_STYLE_IDS.map((id) => {
-              const selected = id === style;
-              return (
-                <Pressable
-                  key={id}
-                  onPress={() => setStyle(id)}
-                  className={cn(
-                    "rounded-full border px-3.5 py-1.5 active:opacity-80",
-                    selected ? "border-foreground bg-foreground" : "border-border bg-card"
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      "text-[13px] font-medium",
-                      selected ? "text-primary-foreground" : "text-foreground"
-                    )}
-                  >
-                    {mascotStyle(id).label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <View className="flex-row flex-wrap gap-2.5">
-            {SEEDS.map((seed) => {
-              const ref = mascotRef(style, seed);
-              const selected = value === ref;
-              return (
-                <Pressable
-                  key={ref}
-                  onPress={() => {
-                    onSelect(ref);
-                    setOpen(false);
-                  }}
-                  accessibilityLabel={seed}
-                  className={cn(
-                    "rounded-full p-0.5",
-                    selected && "border border-foreground"
-                  )}
-                >
-                  <Mascot ref={ref} size={FACE_SIZE} />
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {value && (
-            <Pressable
-              onPress={() => {
-                onSelect(undefined);
-                setOpen(false);
-              }}
-              className="items-start"
-            >
-              <Text variant="muted" className="text-[13px] underline">
-                Use the default face
-              </Text>
-            </Pressable>
-          )}
-
-          <Text variant="muted" className="text-[11px]">
-            {meta.title}
-            {meta.license ? ` · ${meta.license.name}` : ""}
-          </Text>
+          <MascotStyleGrid
+            value={value}
+            onSelect={onSelect}
+            onClose={() => setOpen(false)}
+            open={open}
+          />
         </View>
       </DialogContent>
     </Dialog>
