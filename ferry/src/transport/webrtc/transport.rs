@@ -7,7 +7,6 @@ use rtc::rtp_transceiver::rtp_sender::{
     RTCRtpCodec, RTCRtpCodecParameters, RTCRtpCodingParameters, RTCRtpEncodingParameters,
     RtpCodecKind,
 };
-use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use webrtc::data_channel::{DataChannel, DataChannelEvent};
 use webrtc::media_stream::track_local::TrackLocal;
@@ -92,7 +91,7 @@ pub struct WebRtcClient<S: FrameSerializer<Message = bytes::Bytes>> {
     data_channel_rx: oneshot::Receiver<Arc<dyn DataChannel>>,
     /// Decoded mic audio (`RawAudioFrame`s), forwarded from the `on_track`
     /// handler's RTP-receive task into the pipeline.
-    inbound_audio_rx: Receiver<Frame>,
+    inbound_audio_rx: tokio::sync::mpsc::Receiver<Frame>,
     output_track: Arc<TrackLocalStaticSample>,
     output_ssrc: u32,
     /// The Opus payload type actually negotiated in the answer SDP for this
@@ -126,7 +125,7 @@ pub struct WebRtcClient<S: FrameSerializer<Message = bytes::Bytes>> {
 struct Handler {
     gather_complete_tx: Mutex<Option<oneshot::Sender<()>>>,
     data_channel_tx: Mutex<Option<oneshot::Sender<Arc<dyn DataChannel>>>>,
-    inbound_audio_tx: Sender<Frame>,
+    inbound_audio_tx: tokio::sync::mpsc::Sender<Frame>,
 }
 
 #[async_trait::async_trait]
@@ -201,7 +200,8 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
     ) -> anyhow::Result<(Self, String)> {
         let (gather_complete_tx, gather_complete_rx) = oneshot::channel();
         let (data_channel_tx, data_channel_rx) = oneshot::channel();
-        let (inbound_audio_tx, inbound_audio_rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
+        let (inbound_audio_tx, inbound_audio_rx) =
+            tokio::sync::mpsc::channel(EVENT_CHANNEL_CAPACITY);
 
         let handler = Arc::new(Handler {
             gather_complete_tx: Mutex::new(Some(gather_complete_tx)),
@@ -393,7 +393,7 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                 }
             }, if self.status_rx.is_some() => {
                 // The data channel may still be mid-handshake (ICE/DTLS/SCTP)
-                // when the other leg fails fast — e.g. Twilio can reject a
+                // when the other leg fails fast e.g. Twilio can reject a
                 // dial in well under a second, faster than a LAN peer's data
                 // channel finishes opening. Give it a short grace period to
                 // arrive so CALL_ENDED_TAG can still be delivered; without
