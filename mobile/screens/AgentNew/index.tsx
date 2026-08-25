@@ -305,6 +305,19 @@ export default function AgentNewScreen() {
   return <AgentForm editingAgent={editingAgent} />;
 }
 
+/** Every field is required before the form can submit. */
+function isFormComplete(value: AgentValues): boolean {
+  return !!(
+    value.name.trim() &&
+    value.inputLang &&
+    value.outputLang &&
+    value.mode &&
+    value.gender &&
+    value.mascot &&
+    value.voice
+  );
+}
+
 /** Only the fields that actually changed vs. `editingAgent` — omitted keys
  * leave that column untouched server-side (see UpdateAgentRequest on
  * ferry). Shared by the Save button and the Try-agent save-first flow so
@@ -333,6 +346,81 @@ function buildPatch(value: AgentValues, editingAgent: AgentResponse): UpdateAgen
     patch.voice = value.voice;
   }
   return patch;
+}
+
+/** Isolated so its `state.values` subscription (needed for `hasChanges`)
+ * only re-renders the footer, not the whole screen — every other field
+ * above subscribes narrowly via `form.Field`/`form.Subscribe`. */
+function FormFooter({
+  form,
+  editingAgent,
+  isEditing,
+  isSaving,
+  error,
+  colors,
+  insets,
+  handleTryAgent,
+}: {
+  // useForm's return type carries a large generic signature driven by its
+  // validators; re-declaring it here isn't worth the noise, so this one
+  // prop is untyped and everything used off it (store/Field/Subscribe/
+  // handleSubmit) is checked instead where `form` is actually constructed.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  form: any;
+  editingAgent: AgentResponse | undefined;
+  isEditing: boolean;
+  isSaving: boolean;
+  error: string;
+  colors: ReturnType<typeof useThemeColors>;
+  insets: ReturnType<typeof useSafeAreaInsets>;
+  handleTryAgent: () => void;
+}) {
+  const values: AgentValues = useStore(form.store, (state: { values: AgentValues }) => state.values);
+  const canSubmit: boolean = useStore(form.store, (state: { canSubmit: boolean }) => state.canSubmit);
+  const isSubmitting: boolean = useStore(form.store, (state: { isSubmitting: boolean }) => state.isSubmitting);
+
+  // Editing an agent with no actual changes has nothing to save — Save
+  // changes should be disabled, not fire a no-op PATCH. New agents have no
+  // "unchanged" state to compare against, so this only applies once editing.
+  const hasChanges = !isEditing || (editingAgent && Object.keys(buildPatch(values, editingAgent)).length > 0);
+
+  return (
+    <View
+      className="gap-2 border-t border-border bg-canvas px-5 pt-3"
+      style={{ paddingBottom: insets.bottom + 12 }}
+    >
+      {error ? (
+        <Text variant="destructive" className="text-center text-[13px]">
+          {error}
+        </Text>
+      ) : null}
+      <View className="flex-row gap-3">
+        <Button
+          variant="outline"
+          size="lg"
+          className="flex-1"
+          disabled={isSaving}
+          onPress={handleTryAgent}
+        >
+          <PhoneCall size={16} strokeWidth={1.75} color={colors.ink} />
+          <Text className="text-sm font-medium text-foreground">
+            Try agent
+          </Text>
+        </Button>
+        <Button
+          size="lg"
+          className="flex-1"
+          disabled={!canSubmit || !hasChanges || isSaving}
+          loading={isSubmitting}
+          onPress={() => form.handleSubmit()}
+        >
+          <Text className="text-sm font-medium text-primary-foreground">
+            {isEditing ? "Save changes" : "Create agent"}
+          </Text>
+        </Button>
+      </View>
+    </View>
+  );
 }
 
 function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }) {
@@ -404,26 +492,12 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
         }
       : DEFAULT_VALUES,
     validators: {
-      onMount: ({ value }) => {
-        if (!value.name.trim()) return "Give your agent a name";
-        if (!value.inputLang) return "Pick an input language";
-        if (!value.outputLang) return "Pick an output language";
-        if (!value.mode) return "Pick a mode";
-        if (!value.gender) return "Pick a voice gender";
-        if (!value.mascot) return "Pick a mascot";
-        if (!value.voice) return "Pick a voice";
-        return undefined;
-      },
-      onChange: ({ value }) => {
-        if (!value.name.trim()) return "Give your agent a name";
-        if (!value.inputLang) return "Pick an input language";
-        if (!value.outputLang) return "Pick an output language";
-        if (!value.mode) return "Pick a mode";
-        if (!value.gender) return "Pick a voice gender";
-        if (!value.mascot) return "Pick a mascot";
-        if (!value.voice) return "Pick a voice";
-        return undefined;
-      },
+      // The message text is never shown anywhere — canSubmit only cares
+      // whether this returns undefined or not — so this just gates on
+      // every required field being picked, checked on mount and on every
+      // change since a field can go from picked back to empty.
+      onMount: ({ value }) => (isFormComplete(value) ? undefined : "Incomplete"),
+      onChange: ({ value }) => (isFormComplete(value) ? undefined : "Incomplete"),
     },
     onSubmit: async ({ value }) => {
       if (savingRef.current) return;
@@ -485,6 +559,11 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
       requireAuth(() => {});
       return;
     }
+    // Read the form's current values directly rather than subscribing —
+    // this only runs on tap, so there's no render to keep in sync.
+    const currentValues = form.store.state.values as AgentValues;
+    const hasChanges =
+      !isEditing || (editingAgent && Object.keys(buildPatch(currentValues, editingAgent)).length > 0);
     if (!isEditing || !editingAgent || hasChanges) {
       setShowSaveFirst(true);
       return;
@@ -494,15 +573,6 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
       params: { id: editingAgent.id, name: editingAgent.name, mascot: editingAgent.mascot },
     });
   }
-
-  const values = useStore(form.store, (state) => state.values);
-  const canSubmit = useStore(form.store, (state) => state.canSubmit);
-  const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
-
-  // Editing an agent with no actual changes has nothing to save — Save
-  // changes should be disabled, not fire a no-op PATCH. New agents have no
-  // "unchanged" state to compare against, so this only applies once editing.
-  const hasChanges = !isEditing || (editingAgent && Object.keys(buildPatch(values, editingAgent)).length > 0);
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
@@ -533,18 +603,26 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
         >
           {/* Profile block */}
           <View className="items-center pt-4 pb-8">
-            <MascotPicker
-              value={values.mascot}
-              onSelect={(ref) => form.setFieldValue("mascot", ref)}
-            />
-            <Input
-              className="mt-4 h-12 min-w-[140px] max-w-full border-0 bg-transparent px-0 text-center text-[22px] font-semibold"
-              placeholder="Untitled agent"
-              placeholderTextColor={colors.faint}
-              value={values.name}
-              onChangeText={(text) => form.setFieldValue("name", text)}
-              autoCapitalize="words"
-            />
+            <form.Field name="mascot">
+              {(field) => (
+                <MascotPicker
+                  value={field.state.value}
+                  onSelect={(ref) => field.handleChange(ref)}
+                />
+              )}
+            </form.Field>
+            <form.Field name="name">
+              {(field) => (
+                <Input
+                  className="mt-4 h-12 min-w-[140px] max-w-full border-0 bg-transparent px-0 text-center text-[22px] font-semibold"
+                  placeholder="Untitled agent"
+                  placeholderTextColor={colors.faint}
+                  value={field.state.value}
+                  onChangeText={(text) => field.handleChange(text)}
+                  autoCapitalize="words"
+                />
+              )}
+            </form.Field>
             <Text variant="muted" className="mt-1 text-[13px]">
               Give your agent a name
             </Text>
@@ -554,95 +632,99 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
           <View className="gap-7">
             <View className="gap-2.5">
               <SectionLabel>Input language</SectionLabel>
-              <ChipGroup
-                options={LANGUAGES}
-                value={values.inputLang}
-                onChange={(v) => form.setFieldValue("inputLang", v)}
-              />
+              <form.Field name="inputLang">
+                {(field) => (
+                  <ChipGroup
+                    options={LANGUAGES}
+                    value={field.state.value}
+                    onChange={(v) => field.handleChange(v)}
+                  />
+                )}
+              </form.Field>
             </View>
 
             <View className="gap-2.5">
               <SectionLabel>Output language</SectionLabel>
-              <ChipGroup
-                options={LANGUAGES}
-                value={values.outputLang}
-                onChange={(v) => form.setFieldValue("outputLang", v)}
-              />
+              <form.Field name="outputLang">
+                {(field) => (
+                  <ChipGroup
+                    options={LANGUAGES}
+                    value={field.state.value}
+                    onChange={(v) => field.handleChange(v)}
+                  />
+                )}
+              </form.Field>
             </View>
 
             <View className="gap-2.5">
               <SectionLabel>Mode</SectionLabel>
-              <ModeList
-                value={values.mode}
-                onChange={(v) => form.setFieldValue("mode", v)}
-              />
+              <form.Field name="mode">
+                {(field) => (
+                  <ModeList
+                    value={field.state.value}
+                    onChange={(v) => field.handleChange(v)}
+                  />
+                )}
+              </form.Field>
             </View>
 
             <View className="gap-2.5">
               <SectionLabel>Voice gender</SectionLabel>
-              <ChipGroup
-                options={GENDERS}
-                value={values.gender}
-                onChange={(v) => {
-                  form.setFieldValue("gender", v);
-                  // The voice list is scoped to the selected gender — a
-                  // voice picked under the old one won't be in the new
-                  // list, so it'd sit selected but invisible.
-                  form.setFieldValue("voice", null);
-                }}
-              />
+              <form.Field name="gender">
+                {(field) => (
+                  <ChipGroup
+                    options={GENDERS}
+                    value={field.state.value}
+                    onChange={(v) => {
+                      field.handleChange(v);
+                      // The voice list is scoped to the selected gender — a
+                      // voice picked under the old one won't be in the new
+                      // list, so it'd sit selected but invisible.
+                      form.setFieldValue("voice", null);
+                    }}
+                  />
+                )}
+              </form.Field>
             </View>
 
             <View className="gap-2.5">
               <SectionLabel>Voice</SectionLabel>
-              <VoiceGroupPicker
-                gender={values.gender}
-                value={values.voice}
-                onChange={(v) => form.setFieldValue("voice", v)}
-                onPreview={handlePreviewVoice}
-                previewingVoice={previewingVoice}
-                playingVoice={playingVoice}
-              />
+              {/* Nested (not a single Subscribe selecting [gender, voice])
+                  because that selector would return a fresh array on every
+                  store update — form.Subscribe compares with `===`, so a
+                  new array never bails out and this would re-render on any
+                  field change, not just gender/voice. Each form.Field here
+                  subscribes to only its own field's store instead. */}
+              <form.Field name="gender">
+                {(genderField) => (
+                  <form.Field name="voice">
+                    {(voiceField) => (
+                      <VoiceGroupPicker
+                        gender={genderField.state.value}
+                        value={voiceField.state.value}
+                        onChange={(v) => voiceField.handleChange(v)}
+                        onPreview={handlePreviewVoice}
+                        previewingVoice={previewingVoice}
+                        playingVoice={playingVoice}
+                      />
+                    )}
+                  </form.Field>
+                )}
+              </form.Field>
             </View>
           </View>
         </ScrollView>
 
-        {/* Footer — padded past the home indicator */}
-        <View
-          className="gap-2 border-t border-border bg-canvas px-5 pt-3"
-          style={{ paddingBottom: insets.bottom + 12 }}
-        >
-          {error ? (
-            <Text variant="destructive" className="text-center text-[13px]">
-              {error}
-            </Text>
-          ) : null}
-          <View className="flex-row gap-3">
-          <Button
-            variant="outline"
-            size="lg"
-            className="flex-1"
-            disabled={isSaving}
-            onPress={handleTryAgent}
-          >
-            <PhoneCall size={16} strokeWidth={1.75} color={colors.ink} />
-            <Text className="text-sm font-medium text-foreground">
-              Try agent
-            </Text>
-          </Button>
-          <Button
-            size="lg"
-            className="flex-1"
-            disabled={!canSubmit || !hasChanges || isSaving}
-            loading={isSubmitting}
-            onPress={() => form.handleSubmit()}
-          >
-            <Text className="text-sm font-medium text-primary-foreground">
-              {isEditing ? "Save changes" : "Create agent"}
-            </Text>
-          </Button>
-          </View>
-        </View>
+        <FormFooter
+          form={form}
+          editingAgent={editingAgent}
+          isEditing={isEditing}
+          isSaving={isSaving}
+          error={error}
+          colors={colors}
+          insets={insets}
+          handleTryAgent={handleTryAgent}
+        />
       </KeyboardAvoidingView>
 
       <SaveChangesAlert
