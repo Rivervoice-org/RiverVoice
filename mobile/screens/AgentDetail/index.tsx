@@ -109,10 +109,22 @@ export default function AgentDetailScreen() {
   if (!agent) {
     return (
       <SafeAreaView
-        className="flex-1 items-center justify-center bg-canvas"
+        className="flex-1 items-center justify-center bg-canvas px-5"
         edges={["top"]}
       >
-        <Text variant="muted">Agent not found</Text>
+        <Mascot seed={id ?? "unknown"} size={64} />
+        <Text className="mt-4 text-lg font-semibold">Agent not found</Text>
+        <Text variant="muted" className="mt-1.5 text-center text-sm leading-relaxed">
+          This agent may have been deleted or the link is incorrect.
+        </Text>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-5"
+          onPress={() => router.back()}
+        >
+          <Text className="text-xs font-medium text-foreground">Go back</Text>
+        </Button>
       </SafeAreaView>
     );
   }
