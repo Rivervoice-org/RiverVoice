@@ -50,7 +50,7 @@ impl FrameProcessor for TtsStage {
 
         let mut speaking = false;
 
-        'run: loop {
+        loop {
             tokio::select! {
                 frame = io.take() => {
                     let Some(frame) = frame else { break };
@@ -73,7 +73,7 @@ impl FrameProcessor for TtsStage {
                                 })))
                                 .await
                             {
-                                break 'run;
+                                break;
                             }
 
                             match session.send_text(t).await {
@@ -90,7 +90,7 @@ impl FrameProcessor for TtsStage {
                                 characters: text_len as u32,
                             };
                             if !io.push(Frame::new(FrameKind::TtsUsage(usage))).await {
-                                break 'run;
+                                break;
                             }
                         }
                         FrameKind::MtResponseEnd => {

@@ -126,6 +126,42 @@ const Row = memo(function Row({
   );
 });
 
+/**
+ * Owns the mascot's local `useState` itself — picking a mascot only needs
+ * to re-render this block, not the rest of Settings (Appearance, Calls,
+ * Privacy switches, etc.), which the old code did by keeping that state up
+ * in SettingsScreen.
+ */
+function ProfileSection() {
+  const { user, isAuthenticated } = useAuth();
+  const colors = useThemeColors();
+  const [mascot, setMascot] = useState<string | undefined>(undefined);
+
+  if (!isAuthenticated) {
+    return (
+      <SignInPrompt
+        icon={<CircleUserRound size={22} strokeWidth={1.75} color={colors.faint} />}
+        message="Sign in to see your profile"
+      />
+    );
+  }
+
+  return (
+    <View className="items-center px-6 pt-6 pb-8">
+      <MascotPicker value={mascot} onSelect={setMascot} />
+      <Text className="mt-3 text-[20px] font-semibold">{user?.name || "You"}</Text>
+      {user?.phone ? (
+        <Text variant="muted" className="mt-0.5 text-[13px]">
+          +{user.phone}
+        </Text>
+      ) : null}
+      <Text variant="muted" className="mt-1 text-[12px]">
+        Tap the face to change your mascot
+      </Text>
+    </View>
+  );
+}
+
 const APPEARANCE_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Light", icon: Sun },
   { value: "dark", label: "Dark", icon: Moon },
@@ -166,10 +202,9 @@ function AppearancePicker() {
 }
 
 export default function SettingsScreen() {
-  const { signOut, user, isAuthenticated } = useAuth();
+  const { signOut, isAuthenticated } = useAuth();
   const colors = useThemeColors();
   const ICONS = useMemo(() => buildIcons(colors.ink), [colors.ink]);
-  const [mascot, setMascot] = useState<string | undefined>(undefined);
   const [transcribeVoicemails, setTranscribeVoicemails] = useState(true);
   const [missedCallAlerts, setMissedCallAlerts] = useState(true);
   const [keepRecordings, setKeepRecordings] = useState(true);
@@ -196,25 +231,7 @@ export default function SettingsScreen() {
       >
         {/* Profile */}
         <Rise index={1}>
-          {isAuthenticated ? (
-            <View className="items-center px-6 pt-6 pb-8">
-              <MascotPicker value={mascot} onSelect={setMascot} />
-              <Text className="mt-3 text-[20px] font-semibold">{user?.name || "You"}</Text>
-              {user?.phone ? (
-                <Text variant="muted" className="mt-0.5 text-[13px]">
-                  +{user.phone}
-                </Text>
-              ) : null}
-              <Text variant="muted" className="mt-1 text-[12px]">
-                Tap the face to change your mascot
-              </Text>
-            </View>
-          ) : (
-            <SignInPrompt
-              icon={<CircleUserRound size={22} strokeWidth={1.75} color={colors.faint} />}
-              message="Sign in to see your profile"
-            />
-          )}
+          <ProfileSection />
         </Rise>
 
         {/* Appearance */}
