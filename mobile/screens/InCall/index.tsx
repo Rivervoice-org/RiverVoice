@@ -1,28 +1,24 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { View, Pressable, ScrollView } from "react-native";
+import { memo, useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
+import { View, Pressable } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import {
   BottomSheetModal,
-  BottomSheetView,
+  BottomSheetScrollView,
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from "@gorhom/bottom-sheet";
-import { ChevronDown, PhoneOff, Mic, MicOff, Volume2, VolumeX, Captions } from "lucide-react-native";
+import { ChevronDown, PhoneOff, Phone, Mic, MicOff, Volume2, VolumeX, Captions } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
+import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { PulsingRing } from "@/components/PulsingRing";
 import { LiveTranscript } from "@/components/LiveTranscript";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { CallStatus } from "@/lib/webrtc/ferry-call";
 import { formatDuration, callStatusToPhase } from "@/lib/call-status";
-import { useFerryCall } from "@/hooks/use-ferry-call";
+import { useFerryCall } from "@/hooks/use-ferry-call.mock";
 
-/**
- * Owns the once-a-second tick itself, in its own state, so a running call
- * doesn't force the avatar/mascot/controls around it to re-render every
- * second — only this line does.
- */
 const CallStatusLine = memo(function CallStatusLine({
   status,
   error,
@@ -75,29 +71,25 @@ const CallStatusLine = memo(function CallStatusLine({
   );
 });
 
-/**
- * The dialed person's identity — mascot, name, number — plus who's handling
- * the call underneath. Depends only on route params and whether the ring
- * should pulse, so streaming captions (which can update several times a
- * second while someone is talking) never touch this subtree: memo bails out
- * before React even reconciles it.
- */
 const CallerIdentity = memo(function CallerIdentity({
   contactName,
   phone,
-  mascot,
   ringing,
 }: {
   contactName?: string;
   phone: string;
-  mascot?: string;
   ringing: boolean;
 }) {
+  const colors = useThemeColors();
   return (
     <>
       <PulsingRing active={ringing}>
         <View className="h-36 w-36 items-center justify-center rounded-full bg-secondary">
-          <Mascot ref={mascot || undefined} seed={contactName ?? phone} size={128} />
+          {contactName ? (
+            <InitialsAvatar name={contactName} size={128} />
+          ) : (
+            <Phone size={48} strokeWidth={1.75} color={colors.muted} />
+          )}
         </View>
       </PulsingRing>
 
@@ -112,10 +104,6 @@ const CallerIdentity = memo(function CallerIdentity({
   );
 });
 
-/**
- * Who's actually handling the call — a static strip, memoized for the same
- * reason as CallerIdentity above.
- */
 const HandledByStrip = memo(function HandledByStrip({
   agentName,
   agentMascot,
@@ -133,22 +121,19 @@ const HandledByStrip = memo(function HandledByStrip({
   );
 });
 
-/**
- * A round icon button with a caption underneath, matching the native in-call
- * control layout (mute / speaker / captions as a row of three, above one big
- * red end-call circle) rather than this app's usual pill-shaped Button.
- */
 const CallControl = memo(function CallControl({
   icon: Icon,
   label,
   active,
   disabled,
+  badge,
   onPress,
 }: {
   icon: typeof Mic;
   label: string;
   active?: boolean;
   disabled?: boolean;
+  badge?: boolean;
   onPress: () => void;
 }) {
   const colors = useThemeColors();
@@ -161,6 +146,12 @@ const CallControl = memo(function CallControl({
         style={{ opacity: disabled ? 0.4 : 1 }}
       >
         <Icon size={22} strokeWidth={2} color={active ? colors.onInk : colors.ink} />
+        {badge && (
+          <View
+            className="absolute right-3 top-3 h-2 w-2 rounded-full bg-foreground"
+            style={{ borderWidth: 1.5, borderColor: colors.canvas }}
+          />
+        )}
       </View>
       <Text variant="muted" className="text-xs font-medium">
         {label}
@@ -173,7 +164,6 @@ export default function InCallScreen() {
   const params = useLocalSearchParams<{
     name?: string;
     phone: string;
-    mascot?: string;
     agentId?: string;
     agentName: string;
     agentMascot?: string;
@@ -182,9 +172,6 @@ export default function InCallScreen() {
   const colors = useThemeColors();
   const contactName = params.name || undefined;
   const agentName = params.agentName || "Agent";
-  // Only startCallWith (lib/start-call.ts) navigates here, and it always
-  // includes the agent that's placing the call — a missing id means a
-  // broken link, not a normal state to silently recover from.
   const missingAgent = !params.agentId;
 
   const {
@@ -194,23 +181,22 @@ export default function InCallScreen() {
     error,
     isMuted,
     isSpeakerOn,
+    isAgentAudioPlaying,
+    playingWordIndex,
     startCall,
     end,
     toggleMute,
     toggleSpeaker,
   } = useFerryCall();
   const phase = callStatusToPhase(status);
-  // "In progress" for every purpose on this screen — pulsing avatar, enabled
-  // controls — covers both the ringing/"Calling…" phase and once connected.
-  // Only Idle (before start() fires) and Ended/Error should look inert.
   const callInProgress = status === CallStatus.Connecting || status === CallStatus.Connected;
 
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ComponentRef<typeof BottomSheetScrollView>>(null);
   const captionsSheetRef = useRef<BottomSheetModal>(null);
-  // Guards against double-navigating back — both the manual end-call button
-  // and the status-watching effect below can each try to leave the screen
-  // for the same hangup (button press flips `status` too).
   const leavingRef = useRef(false);
+  const sheetOpenRef = useRef(false);
+  const [seenCount, setSeenCount] = useState(0);
+  const hasUnseen = !sheetOpenRef.current && conversation.length > seenCount;
 
   useEffect(() => {
     if (params.agentId) {
@@ -225,12 +211,6 @@ export default function InCallScreen() {
   const leaveScreen = useCallback(() => {
     if (leavingRef.current) return;
     leavingRef.current = true;
-    // Dismiss first and defer the nav-triggered unmount to the next frame —
-    // ending the call flips `status` (a re-render) in the same tick as
-    // `router.back()` otherwise, and Fabric can race that re-render against
-    // the navigator tearing down this screen (which still holds the
-    // BottomSheetModal's portal content), throwing "addViewAt: failed to
-    // insert view... already has a parent".
     captionsSheetRef.current?.dismiss();
     requestAnimationFrame(() => router.back());
   }, []);
@@ -240,9 +220,6 @@ export default function InCallScreen() {
     leaveScreen();
   }, [end, leaveScreen]);
 
-  // Covers a remotely-ended call (e.g. the other leg hanging up or a dial
-  // failure, delivered via CALL_ENDED_TAG) — not just the local end-call
-  // button, which already routes through `endCall` above.
   useEffect(() => {
     if (status === CallStatus.Ended) {
       leaveScreen();
@@ -252,6 +229,16 @@ export default function InCallScreen() {
   const openCaptions = useCallback(() => {
     captionsSheetRef.current?.present();
   }, []);
+
+  const handleSheetChange = useCallback(
+    (index: number) => {
+      sheetOpenRef.current = index >= 0;
+      if (index >= 0) {
+        setSeenCount(conversation.length);
+      }
+    },
+    [conversation.length],
+  );
 
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
@@ -263,13 +250,12 @@ export default function InCallScreen() {
         pressBehavior="close"
       />
     ),
-    []
+    [],
   );
 
   return (
     <View className="flex-1 bg-canvas">
       <SafeAreaView className="flex-1" edges={["top", "bottom"]}>
-        {/* Minimal header — a call has no title bar, just a way back */}
         <View className="flex-row items-center px-4 py-3">
           <Pressable
             onPress={endCall}
@@ -280,14 +266,10 @@ export default function InCallScreen() {
           </Pressable>
         </View>
 
-        {/* Caller ID block — the dialed person is the headline, exactly like
-            a native call screen; the agent interpreting the call is a
-            secondary line underneath, not the main identity. */}
         <View className="flex-1 items-center justify-center px-8">
           <CallerIdentity
             contactName={contactName}
             phone={params.phone}
-            mascot={params.mascot}
             ringing={callInProgress}
           />
 
@@ -296,8 +278,6 @@ export default function InCallScreen() {
           <HandledByStrip agentName={agentName} agentMascot={params.agentMascot} />
         </View>
 
-        {/* Controls — three round toggles, then the end-call circle, same
-            grouping as a native phone call screen */}
         <View className="items-center pb-4">
           <View className="flex-row gap-8">
             <CallControl
@@ -318,6 +298,7 @@ export default function InCallScreen() {
               icon={Captions}
               label="Captions"
               disabled={!callInProgress}
+              badge={hasUnseen}
               onPress={openCaptions}
             />
           </View>
@@ -334,30 +315,30 @@ export default function InCallScreen() {
         </View>
       </SafeAreaView>
 
-      {/* Captions sheet — the native call screen has no room for a
-          transcript, so it lives one swipe away instead of on-screen. */}
       <BottomSheetModal
         ref={captionsSheetRef}
-        snapPoints={["60%", "90%"]}
+        onChange={handleSheetChange}
         backdropComponent={renderBackdrop}
         backgroundStyle={{ backgroundColor: colors.canvas }}
         handleIndicatorStyle={{ backgroundColor: colors.border }}
       >
-        <BottomSheetView style={{ paddingBottom: insets.bottom + 14, flex: 1 }} className="px-4 pt-1">
+        <BottomSheetScrollView
+          ref={scrollRef}
+          style={{ paddingBottom: insets.bottom + 14 }}
+          className="px-4 pt-1"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
           <Text className="mb-3 px-1 text-[15px] font-semibold">Captions</Text>
-          <ScrollView
-            ref={scrollRef}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 24 }}
-          >
-            <LiveTranscript
-              conversation={conversation}
-              interim={interimCaption}
-              phase={phase}
-              agentName={agentName}
-            />
-          </ScrollView>
-        </BottomSheetView>
+          <LiveTranscript
+            conversation={conversation}
+            interim={interimCaption}
+            phase={phase}
+            agentName={agentName}
+            isAgentAudioPlaying={isAgentAudioPlaying}
+            playingWordIndex={playingWordIndex}
+          />
+        </BottomSheetScrollView>
       </BottomSheetModal>
     </View>
   );

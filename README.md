@@ -22,8 +22,44 @@ the next real backend work; nothing in this repo does it yet.
 
 ---
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/home.jpg" width="260" alt="Home screen with usage and recent calls"><br>
+      <sub>Home</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/call-dialer.jpg" width="260" alt="Call screen with contact list"><br>
+      <sub>Call</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/in-call.jpg" width="260" alt="Active call screen"><br>
+      <sub>In call</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/call-details.jpg" width="260" alt="Call details with recording and transcript"><br>
+      <sub>Call details</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/new-agent.jpg" width="260" alt="New agent creation screen"><br>
+      <sub>New agent</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/settings.jpg" width="260" alt="Settings screen">
+      <br><sub>Settings</sub>
+    </td>
+  </tr>
+</table>
+
+---
+
 ## Contents
 
+- [Screenshots](#screenshots)
 - [The shape of the system](#the-shape-of-the-system)
 - [Running it](#running-it)
 - [web](#web)
