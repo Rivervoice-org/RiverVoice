@@ -202,6 +202,7 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
         let (gather_complete_tx, gather_complete_rx) = oneshot::channel();
         let (data_channel_tx, data_channel_rx) = oneshot::channel();
         let (inbound_audio_tx, inbound_audio_rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
+
         let handler = Arc::new(Handler {
             gather_complete_tx: Mutex::new(Some(gather_complete_tx)),
             data_channel_tx: Mutex::new(Some(data_channel_tx)),
