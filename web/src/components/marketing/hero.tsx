@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { HeroCrowd } from "@/components/marketing/hero-crowd";
 import { Swash } from "@/components/marketing/jaali";
 import { Button } from "@/components/ui/button";
@@ -16,7 +14,7 @@ export function Hero() {
 
       <div className="relative flex flex-col items-center">
         <h1 className="animate-rise max-w-3xl text-[36px] leading-[1.04] font-semibold tracking-[-0.04em] text-balance xs:text-[44px] sm:text-[64px] lg:text-[74px]">
-          Voice agents for
+          Voice translation agents for
           {/* The inner span hugs the words, so the stroke sits under the
               phrase rather than spanning the whole centred line */}
           <span className="mt-1 block font-serif font-light italic">
@@ -45,28 +43,14 @@ export function Hero() {
               {i === 0 ? ", " : i === 1 ? " and " : ""}
             </span>
           ))}{" "}
-          — half English, half not, changing language mid-sentence. Your agent keeps up, in all 23
-          of them.
+          — half English, half not, changing language mid-sentence. Your agent keeps up, in all 5 of
+          them.
         </p>
 
         <div
           className="animate-rise mt-9 flex w-full flex-col items-stretch justify-center gap-3 xs:w-auto xs:flex-row xs:items-center"
           style={{ animationDelay: "0.16s" }}
         >
-          {/* One ping on hover rather than a loop: the halo answers the pointer,
-              it does not pulse at the reader forever */}
-          <Button
-            size="lg"
-            className="group relative h-11 overflow-visible px-5 text-[15px]"
-            render={<Link href="/sign-up" />}
-          >
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-0 rounded-[inherit] border border-foreground/40 opacity-0 group-hover:animate-halo motion-reduce:hidden"
-            />
-            Build your first agent
-          </Button>
-
           <Button
             variant="outline"
             size="lg"

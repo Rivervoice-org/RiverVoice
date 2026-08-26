@@ -17,18 +17,17 @@ const HERO = [
   { hello: "வணக்கம்", lang: "Tamil" },
   { hello: "నమస్కారం", lang: "Telugu" },
   { hello: "ನಮಸ್ಕಾರ", lang: "Kannada" },
-  { hello: "নমস্কার", lang: "Bengali" },
-  { hello: "નમસ્તે", lang: "Gujarati" },
+  { hello: "Hello", lang: "English" },
 ];
 
 /* The rest of the chorus, each with its own place and its own way in to the
    line. Delays offset them so only two or three are ever visible at once. */
 const SCATTER = [
-  { hello: "നമസ്കാരം", left: "4%", top: "12%", dx: "12px", dy: "34px", delay: "0s" },
-  { hello: "ନମସ୍କାର", left: "72%", top: "6%", dx: "-12px", dy: "38px", delay: "1.5s" },
-  { hello: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ", left: "56%", top: "80%", dx: "-8px", dy: "-36px", delay: "3s" },
+  { hello: "நமஸ்காரம்", left: "4%", top: "12%", dx: "12px", dy: "34px", delay: "0s" },
+  { hello: "నమస్తే", left: "72%", top: "6%", dx: "-12px", dy: "38px", delay: "1.5s" },
+  { hello: "ನಮಸ್ತೆ", left: "56%", top: "80%", dx: "-8px", dy: "-36px", delay: "3s" },
   { hello: "नमस्कार", left: "10%", top: "72%", dx: "14px", dy: "-32px", delay: "4.5s" },
-  { hello: "নমস্কাৰ", left: "82%", top: "64%", dx: "-10px", dy: "-30px", delay: "6s" },
+  { hello: "Namaste", left: "82%", top: "64%", dx: "-10px", dy: "-30px", delay: "6s" },
 ];
 
 /* One period of the line, ending on the same tangent it starts on — (30,-14)

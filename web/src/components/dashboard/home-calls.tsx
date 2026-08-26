@@ -33,6 +33,9 @@ export function HomeCalls() {
               {call.caller}
             </span>
             <span className="min-w-0 flex-1 truncate text-muted-foreground">{call.agent}</span>
+            <span className="hidden w-40 shrink-0 truncate text-muted-foreground md:block">
+              {call.language}
+            </span>
             <span className="hidden w-28 shrink-0 truncate text-muted-foreground sm:block">
               {outcomes[call.outcome]}
             </span>

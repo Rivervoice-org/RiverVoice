@@ -8,40 +8,18 @@ import { cn } from "@/lib/utils";
  * the way the calls do not. Two rows travel in opposite directions so the band
  * reads as current rather than as a list that happens to slide.
  *
- * Only languages whose greeting we can set correctly get a card; the rest are
- * named underneath, which is honest and keeps the rail free of transliterated
- * guesswork.
+ * Five languages, no more — every one of them a language the pipeline actually
+ * speaks, not a name lifted from a longer list to look impressive.
  */
 const ROW_ONE = [
   { hello: "नमस्ते", lang: "Hindi", code: "hi" },
-  { hello: "নমস্কার", lang: "Bengali", code: "bn" },
-  { hello: "నమస్కారం", lang: "Telugu", code: "te" },
-  { hello: "नमस्कार", lang: "Marathi", code: "mr" },
   { hello: "வணக்கம்", lang: "Tamil", code: "ta" },
-  { hello: "નમસ્તે", lang: "Gujarati", code: "gu" },
+  { hello: "నమస్కారం", lang: "Telugu", code: "te" },
 ];
 
 const ROW_TWO = [
   { hello: "ನಮಸ್ಕಾರ", lang: "Kannada", code: "kn" },
-  { hello: "ନମସ୍କାର", lang: "Odia", code: "or" },
-  { hello: "നമസ്കാരം", lang: "Malayalam", code: "ml" },
-  { hello: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ", lang: "Punjabi", code: "pa" },
-  { hello: "السلام علیکم", lang: "Urdu", code: "ur", rtl: true },
   { hello: "Hello", lang: "English", code: "en" },
-];
-
-const ALSO = [
-  "Assamese",
-  "Maithili",
-  "Santali",
-  "Kashmiri",
-  "Nepali",
-  "Konkani",
-  "Sindhi",
-  "Dogri",
-  "Manipuri",
-  "Bodo",
-  "Sanskrit",
 ];
 
 type Greeting = { hello: string; lang: string; code: string; rtl?: boolean };
@@ -67,8 +45,16 @@ function GreetingCard({ greeting }: { greeting: Greeting }) {
   );
 }
 
+/** Repeated until the half-track is comfortably wider than any viewport — five
+    languages alone leave a gap the marquee's -50% loop exposes as blank page. */
+function fillRow(items: Greeting[]): Greeting[] {
+  const copies = Math.ceil(8 / items.length);
+  return Array.from({ length: copies }, () => items).flat();
+}
+
 /** The track holds the list twice and travels half its width, so there is no seam. */
 function Rail({ items, reverse }: { items: Greeting[]; reverse?: boolean }) {
+  const filled = fillRow(items);
   return (
     <div
       className="group/rail overflow-hidden py-2"
@@ -87,13 +73,13 @@ function Rail({ items, reverse }: { items: Greeting[]; reverse?: boolean }) {
             reverse && "[animation-direction:reverse]",
           )}
         >
-          {items.map((greeting) => (
-            <GreetingCard key={greeting.lang} greeting={greeting} />
+          {filled.map((greeting, i) => (
+            <GreetingCard key={`${greeting.lang}-${i}`} greeting={greeting} />
           ))}
 
           {/* The second pass is scenery, not content */}
-          {items.map((greeting) => (
-            <div key={`${greeting.lang}-repeat`} aria-hidden>
+          {filled.map((greeting, i) => (
+            <div key={`${greeting.lang}-${i}-repeat`} aria-hidden>
               <GreetingCard greeting={greeting} />
             </div>
           ))}
@@ -108,7 +94,7 @@ export function Languages() {
     <section id="languages" className="scroll-mt-20 py-20 sm:py-28">
       <Reveal>
         <SectionHeading
-          eyebrow="23 languages"
+          eyebrow="5 languages"
           title="Your caller should not have to switch for you."
           blurb="Most lines make the caller meet the software halfway. This one starts in whichever language the call opens in, and follows if it changes halfway through a sentence."
           className="mx-auto px-4 text-center"
@@ -125,26 +111,6 @@ export function Languages() {
           <Rail items={ROW_TWO} reverse />
         </Reveal>
       </div>
-
-      {/* The tail read out one name at a time, 90ms apart — a list being said
-          aloud rather than a paragraph appearing. One pass, then still. */}
-      <Reveal
-        delay={600}
-        className="mx-auto mt-12 max-w-2xl px-4 text-center text-sm leading-7 text-muted-foreground"
-      >
-        <span className="text-foreground">Also answers in</span>{" "}
-        {ALSO.map((name, i) => (
-          <span key={name}>
-            <span
-              className="animate-roll-call motion-reduce:animate-none"
-              style={{ animationDelay: `${900 + i * 90}ms` }}
-            >
-              {name}
-            </span>
-            {i < ALSO.length - 1 ? " · " : ""}
-          </span>
-        ))}
-      </Reveal>
     </section>
   );
 }

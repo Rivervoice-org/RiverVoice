@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     default: "Rivervoice",
     template: "%s · Rivervoice",
   },
-  description: "Voice agents that answer the phone.",
+  description: "Voice translation agents that answer the phone.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

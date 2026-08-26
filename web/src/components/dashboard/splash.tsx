@@ -24,7 +24,7 @@ export function Splash() {
 
         {/* Lands last, once the lockup has settled */}
         <p className="animate-splash-word text-[13px] text-muted-foreground [animation-delay:0.42s]">
-          Voice agents, built for India
+          Voice translation agents, built for India
         </p>
       </div>
     </div>

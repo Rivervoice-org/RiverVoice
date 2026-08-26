@@ -25,7 +25,7 @@ const CALLS = [
   { hello: "வணக்கம்", lang: "Tamil", out: "Message taken", secs: 38 },
   { hello: "ನಮಸ್ಕಾರ", lang: "Kannada", out: "Renewed · 12 months", secs: 104 },
   { hello: "నమస్కారం", lang: "Telugu", out: "Promised · Friday", secs: 126 },
-  { hello: "নমস্কার", lang: "Bengali", out: "Booked · 11:30 Thu", secs: 63 },
+  { hello: "Hello", lang: "English", out: "Booked · 11:30 Thu", secs: 63 },
 ];
 
 const STEP = 400;

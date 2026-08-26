@@ -9,9 +9,9 @@ import { Steps } from "@/components/marketing/steps";
 
 export const metadata = {
   // The one page that should not have the product name appended twice.
-  title: { absolute: "Rivervoice · Voice agents that answer the phone" },
+  title: { absolute: "Rivervoice · Voice translation agents that answer the phone" },
   description:
-    "Voice agents that pick up on the first ring and answer in 23 Indian languages, switching mid-call.",
+    "Voice translation agents that pick up on the first ring and answer in 5 Indian languages, switching mid-call.",
 };
 
 /** The public front page. Everything under /home sits behind the session gate. */

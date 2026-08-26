@@ -1,5 +1,6 @@
 import { HomeAgents } from "@/components/dashboard/home-agents";
 import { HomeCalls } from "@/components/dashboard/home-calls";
+import { HomeLanguages } from "@/components/dashboard/home-languages";
 import { HomeUsage } from "@/components/dashboard/home-usage";
 
 export const metadata = { title: "Home" };
@@ -12,10 +13,13 @@ export default function HomePage() {
           Good afternoon, Pavan
         </h1>
 
-        <p className="mt-1.5 text-sm text-muted-foreground">Wednesday, 6 August</p>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          Wednesday, 6 August — your agents are interpreting calls in real time.
+        </p>
       </div>
 
       <HomeUsage />
+      <HomeLanguages />
       <HomeAgents />
       <HomeCalls />
     </div>

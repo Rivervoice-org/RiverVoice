@@ -11,27 +11,9 @@ import { cn } from "@/lib/utils";
 /** A glyph from each script, so the list is scannable without reading. */
 export const LANGUAGES = [
   { name: "Hindi", glyph: "अ" },
-  { name: "Bengali", glyph: "অ" },
   { name: "Telugu", glyph: "త" },
-  { name: "Marathi", glyph: "म" },
   { name: "Tamil", glyph: "அ" },
-  { name: "Gujarati", glyph: "ગ" },
   { name: "Kannada", glyph: "ಕ" },
-  { name: "Malayalam", glyph: "മ" },
-  { name: "Odia", glyph: "ଓ" },
-  { name: "Punjabi", glyph: "ਪ" },
-  { name: "Assamese", glyph: "অ" },
-  { name: "Urdu", glyph: "ا" },
-  { name: "Maithili", glyph: "म" },
-  { name: "Sanskrit", glyph: "स" },
-  { name: "Konkani", glyph: "क" },
-  { name: "Nepali", glyph: "न" },
-  { name: "Sindhi", glyph: "س" },
-  { name: "Kashmiri", glyph: "ک" },
-  { name: "Manipuri", glyph: "ꯃ" },
-  { name: "Santali", glyph: "ᱥ" },
-  { name: "Bodo", glyph: "ब" },
-  { name: "Dogri", glyph: "ड" },
   { name: "English", glyph: "A" },
 ];
 
