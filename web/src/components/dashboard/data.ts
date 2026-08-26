@@ -34,7 +34,7 @@ export const waitingCalls = [
 
 export const metrics = [
   {
-    label: "Calls answered",
+    label: "Calls translated",
     value: "1,284",
     delta: "+12%",
     trend: "up" as const,
@@ -42,7 +42,7 @@ export const metrics = [
     series: [22, 28, 24, 34, 30, 41, 38, 46, 44, 52, 49, 58],
   },
   {
-    label: "Median handle time",
+    label: "Median call length",
     value: "2:41",
     delta: "−18s",
     trend: "up" as const,
@@ -50,9 +50,9 @@ export const metrics = [
     series: [48, 46, 47, 43, 44, 40, 38, 39, 35, 34, 32, 30],
   },
   {
-    label: "Resolved without a human",
-    value: "76%",
-    delta: "+4 pts",
+    label: "Languages spoken",
+    value: "5",
+    delta: "+1",
     trend: "up" as const,
     caption: "vs. last week",
     series: [30, 33, 31, 38, 36, 42, 44, 41, 48, 52, 55, 58],
@@ -67,13 +67,22 @@ export const metrics = [
   },
 ];
 
+/** Which language pairs carried the calls, most-spoken first. */
+export const topLanguages = [
+  { pair: "Kannada → English", calls: 412 },
+  { pair: "Hindi → English", calls: 298 },
+  { pair: "Tamil → English", calls: 176 },
+  { pair: "English → English", calls: 288 },
+  { pair: "Telugu → English", calls: 110 },
+];
+
 export const calls: Call[] = [
   {
     id: "c_9f21",
     caller: "+91 99001 47210",
     region: "Bengaluru, IN",
     agent: "Front Desk",
-    language: "Kannada",
+    language: "Kannada → English",
     duration: "3:12",
     outcome: "resolved",
     time: "11:42",
@@ -84,7 +93,7 @@ export const calls: Call[] = [
     caller: "+1 628 555 0147",
     region: "San Francisco, US",
     agent: "Billing",
-    language: "English",
+    language: "English → English",
     duration: "5:48",
     outcome: "transferred",
     time: "11:29",
@@ -95,7 +104,7 @@ export const calls: Call[] = [
     caller: "+91 80 4711 0290",
     region: "Bengaluru, IN",
     agent: "Front Desk",
-    language: "Hindi",
+    language: "Hindi → English",
     duration: "1:04",
     outcome: "voicemail",
     time: "11:16",
@@ -106,7 +115,7 @@ export const calls: Call[] = [
     caller: "+44 20 7946 0812",
     region: "London, UK",
     agent: "Order status",
-    language: "English",
+    language: "English → English",
     duration: "2:33",
     outcome: "resolved",
     time: "10:58",
@@ -117,7 +126,7 @@ export const calls: Call[] = [
     caller: "+91 97400 33184",
     region: "Mysuru, IN",
     agent: "Front Desk",
-    language: "Kannada",
+    language: "Kannada → English",
     duration: "0:21",
     outcome: "dropped",
     time: "10:47",
@@ -128,7 +137,7 @@ export const calls: Call[] = [
     caller: "+1 917 555 0163",
     region: "New York, US",
     agent: "Billing",
-    language: "English",
+    language: "English → English",
     duration: "4:07",
     outcome: "resolved",
     time: "10:31",

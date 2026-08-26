@@ -22,7 +22,7 @@ export function HomeUsage() {
 
       <div className="flex flex-col justify-between rounded-xl border border-border p-5">
         <div>
-          <p className="text-xs text-muted-foreground">Minutes left</p>
+          <p className="text-xs text-muted-foreground">Translation minutes left</p>
           <p className="mt-2 text-2xl leading-none font-semibold tracking-[-0.02em] tabular-nums">
             {(usage.minutes.included - usage.minutes.used).toLocaleString()}
           </p>

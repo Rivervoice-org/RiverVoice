@@ -1,9 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 
-import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { cn } from "@/lib/utils";
 
@@ -71,25 +69,6 @@ export function SiteNav() {
               </li>
             ))}
           </ul>
-
-          <div className="flex items-center gap-4">
-            <div className="animate-rise" style={{ animationDelay: "0.21s" }}>
-              <Button
-                variant="ghost"
-                size="lg"
-                className="hidden text-muted-foreground hover:bg-transparent hover:text-foreground sm:inline-flex"
-                render={<Link href="/sign-in" />}
-              >
-                Sign in
-              </Button>
-            </div>
-
-            <div className="animate-rise" style={{ animationDelay: "0.35s" }}>
-              <Button size="lg" render={<Link href="/sign-up" />}>
-                Start building
-              </Button>
-            </div>
-          </div>
         </div>
       </nav>
     </header>

@@ -1,15 +1,11 @@
-import Link from "next/link";
-
 import { Reveal } from "@/components/marketing/reveal";
 import { Separator } from "@/components/ui/separator";
 import { Wordmark } from "@/components/wordmark";
 
-/** Only routes that exist get a link; nothing here is a placeholder. */
+/** In-page anchors only — this page has no wiring into the app behind sign-in. */
 const LINKS = [
   { label: "Three steps", href: "#how" },
   { label: "Languages", href: "#languages" },
-  { label: "Sign in", href: "/sign-in" },
-  { label: "Create an account", href: "/sign-up" },
 ];
 
 export function SiteFooter() {
@@ -21,33 +17,22 @@ export function SiteFooter() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
           <Wordmark standUp />
           <p className="text-sm text-muted-foreground">
-            Voice agents that answer the phone, in the language it rang in.
+            Voice translation agents that answer the phone, in the language it rang in.
           </p>
         </div>
 
         <nav>
           <ul className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            {LINKS.map((link) =>
-              link.href.startsWith("#") ? (
-                <li key={link.label}>
-                  <a
-                    href={link.href}
-                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {link.label}
-                  </a>
-                </li>
-              ) : (
-                <li key={link.label}>
-                  <Link
-                    href={link.href}
-                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ),
-            )}
+            {LINKS.map((link) => (
+              <li key={link.label}>
+                <a
+                  href={link.href}
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
           </ul>
         </nav>
       </Reveal>
