@@ -72,6 +72,7 @@ pub async fn webrtc_offer(
     }
 
     let config = config::get().map_err(|e| {
+        tracing::error!("webrtc_offer: config::get failed: {e}");
         ApiResponse::fail(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("server misconfigured: {e}"),
@@ -85,15 +86,22 @@ pub async fn webrtc_offer(
     let serializer = WebRtcSerializer::new(SAMPLE_RATE, NUM_CHANNELS);
     let base = BaseTransport::new(frame_io, serializer);
 
+    tracing::debug!("webrtc_offer: accepting offer for agent {agent_id} with call_id {call_id}");
+
     let (client, answer_sdp) = WebRtcClient::accept_offer(base, req.offer_sdp, None)
         .await
         .map_err(|e| {
+            tracing::error!("webrtc_offer: accept_offer failed: {e:#}");
             ApiResponse::fail(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("webrtc signaling failed: {e}"),
             )
         })?;
 
+    tracing::debug!(
+        "webrtc_offer: accepted offer for agent {agent_id} with call_id {call_id}, answer_sdp length: {}",
+        answer_sdp.len()
+    );
     tokio::spawn(client.run().instrument(span));
 
     Ok(ApiResponse::ok(

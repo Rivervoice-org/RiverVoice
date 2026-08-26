@@ -19,8 +19,10 @@ const ENDPOINT: &str = "wss://api.deepgram.com/v1/listen";
 
 const AUDIO_ENCODING: &str = "linear16";
 
-const MAX_RECONNECT_ATTEMPTS: u32 = 5;
-const RECONNECT_DELAY: Duration = Duration::from_millis(750);
+// Kept reconnect attempts low because increasing them adds latency.
+// Fail fast rather than retry. Same reasoning for the short delay.
+const MAX_RECONNECT_ATTEMPTS: u32 = 1;
+const RECONNECT_DELAY: Duration = Duration::from_millis(100);
 
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -124,7 +126,10 @@ impl SttSession for DeepgramSttSession {
             .serialize(Frame::new(FrameKind::RawAudio(frame)))
             .map_err(|e| SttError::Protocol(e.to_string()))?;
 
-        self.client.send(msg).await.map_err(Into::into)
+        match self.client.send(msg).await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(SttError::Protocol(e.to_string())),
+        }
     }
 
     async fn close(self: Box<Self>) {
