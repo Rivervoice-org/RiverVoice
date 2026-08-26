@@ -1,5 +1,4 @@
 use std::sync::{Mutex, RwLock};
-use std::time::Duration;
 
 use axum::extract::ws::Message;
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -8,17 +7,10 @@ use serde::{Deserialize, Serialize};
 use crate::audio::resampler::SampleRateAdapter;
 use crate::codec::frame_serializer::FrameSerializer;
 use crate::frames::{Frame, FrameKind, RawAudioFrame};
-use crate::transport::pacing::FramePacer;
 
 const TWILIO_SAMPLE_RATE: u32 = 8_000;
 const PIPELINE_SAMPLE_RATE: u32 = 16_000;
 
-/// One 20ms frame at 8kHz mulaw (1 byte/sample) — Twilio's real-time media
-/// frame size. `serialize` only ever appends to `send_buffer`; `drain_paced`
-/// is what actually slices off wire messages, exactly one of these at a
-/// time, at a steady cadence — see the trait doc on why sending whatever
-/// burst size `serialize` produces isn't enough on its own.
-const TWILIO_CHUNK_BYTES: usize = 160;
 const TWILIO_CHUNK_MS: u64 = 20;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -70,23 +62,8 @@ struct MediaOutbound<'a> {
 
 pub struct TwilioSerializer {
     stream_sid: RwLock<Option<String>>,
-    /// Pipeline-rate (16kHz) -> Twilio-rate (8kHz), for outbound TTS audio.
-    /// A real sinc-interpolated resampler (same one the Deepgram STT path
-    /// uses, `ferry/src/codec/stt/deepgram.rs`) — band-limited, so it
-    /// actually filters out content above the new Nyquist before dropping
-    /// the sample rate, unlike naively averaging/dropping samples.
     downsampler: Mutex<SampleRateAdapter>,
-    /// Twilio-rate (8kHz) -> pipeline-rate (16kHz), for inbound mic audio.
     upsampler: Mutex<SampleRateAdapter>,
-    /// Encoded mulaw bytes waiting to go out at a steady 20ms cadence.
-    /// `serialize` only ever pushes; `drain_paced` is the only thing that
-    /// ever drains a chunk. Shared with the WebRTC/Opus path's own pacing —
-    /// see `ferry/src/transport/pacing.rs`.
-    send_pacer: Mutex<FramePacer>,
-    /// Whole-call frame counters, purely for the one-line start/stop summary
-    /// logged around `TwilioInEvent::Start`/`Stop` — per-chunk detail (every
-    /// ~20ms) would drown every other log line in a call, so it only exists
-    /// at TRACE.
     frames_in: Mutex<u64>,
     frames_out: Mutex<u64>,
 }
@@ -103,10 +80,6 @@ impl TwilioSerializer {
                 TWILIO_SAMPLE_RATE,
                 PIPELINE_SAMPLE_RATE,
             )),
-            send_pacer: Mutex::new(FramePacer::new(
-                TWILIO_CHUNK_BYTES,
-                Duration::from_millis(TWILIO_CHUNK_MS),
-            )),
             frames_in: Mutex::new(0),
             frames_out: Mutex::new(0),
         }
@@ -119,6 +92,14 @@ impl FrameSerializer for TwilioSerializer {
     fn serialize(&self, frame: Frame) -> anyhow::Result<Message> {
         match frame.into_kind() {
             FrameKind::TtsAudio(audio) => {
+                let sid = self
+                    .stream_sid
+                    .read()
+                    .map_err(|e| anyhow::anyhow!("twilio: stream_sid lock poisoned: {e}"))?;
+                let stream_sid = sid
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("twilio: no stream_sid yet"))?;
+
                 let samples: Vec<i16> = audio
                     .audio
                     .chunks_exact(2)
@@ -129,57 +110,28 @@ impl FrameSerializer for TwilioSerializer {
                     .lock()
                     .map_err(|e| anyhow::anyhow!("twilio: downsampler lock poisoned: {e}"))?
                     .push(&samples, &mut resampled);
-                let down: Vec<u8> = resampled
+                let mulaw: Vec<u8> = resampled
                     .iter()
                     .map(|&s| linear_to_mulaw_sample(s))
                     .collect();
 
-                self.send_pacer
-                    .lock()
-                    .map_err(|e| anyhow::anyhow!("twilio: send pacer lock poisoned: {e}"))?
-                    .push(down);
+                let b64 = STANDARD.encode(&mulaw);
+                tracing::trace!(
+                    mulaw = mulaw.len(),
+                    b64 = b64.len(),
+                    "twilio: sending audio"
+                );
+                *self.frames_out.lock().unwrap_or_else(|e| e.into_inner()) += 1;
 
-                // Never sent from here — a TtsAudio frame can be hundreds
-                // of ms of audio in one shot; `drain_paced` is what actually
-                // delivers it, sliced into steady 20ms chunks.
-                anyhow::bail!("twilio: buffered for paced delivery")
+                let msg = TwilioOutbound {
+                    event: TwilioOutEvent::Media,
+                    stream_sid,
+                    media: Some(MediaOutbound { payload: &b64 }),
+                };
+                Ok(Message::Text(serde_json::to_string(&msg)?.into()))
             }
             _ => anyhow::bail!("twilio: no wire representation for this frame"),
         }
-    }
-
-    fn drain_paced(&self) -> Option<Message> {
-        let sid = self.stream_sid.read().ok()?;
-        let stream_sid = sid.as_deref()?;
-
-        let chunk = self
-            .send_pacer
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .try_drain()?;
-
-        let b64 = STANDARD.encode(&chunk);
-        // Per-chunk detail (every ~20ms) only at TRACE — the whole-call
-        // frame count gets one summary line at TwilioInEvent::Stop instead.
-        tracing::trace!(
-            mulaw = chunk.len(),
-            b64 = b64.len(),
-            "twilio: sending audio"
-        );
-        *self.frames_out.lock().unwrap_or_else(|e| e.into_inner()) += 1;
-
-        let msg = TwilioOutbound {
-            event: TwilioOutEvent::Media,
-            stream_sid,
-            media: Some(MediaOutbound { payload: &b64 }),
-        };
-        serde_json::to_string(&msg)
-            .ok()
-            .map(|s| Message::Text(s.into()))
-    }
-
-    fn pace_interval(&self) -> Option<Duration> {
-        Some(Duration::from_millis(TWILIO_CHUNK_MS))
     }
 
     fn deserialize(&self, msg: Message) -> anyhow::Result<Option<Frame>> {
