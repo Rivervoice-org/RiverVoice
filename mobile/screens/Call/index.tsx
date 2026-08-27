@@ -30,8 +30,12 @@ function buildSections(contacts: Contact[]): Section[] {
   const map = new Map<string, Contact[]>();
   for (const c of contacts) {
     const letter = c.name[0]?.toUpperCase() || "#";
-    if (!map.has(letter)) map.set(letter, []);
-    map.get(letter)!.push(c);
+    const bucket = map.get(letter);
+    if (bucket) {
+      bucket.push(c);
+    } else {
+      map.set(letter, [c]);
+    }
   }
   return Array.from(map.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))

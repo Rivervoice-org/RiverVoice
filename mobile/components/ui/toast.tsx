@@ -3,7 +3,6 @@ import { X } from "lucide-react-native";
 import * as ToastPrimitive from "@rn-primitives/toast";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
-import { Text } from "./text";
 
 function Toast({
   className,

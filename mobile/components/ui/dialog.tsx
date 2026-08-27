@@ -4,7 +4,6 @@ import { X } from "lucide-react-native";
 import * as DialogPrimitive from "@rn-primitives/dialog";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
-import { Text } from "./text";
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;

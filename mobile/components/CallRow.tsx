@@ -37,7 +37,7 @@ type CallRowProps = {
   titleRight?: React.ReactNode;
   subtitle?: React.ReactNode;
   trailing?: React.ReactNode;
-  showDivider?: boolean;
+  showDivider?: boolean | undefined;
   onPress?: () => void;
 };
 

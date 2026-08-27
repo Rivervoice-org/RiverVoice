@@ -19,7 +19,7 @@ const textVariants = cva("text-foreground", {
 });
 
 type TextProps = RNTextProps &
-  VariantProps<typeof textVariants> & { ref?: React.Ref<RNText> };
+  VariantProps<typeof textVariants> & { ref?: React.Ref<RNText> | undefined };
 
 function Text({ className, variant, font, ref, ...props }: TextProps) {
   return (
