@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CallStatus, FerryCall } from "@/lib/webrtc/ferry-call";
+import { AudioDevice, CallStatus, FerryCall } from "@/lib/webrtc/ferry-call";
 
 export enum Speaker {
   Caller = "caller",
@@ -27,7 +27,10 @@ export function useFerryCall() {
   const [interimCaption, setInterimCaption] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
+  const [activeAudioDevice, setActiveAudioDevice] = useState<AudioDevice>(
+    AudioDevice.None,
+  );
 
   const callRef = useRef<FerryCall | null>(null);
 
@@ -49,7 +52,8 @@ export function useFerryCall() {
     setInterimCaption("");
     setError(null);
     setIsMuted(false);
-    setIsSpeakerOn(true);
+    setAudioDevices([]);
+    setActiveAudioDevice(AudioDevice.None);
 
     const call = new FerryCall({
       onStatusChange: setStatus,
@@ -59,15 +63,25 @@ export function useFerryCall() {
         // Only a final one becomes a permanent line in the conversation.
         if (message.isFinal) {
           setInterimCaption("");
-          setConversation((prev) => [...prev, { speaker: Speaker.Caller, text: message.text }]);
+          setConversation((prev) => [
+            ...prev,
+            { speaker: Speaker.Caller, text: message.text },
+          ]);
         } else {
           setInterimCaption(message.text);
         }
       },
       onTranslation: (message) => {
-        setConversation((prev) => [...prev, { speaker: Speaker.Agent, text: message.text }]);
+        setConversation((prev) => [
+          ...prev,
+          { speaker: Speaker.Agent, text: message.text },
+        ]);
       },
       onError: setError,
+      onAudioRouteChange: (devices, active) => {
+        setAudioDevices(devices);
+        setActiveAudioDevice(active);
+      },
     });
     callRef.current = call;
     return call;
@@ -102,12 +116,8 @@ export function useFerryCall() {
     });
   }, []);
 
-  const toggleSpeaker = useCallback(() => {
-    setIsSpeakerOn((prev) => {
-      const next = !prev;
-      callRef.current?.setSpeakerOn(next);
-      return next;
-    });
+  const chooseAudioRoute = useCallback((route: AudioDevice) => {
+    callRef.current?.chooseAudioRoute(route);
   }, []);
 
   return {
@@ -116,11 +126,12 @@ export function useFerryCall() {
     interimCaption,
     error,
     isMuted,
-    isSpeakerOn,
+    audioDevices,
+    activeAudioDevice,
     startTryAgent,
     startCall,
     end,
     toggleMute,
-    toggleSpeaker,
+    chooseAudioRoute,
   };
 }
