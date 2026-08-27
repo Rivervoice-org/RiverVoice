@@ -17,7 +17,7 @@ import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { CallStatus } from "@/lib/webrtc/ferry-call";
 import { callStatusLabel, callStatusToPhase } from "@/lib/call-status";
-import { useFerryCall } from "@/hooks/use-ferry-call.mock";
+import { useFerryCall } from "@/hooks/use-ferry-call";
 
 const CallStatusLine = memo(function CallStatusLine({
   status,
@@ -69,7 +69,7 @@ const CallerIdentity = memo(function CallerIdentity({
   phone,
   ringing,
 }: {
-  contactName?: string;
+  contactName?: string | undefined;
   phone: string;
   ringing: boolean;
 }) {
@@ -102,7 +102,7 @@ const HandledByStrip = memo(function HandledByStrip({
   agentMascot,
 }: {
   agentName: string;
-  agentMascot?: string;
+  agentMascot?: string | undefined;
 }) {
   return (
     <View className="mt-7 flex-row items-center gap-2 rounded-full bg-secondary py-1.5 pl-1.5 pr-4">
@@ -174,8 +174,6 @@ export default function InCallScreen() {
     error,
     isMuted,
     isSpeakerOn,
-    isAgentAudioPlaying,
-    playingWordIndex,
     startCall,
     end,
     toggleMute,
@@ -322,8 +320,6 @@ export default function InCallScreen() {
             interim={interimCaption}
             phase={phase}
             agentName={agentName}
-            isAgentAudioPlaying={isAgentAudioPlaying}
-            playingWordIndex={playingWordIndex}
           />
         </BottomSheetScrollView>
       </BottomSheetModal>
