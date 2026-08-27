@@ -117,10 +117,11 @@ pub fn build_translation_pipeline(
             >,
     > = Arc::new(SarvamSerializer::new(SAMPLE_RATE));
 
-    let stt_provider = SarvamSttProvider::new(
-        config.sarvam_stt_api_key.to_string(),
-        SarvamSttConfig::new(None),
-    );
+    let mut stt_config = SarvamSttConfig::new(None);
+    stt_config.sample_rate = SAMPLE_RATE;
+    stt_config.languages = vec![source_lang];
+    let stt_provider: SarvamSttProvider =
+        SarvamSttProvider::new(config.sarvam_stt_api_key.to_string(), stt_config);
 
     let mt_provider = SarvamMtProvider::new(
         config.sarvam_tts_api_key.to_string(),

@@ -72,16 +72,38 @@ impl SttProvider for SarvamSttProvider {
         .await?;
 
         let (tx, rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
+        // Sarvam's VAD can fire `vad.speech_end` slightly before that
+        // utterance's trailing `transcript.final` actually arrives — the
+        // opposite of the "final text, then stopped speaking" order every
+        // `SttStage` assumes (and Deepgram guarantees). Tracked here, at the
+        // source of the quirk, rather than in the shared stage: if a final
+        // transcript shows up after speech has already ended, re-emit
+        // `UserStoppedSpeaking` right after it, so downstream always sees
+        // the same well-ordered event stream regardless of provider.
+        let mut speech_ended = false;
         let read_task =
             Self::spawn_read_task("sarvam-stt", read, serializer.clone(), tx, move |frame| {
                 match frame.into_kind() {
-                    FrameKind::Transcription(t) => vec![SttEvent::Transcript(Transcript {
-                        text: t.text,
-                        language,
-                        is_final: t.is_final,
-                    })],
-                    FrameKind::UserStartedSpeaking => vec![SttEvent::UserStartedSpeaking],
-                    FrameKind::UserStoppedSpeaking => vec![SttEvent::UserStoppedSpeaking],
+                    FrameKind::Transcription(t) => {
+                        let is_final = t.is_final;
+                        let mut events = vec![SttEvent::Transcript(Transcript {
+                            text: t.text,
+                            language,
+                            is_final,
+                        })];
+                        if is_final && speech_ended {
+                            events.push(SttEvent::UserStoppedSpeaking);
+                        }
+                        events
+                    }
+                    FrameKind::UserStartedSpeaking => {
+                        speech_ended = false;
+                        vec![SttEvent::UserStartedSpeaking]
+                    }
+                    FrameKind::UserStoppedSpeaking => {
+                        speech_ended = true;
+                        vec![SttEvent::UserStoppedSpeaking]
+                    }
                     _ => vec![],
                 }
             });
