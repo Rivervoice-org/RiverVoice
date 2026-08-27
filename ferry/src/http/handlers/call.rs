@@ -19,7 +19,7 @@ use crate::http::response::ApiResponse;
 use crate::http::state::AppState;
 use crate::observer::frame_observer::FrameObserver;
 use crate::observer::log_observer::LogObserver;
-use crate::pipeline::{NUM_CHANNELS, SAMPLE_RATE, build_translation_pipeline};
+use crate::pipeline::build_translation_pipeline;
 use crate::processor::FrameIo;
 use crate::transport::base::BaseTransport;
 use crate::transport::webrtc::transport::WebRtcClient;
@@ -136,7 +136,7 @@ pub async fn start_call(
 
     let handle = app.call_registry.register(call_id, b_transport_io);
 
-    let serializer = WebRtcSerializer::new(SAMPLE_RATE, NUM_CHANNELS);
+    let serializer = WebRtcSerializer;
     let base = BaseTransport::new(a_transport_io, serializer);
 
     let (client, answer_sdp) =

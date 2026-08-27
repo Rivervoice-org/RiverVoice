@@ -13,7 +13,7 @@ use crate::db;
 use crate::db::entity::agents;
 use crate::http::MAX_REQUEST_BODY_SIZE;
 use crate::http::response::ApiResponse;
-use crate::pipeline::{NUM_CHANNELS, SAMPLE_RATE, build_translation_pipeline};
+use crate::pipeline::build_translation_pipeline;
 use crate::transport::base::BaseTransport;
 use crate::transport::webrtc::transport::WebRtcClient;
 use tracing::Instrument;
@@ -83,7 +83,7 @@ pub async fn webrtc_offer(
     let span = call_span(call_id, "solo");
 
     let frame_io = build_translation_pipeline(config, Some(&agent), false, span.clone());
-    let serializer = WebRtcSerializer::new(SAMPLE_RATE, NUM_CHANNELS);
+    let serializer = WebRtcSerializer;
     let base = BaseTransport::new(frame_io, serializer);
 
     tracing::debug!("webrtc_offer: accepting offer for agent {agent_id} with call_id {call_id}");

@@ -2,12 +2,13 @@ use bytes::Bytes;
 use serde::Serialize;
 
 use crate::codec::frame_serializer::FrameSerializer;
-use crate::frames::{Frame, FrameKind, RawAudioFrame};
+use crate::frames::{Frame, FrameKind};
 
-pub struct WebRtcSerializer {
-    sample_rate: u32,
-    num_channels: u16,
-}
+/// Serializes pipeline frames onto the WebRTC data channel. Stateless, and
+/// one-directional by design: the channel only ever carries transcripts,
+/// translations and status tags *out* to the client. Audio travels the Opus
+/// RTP track in both directions, so nothing ever needs deserializing here.
+pub struct WebRtcSerializer;
 
 const TRANSCRIPT_TAG: u8 = 0x02;
 
@@ -49,23 +50,14 @@ struct TranslationPayload<'a> {
     text: &'a str,
 }
 
-impl WebRtcSerializer {
-    pub fn new(sample_rate: u32, num_channels: u16) -> Self {
-        Self {
-            sample_rate,
-            num_channels,
-        }
-    }
-}
-
 impl FrameSerializer for WebRtcSerializer {
     type Message = Bytes;
 
     fn serialize(&self, frame: Frame) -> anyhow::Result<Bytes> {
         match frame.into_kind() {
             // TtsAudio goes out over the real Opus RTP track (see
-            // `transport::webrtc::WebRtcClient::flush_full_frames`), not the
-            // data channel — never reaches this serializer.
+            // `transport::webrtc::transport::spawn_pacer`), not the data
+            // channel — never reaches this serializer.
             FrameKind::TtsAudio(_) => {
                 anyhow::bail!("webrtc serializer: TtsAudio is sent over the RTP track, not here")
             }
@@ -92,13 +84,7 @@ impl FrameSerializer for WebRtcSerializer {
         }
     }
 
-    fn deserialize(&self, msg: Bytes) -> anyhow::Result<Option<Frame>> {
-        let num_frames = msg.len() as u32 / 2 / u32::from(self.num_channels);
-        Ok(Some(Frame::new(FrameKind::RawAudio(RawAudioFrame {
-            audio: msg.into(),
-            sample_rate: self.sample_rate,
-            num_channels: self.num_channels,
-            num_frames,
-        }))))
+    fn deserialize(&self, _msg: Bytes) -> anyhow::Result<Option<Frame>> {
+        anyhow::bail!("webrtc serializer: the data channel is outbound-only")
     }
 }

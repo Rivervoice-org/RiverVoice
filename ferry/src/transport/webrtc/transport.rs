@@ -583,16 +583,12 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                     }
                 }
                 event = data_channel.poll() => {
+                    // Polled only for `OnClose`. The data channel is
+                    // outbound-only — transcripts, translations and status
+                    // tags go out on it and nothing comes back, since the
+                    // client's mic is a real Opus RTP track (see
+                    // `Handler::on_track`), not PCM on this channel.
                     match event {
-                        Some(DataChannelEvent::OnMessage(msg)) => {
-                            if msg.is_string {
-                                tracing::warn!("webrtc: dropping unexpected text message");
-                                continue;
-                            }
-                            if !self.base.push_wire_message(msg.data.freeze()).await {
-                                break;
-                            }
-                        }
                         Some(DataChannelEvent::OnClose) | None => break,
                         Some(_) => {}
                     }
