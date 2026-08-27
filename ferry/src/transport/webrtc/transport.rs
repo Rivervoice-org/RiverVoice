@@ -1,6 +1,8 @@
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use bytes::BytesMut;
+use rtc::media::Sample;
 use rtc::media_stream::MediaStreamTrack;
 use rtc::rtp_transceiver::rtp_sender::{
     RTCRtpCodec, RTCRtpCodecParameters, RTCRtpCodingParameters, RTCRtpEncodingParameters,
@@ -18,16 +20,43 @@ use webrtc::peer_connection::{
 };
 use webrtc::runtime::default_runtime;
 
-use crate::audio::opus::{OpusDecoder, SAMPLE_RATE};
+use crate::audio::opus::{OpusDecoder, OpusEncoder, SAMPLE_RATE};
 use crate::call::CallStatus;
 use crate::codec::frame_serializer::FrameSerializer;
 use crate::codec::transport::webrtc_dc::{CALL_ENDED_TAG, CALL_RINGING_TAG, PEER_CONNECTED_TAG};
 use crate::frames::{Frame, FrameKind, RawAudioFrame};
 use crate::transport::base::BaseTransport;
 
+/// RTP payload type we assign Opus in our own SDP — arbitrary but fixed,
+/// since we register the codec ourselves rather than negotiating
+/// dynamically.
 const OPUS_PAYLOAD_TYPE: u8 = 120;
+
+/// Per RFC 7587, Opus is always signaled at a 48000Hz clock rate and 2
+/// channels in SDP regardless of the audio's actual encode/decode rate or
+/// channel count — that's a wire-format convention, not what the codec
+/// itself operates at (we run Opus at `SAMPLE_RATE`/mono, see `audio::opus`).
 const OPUS_SDP_CLOCK_RATE: u32 = 48000;
 const OPUS_SDP_CHANNELS: u16 = 2;
+
+/// One 20ms frame at 16kHz mono, 16-bit PCM — Opus only accepts fixed frame
+/// durations (2.5/5/10/20/40/60ms); this is the size TTS chunks get grouped
+/// into before encoding, since providers hand back audio in their own
+/// chunk sizes, not 20ms-aligned ones.
+const FRAME_DURATION_MS: u64 = 20;
+const FRAME_BYTES: usize = (SAMPLE_RATE as usize * FRAME_DURATION_MS as usize / 1000) * 2;
+
+/// The answerer must echo back whatever payload type number the offer used
+/// for a matching codec (JSEP) — not necessarily `OPUS_PAYLOAD_TYPE`, which
+/// is only the number we register the codec under locally. Reads the number
+/// actually written into our own answer SDP so outgoing packets are tagged
+/// with what the client was told to expect.
+fn parse_negotiated_opus_payload_type(sdp: &str) -> Option<u8> {
+    sdp.lines().find_map(|line| {
+        let (pt, rest) = line.strip_prefix("a=rtpmap:")?.split_once(' ')?;
+        rest.starts_with("opus/").then(|| pt.parse().ok())?
+    })
+}
 
 fn opus_codec() -> RTCRtpCodec {
     RTCRtpCodec {
@@ -39,6 +68,17 @@ fn opus_codec() -> RTCRtpCodec {
     }
 }
 
+/// The WebRTC doorway: signaling (SDP offer/answer), the data-channel
+/// read/write loop, and the Opus audio track in both directions.
+/// Everything pipeline-facing lives in `BaseTransport`, same division of
+/// labor as `WebSocketClient`.
+///
+/// Audio flows over a real Opus RTP track in both directions (inbound mic,
+/// outbound TTS) rather than raw PCM on the data channel — the data channel
+/// carries only transcripts, translations, and call-status control bytes.
+/// The client's native WebRTC stack (e.g. `react-native-webrtc`'s NetEQ)
+/// handles jitter buffering and steady playout on receipt; nothing here
+/// paces the outgoing send.
 pub struct WebRtcClient<S: FrameSerializer<Message = bytes::Bytes>> {
     base: BaseTransport<S>,
     peer_connection: Box<dyn PeerConnection>,
@@ -46,6 +86,27 @@ pub struct WebRtcClient<S: FrameSerializer<Message = bytes::Bytes>> {
     /// Decoded mic audio (`RawAudioFrame`s), forwarded from the `on_track`
     /// handler's RTP-receive task into the pipeline.
     inbound_audio_rx: tokio::sync::mpsc::Receiver<Frame>,
+    output_track: Arc<TrackLocalStaticSample>,
+    output_ssrc: u32,
+    /// The Opus payload type actually negotiated in the answer SDP for this
+    /// call — varies per client/call, not the fixed `OPUS_PAYLOAD_TYPE` we
+    /// register our codec under locally. Sending with the wrong value means
+    /// the client silently drops every audio packet as unrecognized.
+    output_payload_type: u8,
+    opus_encoder: OpusEncoder,
+    /// Accumulates PCM across `TtsAudio` frames (which arrive in
+    /// provider-chosen chunk sizes, not 20ms-aligned) until a full
+    /// `FRAME_BYTES` chunk is available to encode and send. No pacing here
+    /// — every full chunk currently buffered is encoded and written
+    /// immediately, back to back.
+    pcm_buffer: VecDeque<u8>,
+    /// Running count across the whole call, purely for the debug log.
+    frames_sent: u32,
+    /// Fires when the call's `CallRegistry` entry transitions to `Ended` —
+    /// Twilio reporting busy/no-answer/failed, or the Twilio leg hanging up
+    /// — so this side hangs up too instead of sitting connected with no
+    /// audio ever arriving. `None` for one-way/no-registry calls (e.g. the
+    /// try-agent screen), which have no other leg to watch.
     status_rx: Option<tokio::sync::watch::Receiver<CallStatus>>,
 }
 
@@ -173,7 +234,7 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
             }],
         ))?);
         peer_connection
-            .add_track(output_track as Arc<dyn TrackLocal>)
+            .add_track(output_track.clone() as Arc<dyn TrackLocal>)
             .await?;
 
         let offer = RTCSessionDescription::offer(offer_sdp)?;
@@ -189,16 +250,74 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
             .ok_or_else(|| anyhow::anyhow!("webrtc: no local description after ICE gathering"))?
             .sdp;
 
+        let output_payload_type =
+            parse_negotiated_opus_payload_type(&answer_sdp).unwrap_or(OPUS_PAYLOAD_TYPE);
+
+        let opus_encoder = OpusEncoder::new().map_err(|e| anyhow::anyhow!("webrtc: {e}"))?;
+
         Ok((
             Self {
                 base,
                 peer_connection: Box::new(peer_connection),
                 data_channel_rx,
                 inbound_audio_rx,
+                output_track,
+                output_ssrc,
+                output_payload_type,
+                opus_encoder,
+                pcm_buffer: VecDeque::new(),
+                frames_sent: 0,
                 status_rx,
             },
             answer_sdp,
         ))
+    }
+
+    /// Encodes and writes every complete `FRAME_BYTES` chunk currently
+    /// buffered, immediately and back to back — no pacing/timer, this just
+    /// groups PCM into the fixed frame size Opus requires.
+    async fn flush_full_frames(&mut self) {
+        while self.pcm_buffer.len() >= FRAME_BYTES {
+            let chunk: Vec<u8> = self.pcm_buffer.drain(..FRAME_BYTES).collect();
+            let samples: Vec<i16> = chunk
+                .chunks_exact(2)
+                .map(|b| i16::from_le_bytes([b[0], b[1]]))
+                .collect();
+
+            let opus_bytes = match self.opus_encoder.encode(&samples) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    tracing::warn!("webrtc: opus encode failed: {e}");
+                    continue;
+                }
+            };
+            let opus_len = opus_bytes.len();
+
+            let sample = Sample {
+                data: opus_bytes.into(),
+                duration: std::time::Duration::from_millis(FRAME_DURATION_MS),
+                ..Default::default()
+            };
+
+            match self
+                .output_track
+                .write_sample(self.output_ssrc, self.output_payload_type, &sample, &[])
+                .await
+            {
+                Ok(()) => {
+                    self.frames_sent += 1;
+                    tracing::trace!(
+                        "webrtc: wrote opus frame #{}, {opus_len} bytes, ssrc={}, payload_type={}",
+                        self.frames_sent,
+                        self.output_ssrc,
+                        self.output_payload_type
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("webrtc: write_sample failed: {e}");
+                }
+            }
+        }
     }
 
     pub async fn run(mut self) {
@@ -291,22 +410,19 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                 }
                 frame = self.base.next_frame() => {
                     let Some(frame) = frame else { break };
-
-                    match self.base.serialize(frame) {
-                        Ok(msg) => {
-                            match data_channel.send(BytesMut::from(msg.as_ref())).await{
-                                Ok(()) => {}
-                                Err(_) => {
-                                    tracing::debug!("webrtc: data channel closed, stopping audio streaming");
-                                    break;
-                                }
+                    match frame.into_kind() {
+                        FrameKind::TtsAudio(audio) => {
+                            self.pcm_buffer.extend(audio.audio);
+                            self.flush_full_frames().await;
+                        }
+                        other => {
+                            if let Ok(msg) = self.base.serialize(Frame::new(other))
+                                && data_channel.send(BytesMut::from(msg.as_ref())).await.is_err()
+                            {
+                                break;
                             }
                         }
-                        Err(e) => {
-                            tracing::warn!("webrtc: dropping frame that failed to serialize: {e}");
-                        }
                     }
-
                 }
                 frame = self.inbound_audio_rx.recv() => {
                     let Some(frame) = frame else { continue };
@@ -317,7 +433,12 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
             }
         }
 
-        tracing::debug!("webrtc: audio streaming stopped");
+        tracing::debug!(
+            frames_sent = self.frames_sent,
+            seconds_sent = self.frames_sent as f64 * FRAME_DURATION_MS as f64 / 1000.0,
+            "webrtc: audio streaming stopped"
+        );
+
         let _ = self.peer_connection.close().await;
     }
 }

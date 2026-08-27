@@ -9,8 +9,6 @@ pub struct WebRtcSerializer {
     num_channels: u16,
 }
 
-const AUDIO_TAG: u8 = 0x00;
-
 const TRANSCRIPT_TAG: u8 = 0x02;
 
 const TRANSLATION_TAG: u8 = 0x03;
@@ -65,11 +63,11 @@ impl FrameSerializer for WebRtcSerializer {
 
     fn serialize(&self, frame: Frame) -> anyhow::Result<Bytes> {
         match frame.into_kind() {
-            FrameKind::TtsAudio(audio) => {
-                let mut payload = Vec::with_capacity(1 + audio.audio.len());
-                payload.push(AUDIO_TAG);
-                payload.extend_from_slice(&audio.audio);
-                Ok(payload.into())
+            // TtsAudio goes out over the real Opus RTP track (see
+            // `transport::webrtc::WebRtcClient::flush_full_frames`), not the
+            // data channel — never reaches this serializer.
+            FrameKind::TtsAudio(_) => {
+                anyhow::bail!("webrtc serializer: TtsAudio is sent over the RTP track, not here")
             }
             FrameKind::Transcription(t) => {
                 let json = serde_json::to_vec(&TranscriptPayload {
@@ -88,18 +86,7 @@ impl FrameSerializer for WebRtcSerializer {
                 payload.extend_from_slice(&json);
                 Ok(payload.into())
             }
-            FrameKind::RawAudio(_)
-            | FrameKind::UserStartedSpeaking
-            | FrameKind::UserStoppedSpeaking
-            | FrameKind::UserTurnAggregation(_)
-            | FrameKind::MtResponseStart
-            | FrameKind::MtResponseEnd
-            | FrameKind::TtsAudioStart
-            | FrameKind::TtsAudioStop
-            | FrameKind::Metrics(_)
-            | FrameKind::SttUsage(_)
-            | FrameKind::MtUsage(_)
-            | FrameKind::TtsUsage(_) => {
+            _other => {
                 anyhow::bail!("webrtc serializer: no wire representation for this frame yet")
             }
         }

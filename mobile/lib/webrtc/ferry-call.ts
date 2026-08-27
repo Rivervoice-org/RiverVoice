@@ -18,6 +18,11 @@ import {
 export enum CallStatus {
   Idle = "idle",
   Connecting = "connecting",
+  // Only reachable on a real two-leg `startCall` (ferry forwards this from
+  // Twilio reporting the callee's phone actively ringing) — `startTryAgent`
+  // has no other leg to ring, so it goes straight from Connecting to
+  // Connected.
+  Ringing = "ringing",
   Connected = "connected",
   Ended = "ended",
   Error = "error",
@@ -59,6 +64,14 @@ export class FerryCall {
   // on its own; without this it finishes connecting anyway, orphaned, with
   // no reference left to ever end it. Checked after every await below.
   private aborted = false;
+  // `startCall` dials a real second leg over Twilio, which sends
+  // PEER_CONNECTED_TAG/CALL_RINGING_TAG once ferry knows the callee's
+  // ringing/pickup state — those drive `Ringing`/`Connected` for that flow.
+  // `startTryAgent` is self-looped with no such leg and no registry entry,
+  // so ferry never sends either tag for it; this flag tells
+  // `pc.onconnectionstatechange` whether to fall back to WebRTC's own
+  // "connected" transport state to mean `CallStatus.Connected` instead.
+  private hasRealCallee = false;
 
   constructor(events: FerryCallEvents) {
     this.events = events;
@@ -70,12 +83,14 @@ export class FerryCall {
 
   /** One-way try-agent demo — self-looped, no real PSTN leg. */
   startTryAgent(agentId: string): Promise<void> {
+    this.hasRealCallee = false;
     return this.negotiate((sdp) => postTryAgentOffer(sdp, agentId));
   }
 
   /** A real two-leg call — ferry dials `toNumber` out over Twilio for the
    * other leg. */
   startCall(agentId: string, toNumber: string): Promise<void> {
+    this.hasRealCallee = true;
     return this.negotiate((sdp) => postCallOffer(sdp, agentId, toNumber));
   }
 
@@ -155,7 +170,16 @@ export class FerryCall {
 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "connected") {
-          this.setStatus(CallStatus.Connected);
+          // This is WebRTC's own transport connecting to ferry — for
+          // `startTryAgent` (no real callee) that already means the call is
+          // live, so it drives `Connected` directly. For `startCall`, it
+          // only means the phone's pipe to ferry is up; the callee hasn't
+          // necessarily even started ringing yet, so `Ringing`/`Connected`
+          // instead come from ferry's own PEER_CONNECTED_TAG/
+          // CALL_RINGING_TAG below, forwarded from the real Twilio leg.
+          if (!this.hasRealCallee) {
+            this.setStatus(CallStatus.Connected);
+          }
           // Belt-and-braces re-assertion: only runs on whichever call
           // instance actually reaches "connected", so a second StrictMode
           // instance's teardown can't undo it the way the earlier
@@ -176,17 +200,35 @@ export class FerryCall {
         // fail this one message.
         try {
           const message = decodeWireMessage(event.data);
-          if (message.kind === WireMessageKind.Transcript) {
-            this.events.onTranscript(message.transcript);
-          } else if (message.kind === WireMessageKind.Translation) {
-            this.events.onTranslation(message.translation);
-          } else if (message.kind === WireMessageKind.CallEnded) {
-            // Explicit "hang up now" from ferry — don't wait on
-            // onconnectionstatechange, which can lag well behind this (ICE
-            // disconnect detection isn't instant, and the other leg — e.g.
-            // Twilio rejecting a dial — can fail in well under a second).
-            this.teardown();
-            this.setStatus(CallStatus.Ended);
+          switch (message.kind) {
+            case WireMessageKind.Transcript:
+              this.events.onTranscript(message.transcript);
+              break;
+            case WireMessageKind.Translation:
+              this.events.onTranslation(message.translation);
+              break;
+            case WireMessageKind.Ringing:
+              // The callee's phone is actively ringing (Twilio, forwarded
+              // by ferry) — only ever sent for `startCall`.
+              this.setStatus(CallStatus.Ringing);
+              break;
+            case WireMessageKind.PeerConnected:
+              // The callee actually picked up — the real "call is live"
+              // signal for `startCall`, distinct from the WebRTC transport
+              // to ferry merely being up (see `onconnectionstatechange`).
+              this.setStatus(CallStatus.Connected);
+              break;
+            case WireMessageKind.CallEnded:
+              // Explicit "hang up now" from ferry — don't wait on
+              // onconnectionstatechange, which can lag well behind this
+              // (ICE disconnect detection isn't instant, and the other leg
+              // — e.g. Twilio rejecting a dial — can fail in well under a
+              // second).
+              this.teardown();
+              this.setStatus(CallStatus.Ended);
+              break;
+            case WireMessageKind.Unknown:
+              break;
           }
         } catch (e) {
           console.warn("[ferry] failed to decode data-channel message:", e);
