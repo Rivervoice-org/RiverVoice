@@ -16,7 +16,7 @@ import { LiveTranscript } from "@/components/LiveTranscript";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { CallStatus } from "@/lib/webrtc/ferry-call";
-import { formatDuration, callStatusToPhase } from "@/lib/call-status";
+import { callStatusLabel, callStatusToPhase } from "@/lib/call-status";
 import { useFerryCall } from "@/hooks/use-ferry-call.mock";
 
 const CallStatusLine = memo(function CallStatusLine({
@@ -44,14 +44,7 @@ const CallStatusLine = memo(function CallStatusLine({
     );
   }
 
-  const label =
-    status === CallStatus.Idle || status === CallStatus.Connecting
-      ? "Calling…"
-      : status === CallStatus.Connected
-        ? formatDuration(duration)
-        : status === CallStatus.Error
-          ? "Call failed"
-          : "Call ended";
+  const label = callStatusLabel(status, duration);
 
   return (
     <>
@@ -189,7 +182,11 @@ export default function InCallScreen() {
     toggleSpeaker,
   } = useFerryCall();
   const phase = callStatusToPhase(status);
-  const callInProgress = status === CallStatus.Connecting || status === CallStatus.Connected;
+  const callInProgress =
+    status === CallStatus.Connecting ||
+    status === CallStatus.Ringing ||
+    status === CallStatus.Connected;
+  const isRinging = status === CallStatus.Ringing;
 
   const scrollRef = useRef<ComponentRef<typeof BottomSheetScrollView>>(null);
   const captionsSheetRef = useRef<BottomSheetModal>(null);
@@ -260,7 +257,7 @@ export default function InCallScreen() {
           <CallerIdentity
             contactName={contactName}
             phone={params.phone}
-            ringing={callInProgress}
+            ringing={isRinging}
           />
 
           <CallStatusLine status={status} error={error} missingAgent={missingAgent} />

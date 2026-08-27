@@ -18,3 +18,19 @@ export function callStatusToPhase(status: CallStatus): TranscriptPhase {
       return TranscriptPhase.Connecting;
   }
 }
+
+export function callStatusLabel(status: CallStatus, duration: number): string {
+  switch (status) {
+    case CallStatus.Idle:
+    case CallStatus.Connecting:
+      return "Calling…";
+    case CallStatus.Ringing:
+      return "Ringing…";
+    case CallStatus.Connected:
+      return formatDuration(duration);
+    case CallStatus.Error:
+      return "Call failed";
+    case CallStatus.Ended:
+      return "Call ended";
+  }
+}

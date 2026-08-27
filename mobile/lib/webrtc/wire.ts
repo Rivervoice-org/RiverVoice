@@ -1,18 +1,23 @@
 /**
  * Tag-byte protocol for ferry's WebRTC data channel — mirrors the constants
- * in ferry/src/serializer/transport/webrtc_dc.rs. Audio no longer travels
- * this channel (it's a real Opus RTP track in both directions); the data
- * channel now only carries transcripts and translations, plus whatever
- * control messages get added later.
+ * in ferry/src/codec/transport/webrtc_dc.rs. Audio never travels this
+ * channel (it's a real Opus RTP track in both directions); the data channel
+ * carries transcripts, translations, and bare-byte call-status control
+ * messages (peer connected, ringing, call ended) — the latter three have no
+ * payload, just the tag itself.
  */
 
 export const TRANSCRIPT_TAG = 0x02;
 export const TRANSLATION_TAG = 0x03;
+export const PEER_CONNECTED_TAG = 0x04;
+export const CALL_RINGING_TAG = 0x05;
 export const CALL_ENDED_TAG = 0x06;
 
 export enum WireMessageKind {
   Transcript = "transcript",
   Translation = "translation",
+  PeerConnected = "peer_connected",
+  Ringing = "ringing",
   CallEnded = "call_ended",
   Unknown = "unknown",
 }
@@ -29,6 +34,8 @@ export type TranslationMessage = {
 export type WireMessage =
   | { kind: WireMessageKind.Transcript; transcript: TranscriptMessage }
   | { kind: WireMessageKind.Translation; translation: TranslationMessage }
+  | { kind: WireMessageKind.PeerConnected }
+  | { kind: WireMessageKind.Ringing }
   | { kind: WireMessageKind.CallEnded }
   | { kind: WireMessageKind.Unknown; tag: number };
 
@@ -54,6 +61,14 @@ export function decodeWireMessage(data: ArrayBuffer): WireMessage {
     const json = new TextDecoder().decode(rest);
     const parsed = JSON.parse(json) as { text: string };
     return { kind: WireMessageKind.Translation, translation: { text: parsed.text } };
+  }
+
+  if (tag === PEER_CONNECTED_TAG) {
+    return { kind: WireMessageKind.PeerConnected };
+  }
+
+  if (tag === CALL_RINGING_TAG) {
+    return { kind: WireMessageKind.Ringing };
   }
 
   if (tag === CALL_ENDED_TAG) {

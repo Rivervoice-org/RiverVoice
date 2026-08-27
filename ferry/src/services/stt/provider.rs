@@ -31,7 +31,6 @@ pub trait SttProvider: Send {
 
     async fn open(
         &self,
-        config: SttConfig,
         serializer: Arc<dyn FrameSerializer<Message = Message>>,
     ) -> Result<(Box<dyn SttSession>, Receiver<SttEvent>), SttError>;
 
@@ -59,27 +58,6 @@ pub trait SttProvider: Send {
     {
         ws_client::spawn_read_task(name, read, serializer, tx, map)
     }
-}
-
-pub struct SttConfig {
-    pub sample_rate: u32,
-    pub languages: Vec<Language>,
-    pub kind: SttConfigKind,
-}
-
-impl SttConfig {
-    pub fn new(sample_rate: u32, languages: Vec<Language>, kind: SttConfigKind) -> Self {
-        Self {
-            sample_rate,
-            languages,
-            kind,
-        }
-    }
-}
-
-#[allow(clippy::large_enum_variant)]
-pub enum SttConfigKind {
-    DeepgramSttConfig(crate::services::stt::deepgram::DeepgramSttConfig),
 }
 
 #[async_trait]

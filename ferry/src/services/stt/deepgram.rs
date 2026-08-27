@@ -10,9 +10,9 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::codec::frame_serializer::FrameSerializer;
 use crate::frames::{Frame, FrameKind, RawAudioFrame};
+use crate::services::stt::language::Language;
 use crate::services::stt::provider::{
-    SttConfig, SttConfigKind, SttError, SttEvent, SttProvider, SttSession, Transcript,
-    WsOutboundClient,
+    SttError, SttEvent, SttProvider, SttSession, Transcript, WsOutboundClient,
 };
 
 const ENDPOINT: &str = "wss://api.deepgram.com/v1/listen";
@@ -34,11 +34,12 @@ fn percent_encode(s: &str) -> String {
 
 pub struct DeepgramSttProvider {
     api_key: String,
+    config: DeepgramSttConfig,
 }
 
 impl DeepgramSttProvider {
-    pub fn new(api_key: String) -> Self {
-        Self { api_key }
+    pub fn new(api_key: String, config: DeepgramSttConfig) -> Self {
+        Self { api_key, config }
     }
 }
 
@@ -50,12 +51,9 @@ impl SttProvider for DeepgramSttProvider {
 
     async fn open(
         &self,
-        config: SttConfig,
         serializer: Arc<dyn FrameSerializer<Message = Message>>,
     ) -> Result<(Box<dyn SttSession>, mpsc::Receiver<SttEvent>), SttError> {
-        let vendor = match &config.kind {
-            SttConfigKind::DeepgramSttConfig(vendor) => vendor,
-        };
+        let vendor = &self.config;
 
         if vendor.utterance_end_ms.is_some() && vendor.interim_results != Some(true) {
             return Err(SttError::Protocol(
@@ -63,8 +61,8 @@ impl SttProvider for DeepgramSttProvider {
                     .to_string(),
             ));
         }
-        let url = build_url(&config, vendor);
-        let language = config.languages.first().copied();
+        let url = build_url(vendor);
+        let language = vendor.languages.first().copied();
 
         let (client, read) = crate::services::ws_client::connect_with_retries(
             &url,
@@ -142,14 +140,14 @@ impl SttSession for DeepgramSttSession {
     }
 }
 
-fn build_url(config: &SttConfig, vendor: &DeepgramSttConfig) -> String {
+fn build_url(vendor: &DeepgramSttConfig) -> String {
     let mut params: Vec<(String, String)> = vec![
         ("encoding".into(), AUDIO_ENCODING.into()),
-        ("sample_rate".into(), config.sample_rate.to_string()),
+        ("sample_rate".into(), vendor.sample_rate.to_string()),
         ("channels".into(), "1".into()),
     ];
 
-    if let Some(language) = config.languages.first() {
+    if let Some(language) = vendor.languages.first() {
         let code = language.code();
         let deepgram_lang = code.split('-').next().unwrap_or(code);
         params.push(("language".into(), deepgram_lang.into()));
@@ -241,21 +239,12 @@ fn build_url(config: &SttConfig, vendor: &DeepgramSttConfig) -> String {
     format!("{ENDPOINT}?{query}")
 }
 
-impl DeepgramSttConfig {
-    pub fn new() -> Self {
-        Self {
-            model: "nova-3".to_string().into(),
-            interim_results: Some(true),
-            utterance_end_ms: Some(1000),
-            vad_events: Some(true),
-            smart_format: Some(true),
-            ..Default::default()
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct DeepgramSttConfig {
+    pub sample_rate: u32,
+
+    pub languages: Vec<Language>,
+
     pub model: Option<String>,
 
     pub punctuate: Option<bool>,
@@ -305,6 +294,79 @@ pub struct DeepgramSttConfig {
     pub mip_opt_out: Option<bool>,
 
     pub extra: HashMap<String, String>,
+}
+
+impl DeepgramSttConfig {
+    // Pass `None` to get Deepgram's recommended defaults outright, or
+    // `Some` with only the fields you care about set — anything left
+    // `None` on it still falls back to the same recommended default.
+    pub fn new(config: Option<DeepgramSttConfig>) -> Self {
+        let Some(c) = config else {
+            return Self::default();
+        };
+
+        Self {
+            sample_rate: c.sample_rate,
+            languages: c.languages,
+            model: c.model.or_else(|| Some("nova-3".to_string())),
+            punctuate: c.punctuate,
+            smart_format: c.smart_format.or(Some(true)),
+            interim_results: c.interim_results.or(Some(true)),
+            endpointing: c.endpointing,
+            utterance_end_ms: c.utterance_end_ms.or(Some(1000)),
+            vad_events: c.vad_events.or(Some(true)),
+            diarize: c.diarize,
+            diarize_model: c.diarize_model,
+            numerals: c.numerals,
+            profanity_filter: c.profanity_filter,
+            redact: c.redact,
+            keywords: c.keywords,
+            keyterms: c.keyterms,
+            detect_entities: c.detect_entities,
+            dictation: c.dictation,
+            filler_words: c.filler_words,
+            search: c.search,
+            replace: c.replace,
+            multichannel: c.multichannel,
+            tag: c.tag,
+            callback: c.callback,
+            callback_method: c.callback_method,
+            mip_opt_out: c.mip_opt_out,
+            extra: c.extra,
+        }
+    }
+
+    fn default() -> Self {
+        Self {
+            sample_rate: 0,
+            languages: Vec::new(),
+            model: Some("nova-3".to_string()),
+            punctuate: None,
+            smart_format: Some(true),
+            interim_results: Some(true),
+            endpointing: None,
+            utterance_end_ms: Some(1000),
+            vad_events: Some(true),
+            diarize: None,
+            diarize_model: None,
+            numerals: None,
+            profanity_filter: None,
+            redact: Vec::new(),
+            keywords: Vec::new(),
+            keyterms: Vec::new(),
+            detect_entities: None,
+            dictation: None,
+            filler_words: None,
+            search: Vec::new(),
+            replace: Vec::new(),
+            multichannel: None,
+            tag: Vec::new(),
+            callback: None,
+            callback_method: None,
+            mip_opt_out: None,
+            extra: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
