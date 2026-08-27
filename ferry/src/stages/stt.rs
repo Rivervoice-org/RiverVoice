@@ -5,23 +5,20 @@ use async_trait::async_trait;
 use crate::codec::frame_serializer::FrameSerializer;
 use crate::frames::{Frame, FrameKind, SttUsageFrame};
 use crate::processor::{FrameIo, FrameProcessor};
-use crate::services::stt::provider::{SttConfig, SttEvent, SttProvider};
+use crate::services::stt::provider::{SttEvent, SttProvider};
 
 pub struct SttStage {
     provider: Box<dyn SttProvider>,
-    config: SttConfig,
     serializer: Arc<dyn FrameSerializer<Message = tokio_tungstenite::tungstenite::Message>>,
 }
 
 impl SttStage {
     pub fn new(
         provider: Box<dyn SttProvider>,
-        config: SttConfig,
         serializer: Arc<dyn FrameSerializer<Message = tokio_tungstenite::tungstenite::Message>>,
     ) -> Self {
         Self {
             provider,
-            config,
             serializer,
         }
     }
@@ -34,8 +31,7 @@ impl FrameProcessor for SttStage {
     }
 
     async fn run(self: Box<Self>, mut io: FrameIo) {
-        let (mut session, mut events) = match self.provider.open(self.config, self.serializer).await
-        {
+        let (mut session, mut events) = match self.provider.open(self.serializer).await {
             Ok(opened) => opened,
             Err(e) => {
                 tracing::error!("{}: failed to open session: {e}", io.name());
@@ -102,7 +98,7 @@ impl FrameProcessor for SttStage {
                         }
                     }
 
-                    // Deepgram finalizes text in chunks as you talk — a single
+                    // STT providers finalize text in chunks as you talk — a single
                     // sentence can produce several interim→final cycles before
                     // you're actually done speaking. Only `UserStoppedSpeaking`
                     // marks the real turn boundary; treating each final chunk

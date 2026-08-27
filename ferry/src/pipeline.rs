@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::Instrument;
 
-use crate::codec::stt::deepgram::DeepgramSerializer;
+use crate::codec::stt::sarvam::SarvamSttSerializer;
 use crate::codec::tts::sarvam::SarvamSerializer;
 use crate::config::Config;
 use crate::db::entity::agents;
@@ -17,9 +17,8 @@ use crate::observer::transcript_log_observer::TranscriptLogObserver;
 use crate::observer::usage_observer::UsageObserver;
 use crate::processor::{FrameIo, FrameProcessor};
 use crate::services::mt::sarvam::{SarvamMtProvider, SpeakerGender, TranslateMode};
-use crate::services::stt::deepgram::{DeepgramSttConfig, DeepgramSttProvider};
 use crate::services::stt::language::Language;
-use crate::services::stt::provider::{SttConfig, SttConfigKind};
+use crate::services::stt::sarvam::{SarvamSttConfig, SarvamSttProvider};
 use crate::services::tts::provider::TtsConfigKind;
 use crate::services::tts::sarvam::{SarvamModel, SarvamTtsConfig, SarvamTtsProvider};
 use crate::stages::mt::MtStage;
@@ -111,18 +110,16 @@ pub fn build_translation_pipeline(
         dyn crate::codec::frame_serializer::FrameSerializer<
                 Message = tokio_tungstenite::tungstenite::Message,
             >,
-    > = Arc::new(DeepgramSerializer::new(SAMPLE_RATE));
+    > = Arc::new(SarvamSttSerializer::new(SAMPLE_RATE));
     let tts_serializer: Arc<
         dyn crate::codec::frame_serializer::FrameSerializer<
                 Message = tokio_tungstenite::tungstenite::Message,
             >,
     > = Arc::new(SarvamSerializer::new(SAMPLE_RATE));
 
-    let stt_provider = DeepgramSttProvider::new(config.deepgram_stt_api_key.to_string());
-    let stt_config = SttConfig::new(
-        SAMPLE_RATE,
-        vec![source_lang],
-        SttConfigKind::DeepgramSttConfig(DeepgramSttConfig::new()),
+    let stt_provider = SarvamSttProvider::new(
+        config.sarvam_stt_api_key.to_string(),
+        SarvamSttConfig::new(None),
     );
 
     let mt_provider = SarvamMtProvider::new(
@@ -144,11 +141,7 @@ pub fn build_translation_pipeline(
     );
 
     let stages: Vec<Box<dyn FrameProcessor>> = vec![
-        Box::new(SttStage::new(
-            Box::new(stt_provider),
-            stt_config,
-            stt_serializer,
-        )),
+        Box::new(SttStage::new(Box::new(stt_provider), stt_serializer)),
         Box::new(MtStage::new(Box::new(mt_provider))),
         Box::new(TtsStage::new(
             Box::new(tts_provider),

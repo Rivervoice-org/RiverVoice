@@ -14,6 +14,7 @@ pub struct Config {
     pub deepgram_stt_api_key: String,
     pub openrouter_api_key: String,
     pub sarvam_tts_api_key: String,
+    pub sarvam_stt_api_key: String,
     pub twilio_account_sid: String,
     pub twilio_auth_token: String,
     pub twilio_twiml_app_sid: String,
@@ -46,6 +47,8 @@ struct RawConfig {
     openrouter_api_key: String,
     #[validate(length(min = 1, message = "SARVAM_TTS_API_KEY is not set"))]
     sarvam_tts_api_key: String,
+    #[validate(length(min = 1, message = "SARVAM_STT_API_KEY is not set"))]
+    sarvam_stt_api_key: String,
     #[validate(length(min = 1, message = "TWILIO_ACCOUNT_SID is not set"))]
     twilio_account_sid: String,
     #[validate(length(min = 1, message = "TWILIO_AUTH_TOKEN is not set"))]
@@ -87,6 +90,7 @@ impl Config {
             deepgram_stt_api_key: std::env::var("DEEPGRAM_STT_API_KEY").unwrap_or_default(),
             openrouter_api_key: std::env::var("OPENROUTER_API_KEY").unwrap_or_default(),
             sarvam_tts_api_key: std::env::var("SARVAM_TTS_API_KEY").unwrap_or_default(),
+            sarvam_stt_api_key: std::env::var("SARVAM_STT_API_KEY").unwrap_or_default(),
             twilio_account_sid: std::env::var("TWILIO_ACCOUNT_SID").unwrap_or_default(),
             twilio_auth_token: std::env::var("TWILIO_AUTH_TOKEN").unwrap_or_default(),
             twilio_twiml_app_sid: std::env::var("TWILIO_TWIML_APP_SID").unwrap_or_default(),
@@ -104,6 +108,7 @@ impl Config {
             deepgram_stt_api_key: raw.deepgram_stt_api_key,
             openrouter_api_key: raw.openrouter_api_key,
             sarvam_tts_api_key: raw.sarvam_tts_api_key,
+            sarvam_stt_api_key: raw.sarvam_stt_api_key,
             twilio_account_sid: raw.twilio_account_sid,
             twilio_auth_token: raw.twilio_auth_token,
             twilio_twiml_app_sid: raw.twilio_twiml_app_sid,
