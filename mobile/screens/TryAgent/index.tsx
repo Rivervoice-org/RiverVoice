@@ -193,7 +193,9 @@ export default function TryAgentScreen() {
 
           <Pressable
             onPress={() => audioRouteSheetRef.current?.present()}
-            disabled={status !== CallStatus.Connected}
+            disabled={
+              status !== CallStatus.Connected || audioDevices.length === 0
+            }
             className={`h-12 w-12 items-center justify-center rounded-full border border-border active:opacity-80 ${
               activeAudioDevice === AudioDevice.SpeakerPhone
                 ? "bg-foreground"

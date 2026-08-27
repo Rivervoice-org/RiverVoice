@@ -85,32 +85,40 @@ export function AudioRoutePickerSheet({
       >
         <Text className="mb-3 text-base font-semibold">Audio output</Text>
 
-        <Card className="overflow-hidden">
-          {available.map((device, index) => {
-            const Icon = AUDIO_ROUTE_ICONS[device];
-            const isActive = device === active;
-            return (
-              <Pressable
-                key={device}
-                onPress={() => {
-                  onSelect(device);
-                  sheetRef.current?.dismiss();
-                }}
-                className={`flex-row items-center gap-3 px-4 py-3.5 active:bg-secondary ${
-                  index !== available.length - 1 ? "border-b border-border" : ""
-                }`}
-              >
-                <Icon size={18} strokeWidth={1.75} color={colors.ink} />
-                <Text className="flex-1 text-[15px]">
-                  {AUDIO_ROUTE_LABELS[device]}
-                </Text>
-                {isActive ? (
-                  <Check size={18} strokeWidth={2} color={colors.ink} />
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </Card>
+        {available.length === 0 ? (
+          <Text variant="muted" className="px-1 py-3 text-[13px]">
+            No audio outputs available yet
+          </Text>
+        ) : (
+          <Card className="overflow-hidden">
+            {available.map((device, index) => {
+              const Icon = AUDIO_ROUTE_ICONS[device];
+              const isActive = device === active;
+              return (
+                <Pressable
+                  key={device}
+                  onPress={() => {
+                    onSelect(device);
+                    sheetRef.current?.dismiss();
+                  }}
+                  className={`flex-row items-center gap-3 px-4 py-3.5 active:bg-secondary ${
+                    index !== available.length - 1
+                      ? "border-b border-border"
+                      : ""
+                  }`}
+                >
+                  <Icon size={18} strokeWidth={1.75} color={colors.ink} />
+                  <Text className="flex-1 text-[15px]">
+                    {AUDIO_ROUTE_LABELS[device]}
+                  </Text>
+                  {isActive ? (
+                    <Check size={18} strokeWidth={2} color={colors.ink} />
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </Card>
+        )}
       </BottomSheetView>
     </BottomSheetModal>
   );

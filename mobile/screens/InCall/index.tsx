@@ -327,7 +327,7 @@ export default function InCallScreen() {
                   : AUDIO_ROUTE_LABELS[activeAudioDevice]
               }
               active={activeAudioDevice === AudioDevice.SpeakerPhone}
-              disabled={!callInProgress}
+              disabled={!callInProgress || audioDevices.length === 0}
               onPress={openAudioRoute}
             />
             <CallControl
