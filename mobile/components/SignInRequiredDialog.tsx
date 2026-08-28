@@ -13,7 +13,7 @@ import { Text } from "@/components/ui/text";
 interface SignInRequiredDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  continueWithGoogle: () => Promise<void>;
+  continueWithGoogle: () => Promise<boolean>;
   /** Called once continueWithGoogle actually succeeds, so the provider can
    * run whatever action was deferred behind this prompt. */
   onSignedIn: () => void;
@@ -33,8 +33,12 @@ export function SignInRequiredDialog({
     setError("");
     setLoading(true);
     try {
-      await continueWithGoogle();
-      onSignedIn();
+      const signedIn = await continueWithGoogle();
+      // Cancelled the account picker — not an error, just leave the dialog
+      // open so they can try again; the pending action must not run.
+      if (signedIn) {
+        onSignedIn();
+      }
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

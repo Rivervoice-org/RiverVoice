@@ -66,13 +66,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     mutationFn: googleSignIn,
   });
 
-  const continueWithGoogle = useCallback(async () => {
+  const continueWithGoogle = useCallback(async (): Promise<boolean> => {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
     const response = await GoogleSignin.signIn();
 
-    // User closed the Google account picker — not an error, just no-op.
+    // User closed the Google account picker — not an error, but callers
+    // need to know sign-in didn't actually happen (e.g. so a deferred
+    // action doesn't run as if it had).
     if (response.type !== "success") {
-      return;
+      return false;
     }
 
     const idToken = response.data.idToken;
@@ -84,6 +86,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     await saveTokens(result);
     setUser({ name: result.name, email: result.email });
     setIsAuthenticated(true);
+    return true;
   }, [googleSignInMutation]);
 
   const signOut = useCallback(() => {

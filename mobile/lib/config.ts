@@ -15,9 +15,17 @@ const envSchema = z.object({
     .min(1, "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is not set"),
 });
 
+// Expo's env-var inlining only statically replaces literal dot-notation
+// `process.env.EXPO_PUBLIC_*` member expressions — bracket notation isn't
+// matched and would silently stay undefined in a release build. That's
+// incompatible with this project's noPropertyAccessFromIndexSignature, so
+// each access is suppressed individually rather than disabling the rule
+// project-wide.
 const parsed = envSchema.safeParse({
-  EXPO_PUBLIC_FERRY_URL: process.env["EXPO_PUBLIC_FERRY_URL"],
-  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env["EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"],
+  // @ts-expect-error -- dot notation required for Expo's env inlining
+  EXPO_PUBLIC_FERRY_URL: process.env.EXPO_PUBLIC_FERRY_URL,
+  // @ts-expect-error -- dot notation required for Expo's env inlining
+  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
 });
 
 if (!parsed.success) {

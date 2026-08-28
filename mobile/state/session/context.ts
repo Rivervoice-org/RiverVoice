@@ -13,7 +13,10 @@ export interface SessionContextValue {
    * signed-in user briefly flashes the signed-out state on every cold start. */
   isBootstrapping: boolean;
   user: SessionUser | null;
-  continueWithGoogle: () => Promise<void>;
+  /** Resolves true if the user actually completed Google sign-in, false if
+   * they cancelled the account picker — callers that defer an action until
+   * sign-in completes need to distinguish the two. */
+  continueWithGoogle: () => Promise<boolean>;
   signOut: () => void;
 }
 
