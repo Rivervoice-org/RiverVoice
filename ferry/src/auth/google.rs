@@ -9,6 +9,11 @@ use tokio::sync::RwLock;
 const GOOGLE_CERTS_URL: &str = "https://www.googleapis.com/oauth2/v3/certs";
 const GOOGLE_ISSUERS: &[&str] = &["https://accounts.google.com", "accounts.google.com"];
 const JWKS_CACHE_TTL_SECS: i64 = 3600;
+/// Caps how often an unrecognized `kid` can trigger a real fetch from
+/// Google — `decode_header` runs before any signature check, so a flood of
+/// tokens carrying bogus `kid`s would otherwise turn into a flood of
+/// outbound requests to Google on every single one of them.
+const JWKS_REFETCH_THROTTLE_SECS: i64 = 10;
 
 #[derive(Debug)]
 pub enum GoogleAuthError {
@@ -67,11 +72,18 @@ async fn get_key(kid: &str) -> Result<Jwk, GoogleAuthError> {
     {
         let cache = JWKS_CACHE.read().await;
         if let Some(cached) = cache.as_ref() {
-            let fresh = (Utc::now() - cached.fetched_at).num_seconds() < JWKS_CACHE_TTL_SECS;
-            if fresh {
+            let age = (Utc::now() - cached.fetched_at).num_seconds();
+            if age < JWKS_CACHE_TTL_SECS {
                 if let Some(jwk) = cached.keys.get(kid) {
                     return Ok(jwk.clone());
                 }
+            }
+            // The cache is stale or just doesn't have this kid — normally
+            // that means a real key rotation and we'd refetch, but only at
+            // most once per throttle window, so a kid we've already just
+            // failed to find can't be resubmitted to force another fetch.
+            if age < JWKS_REFETCH_THROTTLE_SECS {
+                return Err(GoogleAuthError::UnknownKey);
             }
         }
     }

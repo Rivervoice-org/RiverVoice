@@ -12,6 +12,7 @@ use crate::auth::{refresh_token, token};
 use crate::config;
 use crate::db;
 use crate::db::entity::users;
+use crate::http::MAX_REQUEST_BODY_SIZE;
 use crate::http::response::ApiResponse;
 
 const DEFAULT_MASCOT: &str = "notionists:new-agent";
@@ -60,7 +61,7 @@ impl From<users::Model> for UserResponse {
 pub async fn google_sign_in(
     req: Request,
 ) -> Result<ApiResponse<GoogleSignInResponse>, ApiResponse<()>> {
-    let body = to_bytes(req.into_body(), usize::MAX)
+    let body = to_bytes(req.into_body(), MAX_REQUEST_BODY_SIZE)
         .await
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid body: {e}")))?;
 
