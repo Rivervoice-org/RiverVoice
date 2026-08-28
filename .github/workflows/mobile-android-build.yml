@@ -51,11 +51,23 @@ jobs:
       - name: Prebuild native Android project
         run: npx expo prebuild --platform android --non-interactive
 
+      # expo prebuild regenerates gradle.properties from Expo's template
+      # every run, which doesn't turn on Gradle's build cache — without
+      # this, setup-gradle below has nothing to actually cache task
+      # outputs into, even though it's caching ~/.gradle regardless.
+      - name: Enable Gradle build cache
+        run: |
+          echo "org.gradle.caching=true" >> android/gradle.properties
+          echo "org.gradle.parallel=true" >> android/gradle.properties
+
       - uses: gradle/actions/setup-gradle@v6
 
+      # Only arm64-v8a instead of the default four ABIs — this is a CI/test
+      # artifact, not a store release, and native compilation (webrtc,
+      # audio, worklets) is what actually dominates the build time here.
       - name: Build debug APK
         working-directory: mobile/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=arm64-v8a
 
       - uses: actions/upload-artifact@v4
         with:
