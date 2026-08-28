@@ -1,14 +1,15 @@
 import { authHeader } from "@/lib/auth/tokens";
 import { ferry } from "@/lib/ferry";
-import type { CreateUserRequest, CreateUserResponse, UserResponse } from "@/lib/auth/types";
+import type { GoogleSignInRequest, GoogleSignInResponse, UserResponse } from "@/lib/auth/types";
 
 /**
- * Hits ferry's `POST /v1/users` (see ferry/src/http/handlers/user.rs).
- * There is no separate OTP/login endpoint yet — this is the one auth
- * route ferry exposes, and it creates the user if the number is new.
+ * Hits ferry's `POST /v1/auth/google` (see ferry/src/http/handlers/user.rs).
+ * This is the only sign-in route ferry exposes — it finds-or-creates the
+ * account for the Google ID token's `sub` and issues a fresh access +
+ * refresh token pair either way.
  */
-export function createUser(payload: CreateUserRequest): Promise<CreateUserResponse> {
-  return ferry.post<CreateUserResponse>("/v1/users", payload);
+export function googleSignIn(payload: GoogleSignInRequest): Promise<GoogleSignInResponse> {
+  return ferry.post<GoogleSignInResponse>("/v1/auth/google", payload);
 }
 
 /**

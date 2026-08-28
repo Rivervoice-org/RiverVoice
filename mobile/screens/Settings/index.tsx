@@ -150,9 +150,9 @@ function ProfileSection() {
     <View className="items-center px-6 pt-6 pb-8">
       <MascotPicker value={mascot} onSelect={setMascot} />
       <Text className="mt-3 text-[20px] font-semibold">{user?.name || "You"}</Text>
-      {user?.phone ? (
+      {user?.email ? (
         <Text variant="muted" className="mt-0.5 text-[13px]">
-          +{user.phone}
+          {user.email}
         </Text>
       ) : null}
       <Text variant="muted" className="mt-1 text-[12px]">

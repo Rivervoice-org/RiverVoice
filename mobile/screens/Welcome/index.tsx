@@ -1,13 +1,30 @@
+import { useState } from "react";
 import { View } from "react-native";
-import { router } from "expo-router";
 import { Waves } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
+import { useAuth } from "@/hooks/use-auth";
 import { useThemeColors } from "@/lib/theme";
 
 export default function WelcomeScreen() {
   const colors = useThemeColors();
+  const { continueWithGoogle } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleContinueWithGoogle() {
+    setError("");
+    setLoading(true);
+    try {
+      await continueWithGoogle();
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <View className="flex-1 bg-canvas px-6 pt-16 pb-10">
       {/* Top section - Logo and branding */}
@@ -39,18 +56,15 @@ export default function WelcomeScreen() {
         </Text>
       </View>
 
-      {/* Bottom section - CTA buttons */}
+      {/* Bottom section - CTA */}
       <View className="gap-3">
-        <Button size="lg" onPress={() => router.replace("/(tabs)")}>
-          Get started
-        </Button>
-
-        <Button
-          size="lg"
-          variant="outline"
-          onPress={() => router.push("/(auth)/continue-with-number")}
-        >
-          Continue with number
+        {error ? (
+          <Text variant="destructive" className="text-center text-[13px]">
+            {error}
+          </Text>
+        ) : null}
+        <Button size="lg" onPress={handleContinueWithGoogle} loading={loading}>
+          Continue with Google
         </Button>
       </View>
     </View>

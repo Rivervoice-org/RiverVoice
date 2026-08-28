@@ -2,7 +2,7 @@ import { createContext } from "react";
 
 export interface SessionUser {
   name: string;
-  phone: string;
+  email: string;
 }
 
 export interface SessionContextValue {
@@ -13,7 +13,7 @@ export interface SessionContextValue {
    * signed-in user briefly flashes the signed-out state on every cold start. */
   isBootstrapping: boolean;
   user: SessionUser | null;
-  continueWithNumber: (phone: string) => Promise<void>;
+  continueWithGoogle: () => Promise<void>;
   signOut: () => void;
 }
 
