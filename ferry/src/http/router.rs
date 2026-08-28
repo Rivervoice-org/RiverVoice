@@ -67,10 +67,6 @@ fn twilio_routes() -> Router<AppState> {
         .route("/v1/twilio/status/{call_id}", post(handlers::twilio_status))
 }
 
-fn user_routes() -> Router<AppState> {
-    Router::new().route("/v1/users", post(handlers::create_user))
-}
-
 fn protected_user_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/users/me", get(handlers::get_me))
@@ -98,6 +94,7 @@ fn voice_routes() -> Router<AppState> {
 
 fn auth_routes() -> Router<AppState> {
     Router::new()
+        .route("/v1/auth/google", post(handlers::google_sign_in))
         .route("/v1/auth/refresh", post(handlers::refresh))
         .route("/v1/auth/signout", post(handlers::sign_out))
 }
@@ -116,7 +113,6 @@ pub async fn start_server() -> anyhow::Result<()> {
     let router = http_routes()
         .merge(protected_call_routes())
         .merge(twilio_routes())
-        .merge(user_routes())
         .merge(protected_user_routes())
         .merge(auth_routes())
         .merge(agent_routes())
