@@ -46,12 +46,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
             setIsAuthenticated(true);
           }
         }
-      } catch {
+      } catch (err) {
         // Refresh token dead, the /me fetch failed, or SecureStore itself
         // threw (corrupted entry, etc.) — nothing to restore either way.
         // Falling through to the finally below is what matters: bootstrap
         // must resolve regardless of what failed, or the app is stuck on
         // the splash screen forever.
+        console.error("session bootstrap failed:", err);
       } finally {
         if (!cancelled) setIsBootstrapping(false);
       }
@@ -100,17 +101,19 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     void (async () => {
       const refreshToken = await getRefreshToken();
       await clearTokens();
-      await GoogleSignin.signOut().catch(() => {
+      await GoogleSignin.signOut().catch((err) => {
         // Best-effort — clearing the local Google session isn't load-bearing
         // for RiverVoice's own sign-out.
+        console.error("GoogleSignin.signOut failed:", err);
       });
       if (refreshToken) {
         try {
           await signOutRequest(refreshToken);
-        } catch {
+        } catch (err) {
           // Best-effort — the local session is already cleared either way,
           // so a network failure here just leaves the old refresh token
           // valid server-side until it naturally expires.
+          console.error("signOutRequest failed:", err);
         }
       }
     })();

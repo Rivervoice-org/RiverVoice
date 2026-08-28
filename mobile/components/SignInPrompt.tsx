@@ -19,9 +19,10 @@ export function SignInPrompt({ icon, message }: SignInPromptProps) {
     setLoading(true);
     try {
       await continueWithGoogle();
-    } catch {
+    } catch (err) {
       // Nowhere in this empty state to surface an error — the button just
       // stops loading and the user can tap it again.
+      console.error("continueWithGoogle failed:", err);
     } finally {
       setLoading(false);
     }

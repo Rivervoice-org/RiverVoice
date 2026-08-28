@@ -39,7 +39,8 @@ export function SignInRequiredDialog({
       if (signedIn) {
         onSignedIn();
       }
-    } catch {
+    } catch (err) {
+      console.error("continueWithGoogle failed:", err);
       setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);

@@ -18,7 +18,8 @@ export default function WelcomeScreen() {
     setLoading(true);
     try {
       await continueWithGoogle();
-    } catch {
+    } catch (err) {
+      console.error("continueWithGoogle failed:", err);
       setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
