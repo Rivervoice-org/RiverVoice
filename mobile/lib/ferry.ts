@@ -19,7 +19,7 @@ function sleep(ms: number): Promise<void> {
 
 export class FerryApiError extends Error {
   /** The response's HTTP status, or undefined for a network/timeout failure. */
-  status?: number;
+  status?: number | undefined;
 
   constructor(message: string, status?: number) {
     super(message);
@@ -161,7 +161,10 @@ class FerryClient {
 
   /** GETs a ferry route and unwraps ferry's `{ data, error }` envelope. */
   get<T>(path: string, headers?: Record<string, string>): Promise<T> {
-    return this.request<T>(path, { method: "GET", headers });
+    // `RequestInit.headers` (a DOM type) rejects an explicit `undefined`
+    // under `exactOptionalPropertyTypes` — omit the key entirely rather
+    // than set it to a possibly-undefined value.
+    return this.request<T>(path, { method: "GET", ...(headers ? { headers } : {}) });
   }
 
   /** POSTs JSON to a ferry route and unwraps ferry's `{ data, error }` envelope. */
@@ -184,7 +187,7 @@ class FerryClient {
 
   /** DELETEs a ferry route and unwraps ferry's `{ data, error }` envelope. */
   delete<T>(path: string, headers?: Record<string, string>): Promise<T> {
-    return this.request<T>(path, { method: "DELETE", headers });
+    return this.request<T>(path, { method: "DELETE", ...(headers ? { headers } : {}) });
   }
 }
 

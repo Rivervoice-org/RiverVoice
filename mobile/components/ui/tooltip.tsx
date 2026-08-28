@@ -1,7 +1,6 @@
 import * as React from "react";
 import * as TooltipPrimitive from "@rn-primitives/tooltip";
 import { cn } from "@/lib/utils";
-import { Text } from "./text";
 
 const Tooltip = TooltipPrimitive.Root;
 const TooltipTrigger = TooltipPrimitive.Trigger;

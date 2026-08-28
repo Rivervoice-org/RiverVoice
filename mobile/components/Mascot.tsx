@@ -10,7 +10,7 @@ export interface MascotProps {
   size?: number;
   style?: MascotStyle;
   /** "style:seed"; takes precedence over seed and style when given. */
-  ref?: string;
+  ref?: string | undefined;
   borderRadius?: number;
   className?: string;
   containerStyle?: StyleProp<ViewStyle>;
@@ -56,9 +56,14 @@ export const Mascot = memo(function Mascot({
   // exactly the size asked for, so a logical-px request blurs on 2x/3x screens.
   const uri = avatarUrl(ref, Math.round(size * PixelRatio.get()), params);
 
+  // react-native-reanimated's AnimatedProps doesn't accept an explicit
+  // `undefined` for `className` under `exactOptionalPropertyTypes` — the
+  // prop has to be genuinely absent, not present-but-undefined.
+  const animatedClassName = className !== undefined ? { className } : {};
+
   return (
     <Animated.View
-      className={className}
+      {...animatedClassName}
       style={[
         {
           width: size,

@@ -35,7 +35,7 @@ function warmFaces(style: MascotStyleId) {
 
 interface MascotPickerProps {
   /** A mascot ref ("style:seed"), or undefined for the default face. */
-  value?: string;
+  value?: string | undefined;
   onSelect: (ref: string | undefined) => void;
   /** Trigger avatar size. */
   size?: number;

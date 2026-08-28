@@ -120,7 +120,7 @@ export function AgentPickerSheet({
         ) : isError ? (
           <View className="items-center py-10">
             <Text variant="muted" className="text-sm">
-              Couldn't load your agents
+              Couldn&apos;t load your agents
             </Text>
           </View>
         ) : !agents || agents.length === 0 ? (

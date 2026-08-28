@@ -1,6 +1,16 @@
-import { memo, useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentRef,
+} from "react";
 import { View, Pressable } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import {
   BottomSheetModal,
@@ -8,16 +18,21 @@ import {
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from "@gorhom/bottom-sheet";
-import { PhoneOff, Phone, Mic, MicOff, Volume2, VolumeX, Captions } from "lucide-react-native";
+import { PhoneOff, Phone, Mic, MicOff, Captions } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { PulsingRing } from "@/components/PulsingRing";
 import { LiveTranscript } from "@/components/LiveTranscript";
+import {
+  AudioRoutePickerSheet,
+  type AudioRoutePickerHandle,
+} from "@/components/AudioRoutePickerSheet";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
-import { CallStatus } from "@/lib/webrtc/ferry-call";
+import { AudioDevice, CallStatus } from "@/lib/webrtc/ferry-call";
 import { callStatusLabel, callStatusToPhase } from "@/lib/call-status";
-import { useFerryCall } from "@/hooks/use-ferry-call.mock";
+import { AUDIO_ROUTE_ICONS, AUDIO_ROUTE_LABELS } from "@/lib/audio-route";
+import { useFerryCall } from "@/hooks/use-ferry-call";
 
 const CallStatusLine = memo(function CallStatusLine({
   status,
@@ -56,7 +71,11 @@ const CallStatusLine = memo(function CallStatusLine({
         {label}
       </Text>
       {error && status === CallStatus.Error ? (
-        <Text variant="destructive" className="mt-1 text-[13px]" numberOfLines={2}>
+        <Text
+          variant="destructive"
+          className="mt-1 text-[13px]"
+          numberOfLines={2}
+        >
           {error}
         </Text>
       ) : null}
@@ -69,7 +88,7 @@ const CallerIdentity = memo(function CallerIdentity({
   phone,
   ringing,
 }: {
-  contactName?: string;
+  contactName?: string | undefined;
   phone: string;
   ringing: boolean;
 }) {
@@ -86,7 +105,9 @@ const CallerIdentity = memo(function CallerIdentity({
         </View>
       </PulsingRing>
 
-      <Text className="mt-6 text-[28px] font-semibold">{contactName ?? phone}</Text>
+      <Text className="mt-6 text-[28px] font-semibold">
+        {contactName ?? phone}
+      </Text>
 
       {contactName ? (
         <Text font="mono" variant="muted" className="mt-1 text-[15px]">
@@ -102,7 +123,7 @@ const HandledByStrip = memo(function HandledByStrip({
   agentMascot,
 }: {
   agentName: string;
-  agentMascot?: string;
+  agentMascot?: string | undefined;
 }) {
   return (
     <View className="mt-7 flex-row items-center gap-2 rounded-full bg-secondary py-1.5 pl-1.5 pr-4">
@@ -131,14 +152,23 @@ const CallControl = memo(function CallControl({
 }) {
   const colors = useThemeColors();
   return (
-    <Pressable onPress={onPress} disabled={disabled} className="items-center gap-2" hitSlop={8}>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      className="items-center gap-2"
+      hitSlop={8}
+    >
       <View
         className={`h-16 w-16 items-center justify-center rounded-full ${
           active ? "bg-foreground" : "bg-secondary"
         }`}
         style={{ opacity: disabled ? 0.4 : 1 }}
       >
-        <Icon size={22} strokeWidth={2} color={active ? colors.onInk : colors.ink} />
+        <Icon
+          size={22}
+          strokeWidth={2}
+          color={active ? colors.onInk : colors.ink}
+        />
         {badge && (
           <View
             className="absolute right-3 top-3 h-2 w-2 rounded-full bg-foreground"
@@ -173,13 +203,12 @@ export default function InCallScreen() {
     interimCaption,
     error,
     isMuted,
-    isSpeakerOn,
-    isAgentAudioPlaying,
-    playingWordIndex,
+    audioDevices,
+    activeAudioDevice,
     startCall,
     end,
     toggleMute,
-    toggleSpeaker,
+    chooseAudioRoute,
   } = useFerryCall();
   const phase = callStatusToPhase(status);
   const callInProgress =
@@ -190,6 +219,7 @@ export default function InCallScreen() {
 
   const scrollRef = useRef<ComponentRef<typeof BottomSheetScrollView>>(null);
   const captionsSheetRef = useRef<BottomSheetModal>(null);
+  const audioRouteSheetRef = useRef<AudioRoutePickerHandle>(null);
   const leavingRef = useRef(false);
   const sheetOpenRef = useRef(false);
   const [seenCount, setSeenCount] = useState(0);
@@ -227,6 +257,10 @@ export default function InCallScreen() {
     captionsSheetRef.current?.present();
   }, []);
 
+  const openAudioRoute = useCallback(() => {
+    audioRouteSheetRef.current?.present();
+  }, []);
+
   const handleSheetChange = useCallback(
     (index: number) => {
       sheetOpenRef.current = index >= 0;
@@ -260,9 +294,16 @@ export default function InCallScreen() {
             ringing={isRinging}
           />
 
-          <CallStatusLine status={status} error={error} missingAgent={missingAgent} />
+          <CallStatusLine
+            status={status}
+            error={error}
+            missingAgent={missingAgent}
+          />
 
-          <HandledByStrip agentName={agentName} agentMascot={params.agentMascot} />
+          <HandledByStrip
+            agentName={agentName}
+            agentMascot={params.agentMascot}
+          />
         </View>
 
         <View className="items-center pb-4">
@@ -275,11 +316,19 @@ export default function InCallScreen() {
               onPress={toggleMute}
             />
             <CallControl
-              icon={isSpeakerOn ? Volume2 : VolumeX}
-              label="Speaker"
-              active={isSpeakerOn}
-              disabled={!callInProgress}
-              onPress={toggleSpeaker}
+              icon={
+                activeAudioDevice === AudioDevice.None
+                  ? AUDIO_ROUTE_ICONS[AudioDevice.SpeakerPhone]
+                  : AUDIO_ROUTE_ICONS[activeAudioDevice]
+              }
+              label={
+                activeAudioDevice === AudioDevice.None
+                  ? "Audio"
+                  : AUDIO_ROUTE_LABELS[activeAudioDevice]
+              }
+              active={activeAudioDevice === AudioDevice.SpeakerPhone}
+              disabled={!callInProgress || audioDevices.length === 0}
+              onPress={openAudioRoute}
             />
             <CallControl
               icon={Captions}
@@ -322,11 +371,16 @@ export default function InCallScreen() {
             interim={interimCaption}
             phase={phase}
             agentName={agentName}
-            isAgentAudioPlaying={isAgentAudioPlaying}
-            playingWordIndex={playingWordIndex}
           />
         </BottomSheetScrollView>
       </BottomSheetModal>
+
+      <AudioRoutePickerSheet
+        ref={audioRouteSheetRef}
+        devices={audioDevices}
+        active={activeAudioDevice}
+        onSelect={chooseAudioRoute}
+      />
     </View>
   );
 }

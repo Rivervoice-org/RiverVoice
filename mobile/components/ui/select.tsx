@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Platform, StyleSheet } from "react-native";
 import * as SelectPrimitive from "@rn-primitives/select";
-import { Check, ChevronDown, ChevronUp } from "lucide-react-native";
+import { Check, ChevronDown } from "lucide-react-native";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
 import { Text } from "./text";

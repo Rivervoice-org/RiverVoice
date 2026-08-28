@@ -14,7 +14,8 @@ function initialsOf(name: string) {
   const first = words[0];
   if (!first) return "";
   if (words.length === 1) return first.slice(0, 2).toUpperCase();
-  const last = words[words.length - 1]!;
+  // Always in bounds (words.length >= 2 here) — the fallback is unreachable.
+  const last = words[words.length - 1] ?? "";
   return `${first[0]}${last[0]}`.toUpperCase();
 }
 
@@ -22,7 +23,8 @@ function initialsOf(name: string) {
 function hashTint(name: string) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  return INITIALS_TINTS[Math.abs(hash) % INITIALS_TINTS.length]!;
+  // Always in bounds (modulo the tuple's own length) — the fallback is unreachable.
+  return INITIALS_TINTS[Math.abs(hash) % INITIALS_TINTS.length] ?? INITIALS_TINTS[0];
 }
 
 /** A person's avatar when there's no picture to show — initials on a tinted

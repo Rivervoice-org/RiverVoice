@@ -1,7 +1,7 @@
 import InCallManager from "react-native-incall-manager";
-import { DeviceEventEmitter } from "react-native";
+import { DeviceEventEmitter, PermissionsAndroid, Platform } from "react-native";
 import {
-  MediaStream,
+  type MediaStream,
   RTCPeerConnection,
   RTCSessionDescription,
   mediaDevices,
@@ -28,11 +28,24 @@ export enum CallStatus {
   Error = "error",
 }
 
+// Mirrors react-native-incall-manager's native `AudioDevice` enum (Android)
+// — the strings it actually puts in `availableAudioDeviceList`/
+// `selectedAudioDevice` on the `onAudioDeviceChanged` event, and what
+// `chooseAudioRoute()` accepts back.
+export enum AudioDevice {
+  SpeakerPhone = "SPEAKER_PHONE",
+  WiredHeadset = "WIRED_HEADSET",
+  Earpiece = "EARPIECE",
+  Bluetooth = "BLUETOOTH",
+  None = "NONE",
+}
+
 export type FerryCallEvents = {
   onStatusChange: (status: CallStatus) => void;
   onTranscript: (message: TranscriptMessage) => void;
   onTranslation: (message: TranslationMessage) => void;
   onError: (message: string) => void;
+  onAudioRouteChange: (devices: AudioDevice[], active: AudioDevice) => void;
 };
 
 // Server-side signaling is non-trickle (ferry/src/transport/webrtc/transport.rs
@@ -53,7 +66,9 @@ const ICE_GATHERING_TIMEOUT_MS = 5_000;
  */
 export class FerryCall {
   private pc: RTCPeerConnection | null = null;
-  private dataChannel: ReturnType<RTCPeerConnection["createDataChannel"]> | null = null;
+  private dataChannel: ReturnType<
+    RTCPeerConnection["createDataChannel"]
+  > | null = null;
   private localStream: MediaStream | null = null;
   private status: CallStatus = CallStatus.Idle;
   private readonly events: FerryCallEvents;
@@ -72,6 +87,13 @@ export class FerryCall {
   // `pc.onconnectionstatechange` whether to fall back to WebRTC's own
   // "connected" transport state to mean `CallStatus.Connected` instead.
   private hasRealCallee = false;
+  // Tracks whether a Bluetooth or wired headset is currently in
+  // InCallManager's available-route list, kept up to date for the whole
+  // call by `audioDeviceSubscription` below. Used to avoid stomping an
+  // external route with a forced speakerphone selection — see
+  // `startInCallManager`'s comment.
+  private hasExternalAudioRoute = false;
+  private audioDeviceSubscription: { remove: () => void } | null = null;
 
   constructor(events: FerryCallEvents) {
     this.events = events;
@@ -97,12 +119,25 @@ export class FerryCall {
   /** Shared WebRTC negotiation (mic capture, peer connection, data channel,
    * ICE gathering) for both call flows above — `signal` is the only thing
    * that differs between them: which ferry endpoint the local offer goes to. */
-  private async negotiate(signal: (offerSdp: string) => Promise<string>): Promise<void> {
-    if (this.status === CallStatus.Connecting || this.status === CallStatus.Connected) {
+  private async negotiate(
+    signal: (offerSdp: string) => Promise<string>,
+  ): Promise<void> {
+    if (
+      this.status === CallStatus.Connecting ||
+      this.status === CallStatus.Connected
+    ) {
       return;
     }
     this.aborted = false;
     this.setStatus(CallStatus.Connecting);
+
+    // Android 12+ (API 31) gates Bluetooth SCO behind the dangerous
+    // BLUETOOTH_CONNECT permission — without it, InCallManager's own
+    // Bluetooth detection silently no-ops (AppRTCBluetoothManager.start()
+    // returns early) and the call falls back to earpiece/speaker with no
+    // error surfaced anywhere. Best-effort and non-blocking: a denial just
+    // means no Bluetooth routing, not a failed call.
+    await requestBluetoothConnectPermission();
 
     // Activates the platform call-audio session (AudioManager on Android,
     // AVAudioSession on iOS) — without this, react-native-webrtc's audio
@@ -110,10 +145,40 @@ export class FerryCall {
     // no audible output at all. Must happen before media starts flowing.
     // Best-effort: a failure here (native module hiccup) shouldn't take the
     // whole call down — worst case, audio routing just isn't guaranteed.
-    startInCallManager(() => this.aborted);
+    this.audioDeviceSubscription = DeviceEventEmitter.addListener(
+      "onAudioDeviceChanged",
+      (event: AudioDeviceChangedEvent) => {
+        try {
+          const devices = (
+            event.availableAudioDeviceList
+              ? JSON.parse(event.availableAudioDeviceList)
+              : []
+          ) as AudioDevice[];
+          this.hasExternalAudioRoute =
+            devices.includes(AudioDevice.Bluetooth) ||
+            devices.includes(AudioDevice.WiredHeadset);
+          this.events.onAudioRouteChange(
+            devices,
+            event.selectedAudioDevice || AudioDevice.None,
+          );
+        } catch (e) {
+          console.warn(
+            "[ferry] failed to parse onAudioDeviceChanged payload:",
+            e,
+          );
+        }
+      },
+    );
+    startInCallManager(
+      () => this.aborted,
+      () => this.hasExternalAudioRoute,
+    );
 
     try {
-      const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
       if (this.aborted) {
         stream.getTracks().forEach((track) => track.stop());
         return;
@@ -149,19 +214,19 @@ export class FerryCall {
             "streams:",
             event.streams.length,
             "muted:",
-            event.track.muted
+            event.track.muted,
           );
           // Fires as soon as the track is created during SDP negotiation,
           // not when real RTP packets actually arrive — not proof audio is
           // flowing, just that negotiation reached this point.
           event.track.addEventListener("unmute", () => {
-            console.log(
-              "[ferry] remote track unmuted:",
-              event.track.id
-            );
+            console.log("[ferry] remote track unmuted:", event.track.id);
           });
           event.track.addEventListener("mute", () => {
-            console.log("[ferry] remote track muted — audio packets stopped:", event.track.id);
+            console.log(
+              "[ferry] remote track muted — audio packets stopped:",
+              event.track.id,
+            );
           });
         } catch (e) {
           console.warn("[ferry] ontrack handler failed:", e);
@@ -183,9 +248,16 @@ export class FerryCall {
           // Belt-and-braces re-assertion: only runs on whichever call
           // instance actually reaches "connected", so a second StrictMode
           // instance's teardown can't undo it the way the earlier
-          // startInCallManager()-time attempt could.
-          this.setSpeakerOn(true);
-        } else if (pc.connectionState === "failed" || pc.connectionState === "closed") {
+          // startInCallManager()-time attempt could. Skipped when a
+          // Bluetooth/wired headset is connected — forcing speaker here
+          // would otherwise silently override the user's external route.
+          if (!this.hasExternalAudioRoute) {
+            this.setSpeakerOn(true);
+          }
+        } else if (
+          pc.connectionState === "failed" ||
+          pc.connectionState === "closed"
+        ) {
           this.teardown();
           this.setStatus(CallStatus.Ended);
         }
@@ -256,7 +328,7 @@ export class FerryCall {
       }
 
       await pc.setRemoteDescription(
-        new RTCSessionDescription({ type: "answer", sdp: answerSdp })
+        new RTCSessionDescription({ type: "answer", sdp: answerSdp }),
       );
       if (this.aborted) {
         this.teardown();
@@ -273,24 +345,33 @@ export class FerryCall {
       this.events.onError(
         err instanceof SignalingError || err instanceof Error
           ? err.message
-          : "Failed to start call"
+          : "Failed to start call",
       );
     }
   }
 
-  /** Mutes/unmutes the mic locally — doesn't touch the connection. */
   setMuted(muted: boolean): void {
     this.localStream?.getAudioTracks().forEach((track) => {
       track.enabled = !muted;
     });
   }
 
-  /** Routes call audio to the loudspeaker (true) or the earpiece (false). */
   setSpeakerOn(enabled: boolean): void {
     try {
       InCallManager.setForceSpeakerphoneOn(enabled);
     } catch (e) {
       console.warn("[ferry] InCallManager.setForceSpeakerphoneOn failed:", e);
+    }
+  }
+
+  /** Explicitly selects one of the routes reported in the last
+   * `onAudioRouteChange` — e.g. switching to BLUETOOTH once it's connected,
+   * or back to SPEAKER_PHONE/EARPIECE. */
+  chooseAudioRoute(route: AudioDevice): void {
+    try {
+      void InCallManager.chooseAudioRoute(route);
+    } catch (e) {
+      console.warn("[ferry] InCallManager.chooseAudioRoute failed:", e);
     }
   }
 
@@ -314,12 +395,27 @@ export class FerryCall {
     } catch (e) {
       console.warn("[ferry] InCallManager.stop failed:", e);
     }
+    this.audioDeviceSubscription?.remove();
+    this.audioDeviceSubscription = null;
     this.dataChannel?.close();
     this.dataChannel = null;
     this.pc?.close();
     this.pc = null;
     this.localStream?.getTracks().forEach((track) => track.stop());
     this.localStream = null;
+  }
+}
+
+async function requestBluetoothConnectPermission(): Promise<void> {
+  if (Platform.OS !== "android" || Platform.Version < 31) {
+    return;
+  }
+  try {
+    await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+    );
+  } catch (e) {
+    console.warn("[ferry] BLUETOOTH_CONNECT permission request failed:", e);
   }
 }
 
@@ -343,7 +439,10 @@ export class FerryCall {
 // picked, with the user never told why.
 const SPEAKER_WAIT_TIMEOUT_MS = 2_000;
 
-type AudioDeviceChangedEvent = { availableAudioDeviceList?: string };
+type AudioDeviceChangedEvent = {
+  availableAudioDeviceList?: string;
+  selectedAudioDevice?: AudioDevice;
+};
 
 function waitForSpeakerAvailable(timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
@@ -362,23 +461,39 @@ function waitForSpeakerAvailable(timeoutMs: number): Promise<void> {
       "onAudioDeviceChanged",
       (event: AudioDeviceChangedEvent) => {
         try {
-          const devices: string[] = event.availableAudioDeviceList
-            ? JSON.parse(event.availableAudioDeviceList)
-            : [];
-          if (devices.includes("SPEAKER_PHONE")) {
+          const devices = (
+            event.availableAudioDeviceList
+              ? JSON.parse(event.availableAudioDeviceList)
+              : []
+          ) as AudioDevice[];
+          if (devices.includes(AudioDevice.SpeakerPhone)) {
             finish();
           }
         } catch (e) {
-          console.warn("[ferry] failed to parse onAudioDeviceChanged payload:", e);
+          console.warn(
+            "[ferry] failed to parse onAudioDeviceChanged payload:",
+            e,
+          );
         }
-      }
+      },
     );
 
     const timeout = setTimeout(finish, timeoutMs);
   });
 }
 
-function startInCallManager(isAborted: () => boolean): void {
+// `startInCallManager({ auto: true })` (the default) already has InCallManager
+// auto-pick Bluetooth/wired headset over the earpiece/speaker default — see
+// `getPreferredAudioDevice()` in the native module. Forcing speakerphone
+// unconditionally right after start, like this used to, calls the native
+// equivalent of the user explicitly picking SPEAKER_PHONE, which permanently
+// overrides that auto-routing for the rest of the call — a connected
+// Bluetooth headset would go silent the moment the call connects. Only force
+// speaker when nothing external is connected at the time this resolves.
+function startInCallManager(
+  isAborted: () => boolean,
+  hasExternalAudioRoute: () => boolean,
+): void {
   try {
     InCallManager.start({ media: "audio" });
     // Default to loudspeaker rather than earpiece — this is a translation
@@ -388,7 +503,7 @@ function startInCallManager(isAborted: () => boolean): void {
       // The call may have already ended by the time this resolves (fast
       // hang-up, StrictMode abort) — don't force speaker mode back on for
       // a call that's already been torn down.
-      if (isAborted()) {
+      if (isAborted() || hasExternalAudioRoute()) {
         return;
       }
       try {

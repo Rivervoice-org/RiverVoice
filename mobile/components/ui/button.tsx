@@ -43,8 +43,8 @@ const textColor: Record<
 
 type ButtonProps = PressableProps &
   VariantProps<typeof buttonVariants> & {
-    loading?: boolean;
-    ref?: React.Ref<React.ElementRef<typeof Pressable>>;
+    loading?: boolean | undefined;
+    ref?: React.Ref<React.ElementRef<typeof Pressable>> | undefined;
   };
 
 function Button({

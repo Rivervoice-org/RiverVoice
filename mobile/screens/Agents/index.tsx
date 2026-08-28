@@ -75,7 +75,7 @@ export default function AgentsScreen() {
                 <Bot size={22} strokeWidth={1.75} color={colors.faint} />
               </View>
               <Text variant="muted" className="mt-3 text-sm">
-                Couldn't load your agents
+                Couldn&apos;t load your agents
               </Text>
             </View>
           </Rise>

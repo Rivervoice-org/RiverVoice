@@ -5,9 +5,10 @@ import Animated, {
   useSharedValue,
   withRepeat,
   withTiming,
+  type SharedValue,
 } from "react-native-reanimated";
 
-const DEFAULT_HEIGHTS = [0.45, 1, 0.65, 0.8, 0.5, 0.9, 0.55, 1, 0.7, 0.4];
+const DEFAULT_HEIGHTS = [0.45, 1, 0.65, 0.8, 0.5, 0.9, 0.55, 1, 0.7, 0.4] as const;
 
 function Bar({
   progress,
@@ -16,7 +17,7 @@ function Bar({
   height,
   color,
 }: {
-  progress: Animated.SharedValue<number>;
+  progress: SharedValue<number>;
   phase: number;
   base: number;
   height: number;
@@ -59,7 +60,8 @@ export function Equalizer({
           key={index}
           progress={progress}
           phase={(index / bars) * Math.PI * 2}
-          base={DEFAULT_HEIGHTS[index % DEFAULT_HEIGHTS.length]}
+          // Always in bounds (modulo the array's own length) — the fallback is unreachable.
+          base={DEFAULT_HEIGHTS[index % DEFAULT_HEIGHTS.length] ?? DEFAULT_HEIGHTS[0]}
           height={height}
           color={color}
         />
