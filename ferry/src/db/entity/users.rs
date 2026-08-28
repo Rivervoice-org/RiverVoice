@@ -6,9 +6,15 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     #[sea_orm(unique)]
-    pub mobile_number: String,
+    pub google_id: String,
+    #[sea_orm(unique)]
+    pub email: String,
+    pub email_verified: bool,
     pub name: String,
     pub mascot: String,
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
+    pub last_login_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
