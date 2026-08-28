@@ -31,7 +31,8 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bitcode": false
+      "bitcode": false,
+      "bundleIdentifier": "com.rivervoice.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -52,7 +53,7 @@
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_CONNECT"
       ],
-      "package": "com.anonymous.rivervoicemobile"
+      "package": "com.rivervoice.app"
     },
     "web": {
       "favicon": "./assets/favicon.png",
