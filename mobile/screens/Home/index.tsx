@@ -22,7 +22,11 @@ import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { useAuth } from "@/hooks/use-auth";
 import { useRecentCalls } from "@/lib/calls/hooks";
-import { buildContactIndex, relativeTime, toCallRowItem } from "@/lib/calls/format";
+import {
+  buildContactIndex,
+  relativeTime,
+  toCallRowItem,
+} from "@/lib/calls/format";
 import { useRecentAgents } from "@/lib/agents/hooks";
 import type { RecentAgent } from "@/lib/agents/types";
 import { useContacts } from "@/state/contacts";
@@ -327,68 +331,80 @@ export default function HomeScreen() {
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => void refetch()}
+          />
         }
         ListHeaderComponent={
           <HomeHeader name={firstName} hasCalls={rows.length > 0} />
         }
         ListEmptyComponent={
-          <View className="mx-5 mt-3 items-center rounded-xl border border-border bg-card px-5 py-12">
-            {isLoading ? (
-              <RecentCallsSkeleton />
-            ) : isError ? (
-              <>
-                <View className="h-11 w-11 items-center justify-center rounded-full bg-destructive/10">
-                  <CloudOff size={20} strokeWidth={1.75} color={colors.destructive} />
-                </View>
-                <Text className="mt-3 text-center text-sm font-medium">
-                  Couldn&apos;t load your calls
-                </Text>
-                {error instanceof Error ? (
+          // The skeleton brings its own card, drawn at the real list's
+          // paddings — nesting it inside the padded one below would indent
+          // every placeholder row past where the real rows begin.
+          isLoading ? (
+            <RecentCallsSkeleton />
+          ) : (
+            <View className="mx-5 mt-3 items-center rounded-xl border border-border bg-card px-5 py-12">
+              {isError ? (
+                <>
+                  <View className="h-11 w-11 items-center justify-center rounded-full bg-destructive/10">
+                    <CloudOff
+                      size={20}
+                      strokeWidth={1.75}
+                      color={colors.destructive}
+                    />
+                  </View>
+                  <Text className="mt-3 text-center text-sm font-medium">
+                    Couldn&apos;t load your calls
+                  </Text>
+                  {error instanceof Error ? (
+                    <Text variant="muted" className="mt-1 text-center text-xs">
+                      {error.message}
+                    </Text>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-4"
+                    onPress={() => void refetch()}
+                  >
+                    <RotateCw size={14} strokeWidth={2} color={colors.muted} />
+                    <Text className="text-xs font-medium text-foreground">
+                      Try again
+                    </Text>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <View className="h-11 w-11 items-center justify-center rounded-full bg-border">
+                    <Phone size={20} strokeWidth={1.75} color={colors.faint} />
+                  </View>
+                  <Text className="mt-3 text-center text-sm font-medium">
+                    No calls yet
+                  </Text>
                   <Text variant="muted" className="mt-1 text-center text-xs">
-                    {error.message}
+                    Calls you make with an agent will show up here.
                   </Text>
-                ) : null}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-4"
-                  onPress={() => void refetch()}
-                >
-                  <RotateCw size={14} strokeWidth={2} color={colors.muted} />
-                  <Text className="text-xs font-medium text-foreground">
-                    Try again
-                  </Text>
-                </Button>
-              </>
-            ) : (
-              <>
-                <View className="h-11 w-11 items-center justify-center rounded-full bg-border">
-                  <Phone size={20} strokeWidth={1.75} color={colors.faint} />
-                </View>
-                <Text className="mt-3 text-center text-sm font-medium">
-                  No calls yet
-                </Text>
-                <Text variant="muted" className="mt-1 text-center text-xs">
-                  Calls you make with an agent will show up here.
-                </Text>
-                <Button
-                  size="sm"
-                  className="mt-4"
-                  onPress={() => router.navigate("/call")}
-                >
-                  <PhoneOutgoing
-                    size={14}
-                    strokeWidth={2}
-                    color={colors.onInk}
-                  />
-                  <Text className="text-xs font-medium text-primary-foreground">
-                    Start a call
-                  </Text>
-                </Button>
-              </>
-            )}
-          </View>
+                  <Button
+                    size="sm"
+                    className="mt-4"
+                    onPress={() => router.navigate("/call")}
+                  >
+                    <PhoneOutgoing
+                      size={14}
+                      strokeWidth={2}
+                      color={colors.onInk}
+                    />
+                    <Text className="text-xs font-medium text-primary-foreground">
+                      Start a call
+                    </Text>
+                  </Button>
+                </>
+              )}
+            </View>
+          )
         }
         ListFooterComponent={
           <>
