@@ -8,8 +8,17 @@ use sea_orm::entity::prelude::*;
 // instead of serde's default PascalCase variant names.
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, serde::Serialize, serde::Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    EnumIter,
+    DeriveActiveEnum,
+    serde::Serialize,
+    serde::Deserialize,
+    ts_rs::TS,
 )]
+#[ts(export)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "language")]
 pub enum Language {
     #[sea_orm(string_value = "en")]
@@ -30,8 +39,17 @@ pub enum Language {
 }
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, serde::Serialize, serde::Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    EnumIter,
+    DeriveActiveEnum,
+    serde::Serialize,
+    serde::Deserialize,
+    ts_rs::TS,
 )]
+#[ts(export)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "agent_mode")]
 pub enum Mode {
     #[sea_orm(string_value = "formal")]
@@ -49,8 +67,17 @@ pub enum Mode {
 }
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, serde::Serialize, serde::Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    EnumIter,
+    DeriveActiveEnum,
+    serde::Serialize,
+    serde::Deserialize,
+    ts_rs::TS,
 )]
+#[ts(export)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "agent_gender")]
 pub enum Gender {
     #[sea_orm(string_value = "female")]

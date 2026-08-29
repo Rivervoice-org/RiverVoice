@@ -2,23 +2,21 @@ use sea_orm::entity::prelude::*;
 
 use super::agents::Language;
 
-/// One finalized line of speech. Interim STT results are never persisted —
-/// they are replaced on every partial and only committed on `is_final`, so
-/// storing them would multiply rows for text that is immediately overwritten.
-///
-/// Original and translation share a row rather than occupying two. They
-/// arrive as two separate frames (`UserTurnAggregation` then `MtText`), so the
-/// translation is an UPDATE on `(call_id, seq)` rather than a second INSERT —
-/// which rides the unique index, halves the row count, and lets the transcript
-/// be read back with no pairing logic. This matches mobile's `TranscriptEntry`
-/// shape exactly (screens/Transcript/mock.ts).
-///
-/// Valid only while one utterance maps to at most one translation. If output
-/// ever fans out to several target languages at once, this has to become child
-/// rows.
+/// The two people on the call. The agent is never a speaker — it does not
+/// originate a turn, it re-voices one, and its output is `translated_text` on
+/// whichever speaker's row it translated.
 #[derive(
-    Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, serde::Serialize, serde::Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    EnumIter,
+    DeriveActiveEnum,
+    serde::Serialize,
+    serde::Deserialize,
+    ts_rs::TS,
 )]
+#[ts(export)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "call_speaker")]
 pub enum Speaker {
     #[sea_orm(string_value = "caller")]
@@ -29,6 +27,19 @@ pub enum Speaker {
     Callee,
 }
 
+/// One finalized line of speech. Interim STT results are never persisted —
+/// they are replaced on every partial and only committed on `is_final`, so
+/// storing them would multiply rows for text that is immediately overwritten.
+///
+/// Original and translation share a row rather than occupying two. They
+/// arrive as two separate frames (`UserTurnAggregation` then `MtText`), so the
+/// translation is an UPDATE on `(call_id, seq)` rather than a second INSERT —
+/// which rides the unique index, halves the row count, and lets the transcript
+/// be read back with no pairing logic.
+///
+/// Valid only while one utterance maps to at most one translation. If output
+/// ever fans out to several target languages at once, this has to become child
+/// rows.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "call_utterances")]
 pub struct Model {

@@ -9,8 +9,17 @@ use super::agents::Language;
 // that the two agree (end_reason is present exactly when status is `Ended`).
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, serde::Serialize, serde::Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    EnumIter,
+    DeriveActiveEnum,
+    serde::Serialize,
+    serde::Deserialize,
+    ts_rs::TS,
 )]
+#[ts(export)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "call_direction")]
 pub enum Direction {
     #[sea_orm(string_value = "outbound")]
@@ -22,8 +31,17 @@ pub enum Direction {
 }
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, serde::Serialize, serde::Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    EnumIter,
+    DeriveActiveEnum,
+    serde::Serialize,
+    serde::Deserialize,
+    ts_rs::TS,
 )]
+#[ts(export)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "call_status")]
 pub enum Status {
     #[sea_orm(string_value = "dialing")]
@@ -41,8 +59,17 @@ pub enum Status {
 }
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, serde::Serialize, serde::Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    EnumIter,
+    DeriveActiveEnum,
+    serde::Serialize,
+    serde::Deserialize,
+    ts_rs::TS,
 )]
+#[ts(export)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "call_end_reason")]
 pub enum EndReason {
     #[sea_orm(string_value = "busy")]
