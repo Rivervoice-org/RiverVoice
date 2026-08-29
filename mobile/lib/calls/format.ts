@@ -94,6 +94,7 @@ export function toCallRowItem(
     name: contactNames.get(phoneKey(call.toNumber)) ?? "",
     number: call.toNumber,
     fromNumber: call.fromNumber,
+    agentId: call.agentId,
     agent: call.agentName,
     language: languageLabel(call.inputLanguage, call.outputLanguage),
     duration: formatDuration(call.billableSeconds),

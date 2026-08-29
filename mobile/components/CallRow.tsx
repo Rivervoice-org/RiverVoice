@@ -23,6 +23,8 @@ export type CallRowItem = {
   name: string;
   number: string;
   fromNumber: string;
+  /** Null once the agent is deleted, which is what makes the row un-redialable. */
+  agentId: string | null;
   agent: string | null;
   language: string;
   duration: string;
