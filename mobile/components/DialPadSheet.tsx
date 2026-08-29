@@ -211,12 +211,15 @@ const DialPadBody = memo(function DialPadBody({
           placeholderTextColor={colors.muted}
           keyboardType="phone-pad"
           showSoftInputOnFocus={false}
-          // The caret has nothing to do here: the soft keyboard is suppressed,
-          // so the only way text arrives is the keypad (always appending) or a
-          // paste (always replacing). Left visible it just parked itself
-          // against the edge of the centre-aligned field and blinked.
-          // Long-press paste still works with it hidden.
-          caretHidden
+          // No `caretHidden` here, however much the stray blinking caret
+          // wants hiding: on Android that maps to
+          // TextView.setCursorVisible(false), which disables the insertion
+          // controller — both the caret and the insertion handle that raises
+          // the "Paste" bubble. On an empty field that handle is the only
+          // route to Paste, so hiding the caret silently removes long-press
+          // paste, which is the entire reason this is a TextInput and not a
+          // Text.
+          selectTextOnFocus
           autoCorrect={false}
           autoComplete="off"
           importantForAutofill="no"
