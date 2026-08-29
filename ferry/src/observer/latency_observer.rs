@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use crate::frames::{Frame, FrameKind};
 use crate::observer::frame_observer::FrameObserver;
+use crate::stages::stage::Stage;
 
 pub struct LatencyObserver {
     waiting_since: Mutex<Option<Instant>>,
@@ -23,7 +24,7 @@ impl Default for LatencyObserver {
 }
 
 impl FrameObserver for LatencyObserver {
-    fn on_push(&self, _stage: &str, frame: &Frame) {
+    fn on_push(&self, _stage: Stage, frame: &Frame) {
         match frame.kind() {
             FrameKind::UserStoppedSpeaking => {
                 let mut waiting_since = self.waiting_since.lock().unwrap();

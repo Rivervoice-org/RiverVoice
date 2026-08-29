@@ -7,6 +7,7 @@ use crate::frames::{Frame, FrameKind, MtTextFrame, TtsAudioFrame, TtsUsageFrame}
 use crate::processor::{FrameIo, FrameProcessor};
 use crate::services::stt::language::Language;
 use crate::services::tts::provider::{TtsConfig, TtsEvent, TtsProvider};
+use crate::stages::stage::Stage;
 
 pub struct TtsStage {
     provider: Box<dyn TtsProvider>,
@@ -30,8 +31,8 @@ impl TtsStage {
 
 #[async_trait]
 impl FrameProcessor for TtsStage {
-    fn name(&self) -> &'static str {
-        "tts"
+    fn name(&self) -> Stage {
+        Stage::Tts
     }
 
     async fn run(self: Box<Self>, mut io: FrameIo) {

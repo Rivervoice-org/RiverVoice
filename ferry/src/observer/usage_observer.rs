@@ -2,6 +2,7 @@ use std::sync::Mutex;
 
 use crate::frames::{Frame, FrameKind, MtUsageFrame, SttUsageFrame, TtsUsageFrame};
 use crate::observer::frame_observer::FrameObserver;
+use crate::stages::stage::Stage;
 
 pub struct UsageObserver {
     stt: Mutex<SttUsageFrame>,
@@ -38,9 +39,9 @@ impl Default for UsageObserver {
 }
 
 impl FrameObserver for UsageObserver {
-    fn on_push(&self, stage: &str, frame: &Frame) {
+    fn on_push(&self, stage: Stage, frame: &Frame) {
         if let FrameKind::SttUsage(usage) = frame.kind()
-            && stage == "stt"
+            && stage == Stage::Stt
         {
             let total = {
                 let mut total = self.stt.lock().unwrap();
@@ -49,7 +50,7 @@ impl FrameObserver for UsageObserver {
             };
             tracing::info!(
                 target: "ferry::usage",
-                stage = "stt",
+                stage = Stage::Stt.as_str(),
                 audio_seconds = usage.audio_seconds,
                 total_audio_seconds = total.audio_seconds,
                 "stt_usage"
@@ -57,7 +58,7 @@ impl FrameObserver for UsageObserver {
         }
 
         if let FrameKind::MtUsage(usage) = frame.kind()
-            && stage == "mt"
+            && stage == Stage::Mt
         {
             let total = {
                 let mut total = self.mt.lock().unwrap();
@@ -68,7 +69,7 @@ impl FrameObserver for UsageObserver {
             };
             tracing::info!(
                 target: "ferry::usage",
-                stage = "mt",
+                stage = Stage::Mt.as_str(),
                 prompt_tokens = usage.prompt_tokens,
                 completion_tokens = usage.completion_tokens,
                 total_tokens = usage.total_tokens,
@@ -79,7 +80,7 @@ impl FrameObserver for UsageObserver {
         }
 
         if let FrameKind::TtsUsage(usage) = frame.kind()
-            && stage == "tts"
+            && stage == Stage::Tts
         {
             let total = {
                 let mut total = self.tts.lock().unwrap();
@@ -88,7 +89,7 @@ impl FrameObserver for UsageObserver {
             };
             tracing::info!(
                 target: "ferry::usage",
-                stage = "tts",
+                stage = Stage::Tts.as_str(),
                 characters = usage.characters,
                 total_characters = total.characters,
                 "tts_usage"

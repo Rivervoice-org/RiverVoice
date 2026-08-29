@@ -27,6 +27,7 @@ use crate::observer::frame_observer::FrameObserver;
 use crate::observer::log_observer::LogObserver;
 use crate::pipeline::build_translation_pipeline;
 use crate::processor::FrameIo;
+use crate::stages::stage::Stage;
 use crate::transport::base::BaseTransport;
 use crate::transport::webrtc::transport::WebRtcClient;
 use tracing::Instrument;
@@ -315,10 +316,10 @@ pub async fn start_call(
     // (b2a_exit) and pushes A's mic input into A's own pipeline's entrance
     // (a2b_entrance) — the cross-wiring is entirely in which halves get
     // paired up here, nothing "in flight" needs to move between them later.
-    let a_transport_io = FrameIo::new("call-a", b2a_exit, a2b_entrance, observers().into());
+    let a_transport_io = FrameIo::new(Stage::CallA, b2a_exit, a2b_entrance, observers().into());
     // B's transport is the mirror: reads pipeline_a2b's output (a2b_exit),
     // pushes B's mic input into pipeline_b2a's entrance (b2a_entrance).
-    let b_transport_io = FrameIo::new("call-b", a2b_exit, b2a_entrance, observers().into());
+    let b_transport_io = FrameIo::new(Stage::CallB, a2b_exit, b2a_entrance, observers().into());
 
     let handle = app.call_registry.register(call_id, b_transport_io);
 

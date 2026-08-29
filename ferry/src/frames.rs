@@ -1,3 +1,4 @@
+use crate::stages::stage::Stage;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 static NEXT_FRAME_ID: AtomicU32 = AtomicU32::new(0);
@@ -119,7 +120,7 @@ pub struct TtsAudioFrame {
 }
 
 pub struct MetricsFrame {
-    pub stage: String,
+    pub stage: Stage,
     pub ttfb_ms: u64,
 }
 

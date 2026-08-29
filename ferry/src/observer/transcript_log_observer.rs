@@ -7,6 +7,7 @@ use chrono::Local;
 
 use crate::frames::{Frame, FrameKind};
 use crate::observer::frame_observer::FrameObserver;
+use crate::stages::stage::Stage;
 
 pub struct TranscriptLogObserver {
     model: &'static str,
@@ -36,17 +37,21 @@ impl TranscriptLogObserver {
 }
 
 impl FrameObserver for TranscriptLogObserver {
-    fn on_push(&self, stage: &str, frame: &Frame) {
+    fn on_push(&self, stage: Stage, frame: &Frame) {
         match (stage, frame.kind()) {
             // Record each completed turn when the aggregator produces it.
-            ("user-aggregator", FrameKind::UserTurnAggregation(agg)) => {
+            // The aggregator lives inside the stt stage, which is what
+            // pushes the frame — this arm named a "user-aggregator" stage
+            // that never existed, so it never fired and every line below was
+            // logged with an empty transcript.
+            (Stage::Stt, FrameKind::UserTurnAggregation(agg)) => {
                 if let Ok(mut state) = self.state.lock() {
                     state.pending.push_back(agg.text.clone());
                 }
             }
             // MtUsage lands after the turn; pair it with the oldest
             // unlogged transcript.
-            ("mt", FrameKind::MtUsage(usage)) => {
+            (Stage::Mt, FrameKind::MtUsage(usage)) => {
                 let Ok(mut state) = self.state.lock() else {
                     return;
                 };
