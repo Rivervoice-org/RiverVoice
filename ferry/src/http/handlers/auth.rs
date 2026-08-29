@@ -9,12 +9,16 @@ use crate::http::response::ApiResponse;
 
 const GENERIC_SERVER_ERROR: &str = "Something went wrong. Please try again.";
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct RefreshResponse {
     pub access_token: String,
     pub refresh_token: String,
@@ -57,7 +61,9 @@ pub async fn refresh(req: Request) -> Result<ApiResponse<RefreshResponse>, ApiRe
     ))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct SignOutRequest {
     pub refresh_token: String,
 }

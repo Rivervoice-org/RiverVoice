@@ -15,7 +15,9 @@ use crate::services::tts::sarvam::{BulbulV2Voice, BulbulV3Voice, VoiceGender};
 
 const GENERIC_SERVER_ERROR: &str = "Something went wrong. Please try again.";
 
-#[derive(Deserialize, Validate)]
+#[derive(Deserialize, Validate, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct CreateAgentRequest {
     #[validate(length(min = 1, message = "name is required"))]
     pub name: String,
@@ -34,28 +36,39 @@ pub struct CreateAgentRequest {
 /// columns are NOT NULL, so there's no separate "clear it back to null"
 /// state to represent — a plain `Option<T>` (omitted vs. present) covers
 /// this fully, unlike the double-Option tri-state a nullable column needs.
-#[derive(Deserialize, Validate)]
+#[derive(Deserialize, Validate, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct UpdateAgentRequest {
     #[serde(default)]
+    #[ts(optional)]
     #[validate(length(min = 1, message = "name is required"))]
     pub name: Option<String>,
     #[serde(default)]
+    #[ts(optional)]
     pub input_language: Option<Language>,
     #[serde(default)]
+    #[ts(optional)]
     pub output_language: Option<Language>,
     #[serde(default)]
+    #[ts(optional)]
     pub mode: Option<Mode>,
     #[serde(default)]
+    #[ts(optional)]
     pub gender: Option<Gender>,
     #[serde(default)]
+    #[ts(optional)]
     #[validate(length(min = 1, message = "mascot must not be empty"))]
     pub mascot: Option<String>,
     #[serde(default)]
+    #[ts(optional)]
     #[validate(length(min = 1, message = "voice must not be empty"))]
     pub voice: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct AgentResponse {
     pub id: String,
     pub name: String,
