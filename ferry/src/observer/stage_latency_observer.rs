@@ -4,9 +4,10 @@ use std::time::Instant;
 
 use crate::frames::Frame;
 use crate::observer::frame_observer::FrameObserver;
+use crate::stages::stage::Stage;
 
 pub struct StageLatencyObserver {
-    last_take_at: Mutex<HashMap<String, Instant>>,
+    last_take_at: Mutex<HashMap<Stage, Instant>>,
 }
 
 impl StageLatencyObserver {
@@ -24,19 +25,19 @@ impl Default for StageLatencyObserver {
 }
 
 impl FrameObserver for StageLatencyObserver {
-    fn on_take(&self, stage: &str, _frame: &Frame) {
+    fn on_take(&self, stage: Stage, _frame: &Frame) {
         self.last_take_at
             .lock()
             .unwrap()
-            .insert(stage.to_string(), Instant::now());
+            .insert(stage, Instant::now());
     }
 
-    fn on_push(&self, stage: &str, frame: &Frame) {
-        let since = self.last_take_at.lock().unwrap().get(stage).copied();
+    fn on_push(&self, stage: Stage, frame: &Frame) {
+        let since = self.last_take_at.lock().unwrap().get(&stage).copied();
         if let Some(since) = since {
             tracing::trace!(
                 target: "ferry::stage_latency",
-                stage,
+                stage = stage.as_str(),
                 frame = %frame.get_name(),
                 elapsed_ms = since.elapsed().as_millis() as u64,
                 "time since last take"

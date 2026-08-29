@@ -22,6 +22,7 @@ use crate::services::stt::sarvam::{SarvamSttConfig, SarvamSttProvider};
 use crate::services::tts::provider::TtsConfigKind;
 use crate::services::tts::sarvam::{SarvamModel, SarvamTtsConfig, SarvamTtsProvider};
 use crate::stages::mt::MtStage;
+use crate::stages::stage::Stage;
 use crate::stages::stt::SttStage;
 use crate::stages::tts::TtsStage;
 
@@ -193,6 +194,6 @@ impl Pipeline {
             prev_exit = exit;
         }
 
-        FrameIo::new("Rivervoice", prev_exit, into_first, observers)
+        FrameIo::new(Stage::Pipeline, prev_exit, into_first, observers)
     }
 }

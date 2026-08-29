@@ -6,9 +6,10 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::frames::{Frame, FrameKind, MetricsFrame};
 use crate::observer::frame_observer::FrameObserver;
+use crate::stages::stage::Stage;
 
 pub struct FrameIo {
-    name: String,
+    name: Stage,
     upstream: Receiver<Frame>,
     downstream: Sender<Frame>,
 
@@ -19,13 +20,13 @@ pub struct FrameIo {
 
 impl FrameIo {
     pub fn new(
-        name: impl Into<String>,
+        name: Stage,
         upstream: Receiver<Frame>,
         downstream: Sender<Frame>,
         observers: Arc<[Arc<dyn FrameObserver>]>,
     ) -> Self {
         Self {
-            name: name.into(),
+            name,
             upstream,
             downstream,
             observers,
@@ -33,15 +34,15 @@ impl FrameIo {
         }
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn name(&self) -> Stage {
+        self.name
     }
 
     pub async fn take(&mut self) -> Option<Frame> {
         let frame = self.upstream.recv().await;
         if let Some(frame) = &frame {
             for observer in self.observers.iter() {
-                observer.on_take(&self.name, frame);
+                observer.on_take(self.name, frame);
             }
         }
         frame
@@ -49,7 +50,7 @@ impl FrameIo {
 
     pub async fn push(&self, frame: Frame) -> bool {
         for observer in self.observers.iter() {
-            observer.on_push(&self.name, &frame);
+            observer.on_push(self.name, &frame);
         }
 
         self.downstream.send(frame).await.is_ok()
@@ -67,7 +68,7 @@ impl FrameIo {
             None => return true,
         };
         self.push(Frame::new(FrameKind::Metrics(MetricsFrame {
-            stage: self.name.clone(),
+            stage: self.name,
             ttfb_ms: start.elapsed().as_millis() as u64,
         })))
         .await
@@ -91,7 +92,7 @@ impl FrameIo {
 
 #[async_trait]
 pub trait FrameProcessor: Send {
-    fn name(&self) -> &'static str;
+    fn name(&self) -> Stage;
 
     async fn run(self: Box<Self>, io: FrameIo);
 }

@@ -15,6 +15,7 @@ use crate::db;
 use crate::db::entity::{agents, call_utterances, calls};
 use crate::frames::{Frame, FrameKind};
 use crate::observer::frame_observer::FrameObserver;
+use crate::stages::stage::Stage;
 
 /// Persists a call to Postgres without any handler, stage or transport
 /// knowing the database exists. Two seams, both of which already existed:
@@ -159,14 +160,14 @@ impl CallRecordObserver {
 }
 
 impl FrameObserver for CallRecordObserver {
-    fn on_push(&self, stage: &str, frame: &Frame) {
+    fn on_push(&self, stage: Stage, frame: &Frame) {
         match (stage, frame.kind()) {
             // The finalized turn. Interim `Transcription` frames are
             // deliberately ignored: they are replaced on every partial, so
             // persisting them would multiply rows for text that is immediately
             // overwritten. Live partials reach the client over the data
             // channel, not through here.
-            ("stt", FrameKind::UserTurnAggregation(turn)) => {
+            (Stage::Stt, FrameKind::UserTurnAggregation(turn)) => {
                 let seq = self.seq.fetch_add(1, Ordering::Relaxed);
                 if let Ok(mut queue) = self.awaiting_translation.lock() {
                     queue.push_back(seq);
@@ -182,7 +183,7 @@ impl FrameObserver for CallRecordObserver {
             }
             // Only from the `mt` stage: `tts` re-pushes `MtText` downstream
             // (stages/tts.rs), and matching that too would double every line.
-            ("mt", FrameKind::MtText(mt)) => {
+            (Stage::Mt, FrameKind::MtText(mt)) => {
                 let Some(seq) = self
                     .awaiting_translation
                     .lock()

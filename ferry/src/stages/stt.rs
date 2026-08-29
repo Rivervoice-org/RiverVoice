@@ -6,6 +6,7 @@ use crate::codec::frame_serializer::FrameSerializer;
 use crate::frames::{Frame, FrameKind, SttUsageFrame};
 use crate::processor::{FrameIo, FrameProcessor};
 use crate::services::stt::provider::{SttEvent, SttProvider};
+use crate::stages::stage::Stage;
 
 pub struct SttStage {
     provider: Box<dyn SttProvider>,
@@ -26,8 +27,8 @@ impl SttStage {
 
 #[async_trait]
 impl FrameProcessor for SttStage {
-    fn name(&self) -> &'static str {
-        "stt"
+    fn name(&self) -> Stage {
+        Stage::Stt
     }
 
     async fn run(self: Box<Self>, mut io: FrameIo) {

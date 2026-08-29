@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::frames::{Frame, FrameKind};
 use crate::observer::frame_observer::FrameObserver;
 use crate::pricing::{self, Per10KCost, PerMillionCost, PerMinuteCost};
+use crate::stages::stage::Stage;
 
 pub struct BillingObserver {
     org_id: Uuid,
@@ -56,9 +57,9 @@ impl BillingObserver {
 }
 
 impl FrameObserver for BillingObserver {
-    fn on_push(&self, stage: &str, frame: &Frame) {
+    fn on_push(&self, stage: Stage, frame: &Frame) {
         match frame.kind() {
-            FrameKind::SttUsage(usage) if stage == "stt" => {
+            FrameKind::SttUsage(usage) if stage == Stage::Stt => {
                 self.charge(
                     self.stt_cost.charge(usage.audio_seconds),
                     "audio_second",
@@ -66,7 +67,7 @@ impl FrameObserver for BillingObserver {
                     "stt",
                 );
             }
-            FrameKind::MtUsage(usage) if stage == "mt" => {
+            FrameKind::MtUsage(usage) if stage == Stage::Mt => {
                 self.charge(
                     self.mt_cost.charge_prompt(usage.prompt_tokens),
                     "prompt_token",
@@ -80,7 +81,7 @@ impl FrameObserver for BillingObserver {
                     "mt",
                 );
             }
-            FrameKind::TtsUsage(usage) if stage == "tts" => {
+            FrameKind::TtsUsage(usage) if stage == Stage::Tts => {
                 self.charge(
                     self.tts_cost.charge(usage.characters),
                     "character",

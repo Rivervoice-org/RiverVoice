@@ -1,10 +1,11 @@
 use crate::frames::{Frame, FrameKind};
 use crate::observer::frame_observer::FrameObserver;
+use crate::stages::stage::Stage;
 
 pub struct LogObserver;
 
 impl FrameObserver for LogObserver {
-    fn on_push(&self, stage: &str, frame: &Frame) {
+    fn on_push(&self, stage: Stage, frame: &Frame) {
         match payload_summary(frame.kind()) {
             // Only frame kinds that actually carry a human-meaningful
             // payload (transcribed/translated text, synthesized audio) get
@@ -16,33 +17,20 @@ impl FrameObserver for LogObserver {
             Some(payload) => {
                 tracing::info!(
                     target: "ferry::frame_flow",
-                    stage,
-                    next = next_stage(stage),
+                    stage = stage.as_str(),
+                    next = stage.next().map_or("?", Stage::as_str),
                     payload = %payload,
                     "handoff"
                 );
             }
             None => {
-                tracing::trace!(target: "ferry::frame_flow", stage, frame = %frame.get_name(), "push");
+                tracing::trace!(target: "ferry::frame_flow", stage = stage.as_str(), frame = %frame.get_name(), "push");
             }
         }
     }
 
-    fn on_take(&self, stage: &str, frame: &Frame) {
-        tracing::trace!(target: "ferry::frame_flow", stage, frame = %frame.get_name(), "take");
-    }
-}
-
-/// Pipeline order is fixed (`stt` -> `mt` -> `tts`), and `tts`'s output goes
-/// straight to whichever transport is attached (WebRTC track or Twilio
-/// WS) rather than another pipeline stage — hardcoding that chain here is
-/// simpler than threading "who's downstream of me" through every stage.
-fn next_stage(stage: &str) -> &'static str {
-    match stage {
-        "stt" => "mt",
-        "mt" => "tts",
-        "tts" => "transport",
-        _ => "?",
+    fn on_take(&self, stage: Stage, frame: &Frame) {
+        tracing::trace!(target: "ferry::frame_flow", stage = stage.as_str(), frame = %frame.get_name(), "take");
     }
 }
 
