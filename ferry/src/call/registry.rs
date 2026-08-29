@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 
 use tokio::sync::{Mutex, watch};
 use uuid::Uuid;
@@ -162,5 +163,114 @@ impl CallRegistry {
             .write()
             .unwrap_or_else(|e| e.into_inner())
             .remove(call_id);
+    }
+}
+
+/// One user's in-flight session against either of ferry's call-starting
+/// endpoints — `/v1/try-agent/offer` or `/v1/call/start`. Distinct from
+/// `CallRegistry`, which is keyed by `CallId` and exists so Twilio's later,
+/// independently-arriving requests can find leg A's state; this instead
+/// answers "does this user already have something running" so a second
+/// concurrent start can be rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActiveSession {
+    TryAgent {
+        call_id: Uuid,
+        started_at: Instant,
+    },
+    Call {
+        call_id: CallId,
+        started_at: Instant,
+    },
+}
+
+impl ActiveSession {
+    fn started_at(&self) -> Instant {
+        match self {
+            ActiveSession::TryAgent { started_at, .. } => *started_at,
+            ActiveSession::Call { started_at, .. } => *started_at,
+        }
+    }
+
+    /// True once a session has outlived any real call — the backstop for a
+    /// registration whose cleanup never ran (a task that panicked somewhere
+    /// `SessionGuard`'s drop couldn't reach, or a bug). Without this, one
+    /// leaked entry would 409-lock a user out forever.
+    fn is_stale(&self, max_age: Duration) -> bool {
+        self.started_at().elapsed() > max_age
+    }
+}
+
+/// Generous on purpose: this isn't a call-duration limit, it's a safety net
+/// for a registration whose normal cleanup failed to run. Real calls should
+/// never get close to it.
+pub const MAX_SESSION_AGE: Duration = Duration::from_secs(4 * 60 * 60);
+
+/// Process-wide table of one active session per user, keyed by `user_id`.
+#[derive(Clone, Default)]
+pub struct UserSessionRegistry(Arc<RwLock<HashMap<Uuid, ActiveSession>>>);
+
+impl UserSessionRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Registers `session` for `user_id` unless a non-stale one is already
+    /// there, in which case the existing one is returned as the conflict.
+    /// Checking and inserting happen under one lock so two near-simultaneous
+    /// requests for the same user can't both observe "no active session" and
+    /// both register.
+    ///
+    /// Returns a `SessionGuard` that removes the entry again once dropped —
+    /// including on panic unwind, not just the happy path — so a leftover
+    /// entry can only ever come from `is_stale`'s backstop, never a bug that
+    /// forgets to clean up explicitly.
+    pub fn try_register(
+        &self,
+        user_id: Uuid,
+        session: ActiveSession,
+        max_age: Duration,
+    ) -> Result<SessionGuard, ActiveSession> {
+        let mut map = self.0.write().unwrap_or_else(|e| e.into_inner());
+        if let Some(existing) = map.get(&user_id) {
+            if !existing.is_stale(max_age) {
+                return Err(*existing);
+            }
+        }
+        map.insert(user_id, session);
+        drop(map);
+        Ok(SessionGuard {
+            registry: self.clone(),
+            user_id,
+            session,
+        })
+    }
+
+    /// Removes `user_id`'s entry only if it still matches `session` — guards
+    /// against a guard for an old, already-superseded session clobbering
+    /// whatever the user has started since.
+    fn remove_if(&self, user_id: &Uuid, session: &ActiveSession) {
+        let mut map = self.0.write().unwrap_or_else(|e| e.into_inner());
+        if map.get(user_id) == Some(session) {
+            map.remove(user_id);
+        }
+    }
+}
+
+/// RAII handle on one `UserSessionRegistry` entry — clears it on drop so the
+/// entry can never outlive the task that owns it, whether that task ends
+/// normally (call hung up, call ended for any other reason) or via panic
+/// unwind (Rust runs `Drop` impls while unwinding a panic, so this still
+/// fires even then; only a hard process crash skips it, and that clears the
+/// whole in-memory registry anyway).
+pub struct SessionGuard {
+    registry: UserSessionRegistry,
+    user_id: Uuid,
+    session: ActiveSession,
+}
+
+impl Drop for SessionGuard {
+    fn drop(&mut self) {
+        self.registry.remove_if(&self.user_id, &self.session);
     }
 }

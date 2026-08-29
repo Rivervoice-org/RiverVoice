@@ -105,7 +105,7 @@ first. `CallHandle.status_tx: watch::Sender<CallStatus>` is how the two
 legs learn about each other asynchronously (Twilio answered → tell A to
 stop showing "ringing"; either leg hangs up → tear down the other).
 
-`handlers/webrtc.rs::webrtc_offer` (the try-agent demo, `/v1/try-agent/offer`)
+`handlers/try_agent.rs::try_agent_offer` (the try-agent demo, `/v1/try-agent/offer`)
 is deliberately the *one-way* self-looped case — one pipeline, no registry,
 no Twilio. Don't add two-leg concepts to it.
 

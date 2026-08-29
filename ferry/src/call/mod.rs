@@ -1,3 +1,6 @@
 pub mod registry;
 
-pub use registry::{CallHandle, CallId, CallRegistry, CallStatus, EndReason, call_span};
+pub use registry::{
+    ActiveSession, CallHandle, CallId, CallRegistry, CallStatus, EndReason, MAX_SESSION_AGE,
+    SessionGuard, UserSessionRegistry, call_span,
+};
