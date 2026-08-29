@@ -82,7 +82,10 @@ pub async fn webrtc_offer(
     let call_id = Uuid::new_v4();
     let span = call_span(call_id, "solo");
 
-    let frame_io = build_translation_pipeline(config, Some(&agent), false, span.clone());
+    // No recorder: try-agent is a one-way demo with no registry entry and no
+    // `calls` row to attach a transcript to.
+    let frame_io =
+        build_translation_pipeline(config, Some(&agent), false, span.clone(), Vec::new());
     let serializer = WebRtcSerializer;
     let base = BaseTransport::new(frame_io, serializer);
 

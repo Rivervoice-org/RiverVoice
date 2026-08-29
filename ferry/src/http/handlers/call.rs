@@ -3,7 +3,8 @@ use std::sync::Arc;
 use axum::body::to_bytes;
 use axum::extract::{Extension, Request, State};
 use axum::http::StatusCode;
-use sea_orm::EntityTrait;
+use sea_orm::ActiveValue::Set;
+use sea_orm::{ActiveModelTrait, EntityTrait};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
@@ -13,10 +14,11 @@ use crate::call::{CallHandle, CallId, CallStatus, EndReason, call_span};
 use crate::codec::transport::webrtc_dc::WebRtcSerializer;
 use crate::config::{self, Config};
 use crate::db;
-use crate::db::entity::agents;
+use crate::db::entity::{agents, call_utterances, calls};
 use crate::http::MAX_REQUEST_BODY_SIZE;
 use crate::http::response::ApiResponse;
 use crate::http::state::AppState;
+use crate::observer::call_record_observer::CallRecorder;
 use crate::observer::frame_observer::FrameObserver;
 use crate::observer::log_observer::LogObserver;
 use crate::pipeline::build_translation_pipeline;
@@ -111,6 +113,35 @@ pub async fn start_call(
 
     let call_id = CallId::new();
 
+    // Written before anything can move the call's state: every later update
+    // (ringing, connected, ended) is a primary-key UPDATE from the recorder's
+    // writer task, and those have nothing to update if the row is missing.
+    // A failure here is fatal — a call we cannot account for should not start.
+    insert_call_row(call_id, &session, &agent, config, &to_number)
+        .await
+        .map_err(|e| {
+            tracing::error!(%call_id, "start_call: failed to insert call row: {e}");
+            ApiResponse::fail(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Something went wrong. Please try again.",
+            )
+        })?;
+
+    // One recorder for the call, one observer per direction — both sharing its
+    // seq counter, so the two directions interleave into a single ordered
+    // transcript instead of two independent sequences.
+    let recorder = CallRecorder::new();
+    let a2b_recorder = recorder.observer(
+        call_utterances::Speaker::Caller,
+        Some(agent.input_language.clone()),
+        Some(agent.output_language.clone()),
+    );
+    let b2a_recorder = recorder.observer(
+        call_utterances::Speaker::Callee,
+        Some(agent.output_language.clone()),
+        Some(agent.input_language.clone()),
+    );
+
     // Two directional pipelines, not one self-looped pipeline: A's mic feeds
     // pipeline_a2b (STT in A's language -> MT -> TTS in B's language), and
     // its output is what B should hear. pipeline_b2a is the mirror, feeding
@@ -118,12 +149,22 @@ pub async fn start_call(
     // connect) is safe because a pipeline's stages don't touch either
     // participant's live transport — they're just STT/MT/TTS processing
     // chains hung off API keys/config.
-    let (a2b_exit, a2b_entrance) =
-        build_translation_pipeline(config, Some(&agent), false, call_span(call_id, "a2b"))
-            .into_parts();
-    let (b2a_exit, b2a_entrance) =
-        build_translation_pipeline(config, Some(&agent), true, call_span(call_id, "b2a"))
-            .into_parts();
+    let (a2b_exit, a2b_entrance) = build_translation_pipeline(
+        config,
+        Some(&agent),
+        false,
+        call_span(call_id, "a2b"),
+        vec![a2b_recorder],
+    )
+    .into_parts();
+    let (b2a_exit, b2a_entrance) = build_translation_pipeline(
+        config,
+        Some(&agent),
+        true,
+        call_span(call_id, "b2a"),
+        vec![b2a_recorder],
+    )
+    .into_parts();
 
     // A's transport reads outbound audio from B's pipeline's output
     // (b2a_exit) and pushes A's mic input into A's own pipeline's entrance
@@ -135,6 +176,11 @@ pub async fn start_call(
     let b_transport_io = FrameIo::new("call-b", a2b_exit, b2a_entrance, observers().into());
 
     let handle = app.call_registry.register(call_id, b_transport_io);
+
+    // Now that the handle exists, the writer can subscribe to it — that
+    // subscription is what keeps `ringing`/`connected`/`ended` out of the
+    // three separate handlers that trigger those transitions.
+    recorder.spawn(call_id.as_uuid(), handle.clone());
 
     let serializer = WebRtcSerializer;
     let base = BaseTransport::new(a_transport_io, serializer);
@@ -236,6 +282,41 @@ fn spawn_twilio_dial(
 
 fn observers() -> Vec<Arc<dyn FrameObserver>> {
     vec![Arc::new(LogObserver)]
+}
+
+/// The one place a `calls` row is created. Everything after this is an UPDATE
+/// driven by the recorder's writer task.
+///
+/// The agent's name and language pair are snapshotted rather than left to a
+/// join: agents are mutable and deletable, so a live join would let a rename
+/// silently rewrite history and a delete blank it. `agent_id` is kept for
+/// "open this agent", and is `SetNull` on delete for the same reason.
+async fn insert_call_row(
+    call_id: CallId,
+    session: &UserSession,
+    agent: &agents::Model,
+    config: &Config,
+    to_number: &str,
+) -> db::Result<()> {
+    let now = chrono::Utc::now().fixed_offset();
+    calls::ActiveModel {
+        id: Set(call_id.as_uuid()),
+        user_id: Set(session.user_id),
+        agent_id: Set(Some(agent.id)),
+        direction: Set(calls::Direction::Outbound),
+        from_number: Set(config.twilio_from_number.clone()),
+        to_number: Set(to_number.to_string()),
+        agent_name: Set(Some(agent.name.clone())),
+        input_language: Set(Some(agent.input_language.clone())),
+        output_language: Set(Some(agent.output_language.clone())),
+        status: Set(calls::Status::Dialing),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    }
+    .insert(db::get())
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]

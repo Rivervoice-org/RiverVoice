@@ -1,4 +1,5 @@
 pub mod billing_observer;
+pub mod call_record_observer;
 pub mod frame_observer;
 pub mod latency_observer;
 pub mod log_observer;

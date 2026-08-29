@@ -81,6 +81,7 @@ pub fn build_translation_pipeline(
     agent: Option<&agents::Model>,
     reversed: bool,
     call_span: tracing::Span,
+    extra_observers: Vec<Arc<dyn FrameObserver>>,
 ) -> FrameIo {
     let (source_lang, target_lang) = match agent {
         Some(agent) => {
@@ -153,7 +154,7 @@ pub fn build_translation_pipeline(
 
     let usage_observer = Arc::new(UsageObserver::new());
 
-    let observers: Vec<Arc<dyn FrameObserver>> = vec![
+    let mut observers: Vec<Arc<dyn FrameObserver>> = vec![
         usage_observer,
         Arc::new(LogObserver),
         Arc::new(LatencyObserver::new()),
@@ -161,6 +162,10 @@ pub fn build_translation_pipeline(
         Arc::new(StageLatencyObserver::new()),
         Arc::new(TranscriptLogObserver::new(mt_model_slug)),
     ];
+    // Caller-supplied, because these are per-call and per-direction and this
+    // function has no idea which call it is building for. The DB recorder
+    // arrives this way — see http::handlers::call::start_call.
+    observers.extend(extra_observers);
 
     Pipeline::spawn(stages, observers, call_span)
 }

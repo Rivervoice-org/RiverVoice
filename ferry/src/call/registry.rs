@@ -17,6 +17,14 @@ impl CallId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
+
+    /// The same UUID that is the `calls` row's primary key. The call is
+    /// persisted under the identity it was minted with, so a provider
+    /// callback — which carries this id in its URL — addresses the row
+    /// directly, with no lookup table.
+    pub fn as_uuid(&self) -> Uuid {
+        self.0
+    }
 }
 
 impl std::fmt::Display for CallId {
