@@ -5,22 +5,28 @@ use axum::{
 };
 use serde::Serialize;
 
-#[derive(Serialize)]
+#[derive(Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ApiError {
     pub message: String,
 }
 
-#[derive(Serialize)]
-pub struct ApiResponse<T: Serialize> {
-    #[serde(rename = "statusCode")]
+/// The envelope every ferry route returns. Generic, so the generated
+/// TypeScript is generic too and the client keeps its payload type.
+#[derive(Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ApiResponse<T: ts_rs::TS> {
     pub status_code: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub data: Option<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub error: Option<ApiError>,
 }
 
-impl<T: Serialize> ApiResponse<T> {
+impl<T: Serialize + ts_rs::TS> ApiResponse<T> {
     pub fn ok(status: StatusCode, data: T) -> Self {
         Self {
             status_code: status.as_u16(),
@@ -40,7 +46,7 @@ impl<T: Serialize> ApiResponse<T> {
     }
 }
 
-impl<T: Serialize> IntoResponse for ApiResponse<T> {
+impl<T: Serialize + ts_rs::TS> IntoResponse for ApiResponse<T> {
     fn into_response(self) -> Response {
         let status =
             StatusCode::from_u16(self.status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);

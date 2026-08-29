@@ -24,11 +24,11 @@ export async function getRefreshToken(): Promise<string | null> {
 }
 
 export async function saveTokens(tokens: {
-  access_token: string;
-  refresh_token: string;
+  accessToken: string;
+  refreshToken: string;
 }): Promise<void> {
-  accessToken = tokens.access_token;
-  await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, tokens.refresh_token);
+  accessToken = tokens.accessToken;
+  await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, tokens.refreshToken);
 }
 
 export async function clearTokens(): Promise<void> {

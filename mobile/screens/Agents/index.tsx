@@ -6,20 +6,17 @@ import { Plus, ChevronRight, Bot } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { CallRow } from "@/components/CallRow";
 import { SearchInput } from "@/components/SearchInput";
-import { SignInPrompt } from "@/components/SignInPrompt";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Rise, rowDelay } from "@/components/ui/rise";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { useAgents } from "@/lib/agents/hooks";
-import { useRequireAuth } from "@/hooks/use-require-auth";
 
 export default function AgentsScreen() {
   const colors = useThemeColors();
   const [search, setSearch] = useState("");
   const { data: agents, isPending, isError } = useAgents();
-  const { requireAuth, isAuthenticated } = useRequireAuth();
 
   const filtered = (agents ?? []).filter(
     (agent) => !search || agent.name.toLowerCase().includes(search.toLowerCase()),
@@ -35,7 +32,7 @@ export default function AgentsScreen() {
               Agents
             </Text>
           </View>
-          <Button size="sm" onPress={() => requireAuth(() => router.push("/agent-new"))}>
+          <Button size="sm" onPress={() => router.push("/agent-new")}>
             <Plus size={14} strokeWidth={2} color={colors.onInk} />
             <Text className="text-xs font-medium text-primary-foreground">
               New
@@ -57,14 +54,7 @@ export default function AgentsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* List */}
-        {!isAuthenticated ? (
-          <Rise index={2}>
-            <SignInPrompt
-              icon={<Bot size={22} strokeWidth={1.75} color={colors.faint} />}
-              message="Sign in to see your agents"
-            />
-          </Rise>
-        ) : isPending ? (
+        {isPending ? (
           <View className="items-center py-16">
             <ActivityIndicator color={colors.muted} />
           </View>
@@ -98,7 +88,7 @@ export default function AgentsScreen() {
                   <CallRow
                     avatar={<Mascot ref={agent.mascot ?? undefined} seed={agent.name} size={32} />}
                     title={agent.name}
-                    subtitle={`${agent.input_language.toUpperCase()} → ${agent.output_language.toUpperCase()}`}
+                    subtitle={`${agent.inputLanguage.toUpperCase()} → ${agent.outputLanguage.toUpperCase()}`}
                     trailing={
                       <ChevronRight size={16} strokeWidth={1.75} color={colors.muted} />
                     }

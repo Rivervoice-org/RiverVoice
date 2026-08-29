@@ -46,6 +46,13 @@ rtc = "0.20.3"
 rand = "0.8"
 sea-orm = { version = "2.0.2", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-uuid", "with-chrono"] }
 sha2 = "0.10"
+# Generates the mobile app's TypeScript types straight from these Rust
+# structs (see `cargo test export_bindings`), so the wire contract has one
+# definition instead of a hand-maintained copy that silently drifts.
+# `serde-compat` is what makes #[serde(rename = ...)] on the enums carry
+# through; chrono/uuid impls are what map DateTimeWithTimeZone and Uuid to
+# `string` rather than failing to resolve.
+ts-rs = { version = "11", features = ["chrono-impl", "uuid-impl"] }
 
 [profile.dev]
 debug = 1

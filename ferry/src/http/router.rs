@@ -7,7 +7,7 @@ use axum::{
     middleware,
     middleware::Next,
     response::Response,
-    routing::{get, patch, post},
+    routing::{get, post},
 };
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -58,6 +58,8 @@ fn protected_call_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/try-agent/offer", post(handlers::webrtc_offer))
         .route("/v1/call/start", post(handlers::start_call))
+        .route("/v1/calls", get(handlers::get_recent_calls))
+        .route("/v1/calls/{id}", get(handlers::get_call_detail))
         .route_layer(middleware::from_fn(require_user))
 }
 
@@ -79,9 +81,14 @@ fn agent_routes() -> Router<AppState> {
             "/v1/agents",
             post(handlers::create_agent).get(handlers::get_agents),
         )
+        // Ahead of `/v1/agents/{id}` so the literal segment wins the match
+        // rather than being read as an agent id.
+        .route("/v1/agents/recent", get(handlers::get_recent_agents))
         .route(
             "/v1/agents/{id}",
-            patch(handlers::update_agent).delete(handlers::delete_agent),
+            get(handlers::get_agent)
+                .patch(handlers::update_agent)
+                .delete(handlers::delete_agent),
         )
         .route_layer(middleware::from_fn(require_user))
 }

@@ -15,13 +15,17 @@ const API_KEY_HEADER: &str = "api-subscription-key";
 const PREVIEW_TEXT: &str = "Hi, this is a preview of my voice.";
 const PREVIEW_LANGUAGE_CODE: &str = "en-IN";
 
-#[derive(Deserialize, Validate)]
+#[derive(Deserialize, Validate, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct PreviewVoiceRequest {
     #[validate(length(min = 1, message = "voice is required"))]
     pub voice: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct PreviewVoiceResponse {
     /// Base64-encoded WAV audio — Sarvam's REST endpoint returns WAV by
     /// default, so no re-encoding is needed on this side.

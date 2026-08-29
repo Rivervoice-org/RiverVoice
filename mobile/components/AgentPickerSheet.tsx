@@ -151,7 +151,7 @@ export function AgentPickerSheet({
                 key={agent.id}
                 avatar={<Mascot ref={agent.mascot ?? undefined} seed={agent.name} size={32} />}
                 title={agent.name}
-                subtitle={`${agent.input_language.toUpperCase()} → ${agent.output_language.toUpperCase()}`}
+                subtitle={`${agent.inputLanguage.toUpperCase()} → ${agent.outputLanguage.toUpperCase()}`}
                 showDivider={index !== agents.length - 1}
                 onPress={() => onSelect(agent)}
               />

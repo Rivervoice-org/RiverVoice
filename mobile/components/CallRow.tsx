@@ -23,6 +23,8 @@ export type CallRowItem = {
   name: string;
   number: string;
   fromNumber: string;
+  /** Null once the agent is deleted, which is what makes the row un-redialable. */
+  agentId: string | null;
   agent: string | null;
   language: string;
   duration: string;
@@ -82,7 +84,9 @@ export function CallListItem({
 }) {
   const colors = useThemeColors();
   // the row itself is inert; the chevron is the only tap target
-  const meta = `${call.name ? "" : `${call.number} · `}${call.agent ? `${call.agent} · ` : ""}${call.language}`;
+  // An unknown number titles the row itself (see `title` below), so it is
+  // never repeated here.
+  const meta = `${call.agent ? `${call.agent} · ` : ""}${call.language}`;
   return (
     <CallRow
       avatar={
@@ -92,7 +96,7 @@ export function CallListItem({
           <CallOutcomeAvatar outcome={call.outcome} />
         )
       }
-      title={call.name}
+      title={call.name || call.number}
       subtitle={
         <View className="flex-row items-center gap-1">
           <Text variant="muted" className="text-[11px]" numberOfLines={1}>

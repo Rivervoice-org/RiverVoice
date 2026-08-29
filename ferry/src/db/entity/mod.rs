@@ -2,5 +2,7 @@
 // `sea-orm-cli generate entity` against a migrated database.
 
 pub mod agents;
+pub mod call_utterances;
+pub mod calls;
 pub mod refresh_tokens;
 pub mod users;

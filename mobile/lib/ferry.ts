@@ -83,12 +83,12 @@ class FerryClient {
     }
 
     try {
-      const result = await this.rawRequest<{ access_token: string; refresh_token: string }>(
+      const result = await this.rawRequest<{ accessToken: string; refreshToken: string }>(
         "/v1/auth/refresh",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh_token: refreshToken }),
+          body: JSON.stringify({ refreshToken: refreshToken }),
         },
       );
       // Something else (sign-out) may have cleared the session while this

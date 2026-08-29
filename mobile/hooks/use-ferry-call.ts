@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioDevice, CallStatus, FerryCall } from "@/lib/webrtc/ferry-call";
 
-export enum Speaker {
+/**
+ * Who produced a line during a *live* call — deliberately not the `Speaker`
+ * generated from ferry's `call_speaker` enum, which is `caller | callee`.
+ *
+ * They are different concepts that happened to share a name. The persisted one
+ * records which of the two people spoke. This one splits the data channel's two
+ * message kinds: a transcript (your own words) and a translation (the voice you
+ * hear). In the try-agent demo that second voice really is the agent and there
+ * is no callee at all, which is why this cannot simply be renamed to match.
+ */
+export enum LiveSpeaker {
   Caller = "caller",
   Agent = "agent",
 }
 
-export type ConversationLine = { speaker: Speaker; text: string };
+export type ConversationLine = { speaker: LiveSpeaker; text: string };
 
 /**
  * React wrapper around `FerryCall` — a real WebRTC call against ferry, via
@@ -65,7 +75,7 @@ export function useFerryCall() {
           setInterimCaption("");
           setConversation((prev) => [
             ...prev,
-            { speaker: Speaker.Caller, text: message.text },
+            { speaker: LiveSpeaker.Caller, text: message.text },
           ]);
         } else {
           setInterimCaption(message.text);
@@ -74,7 +84,7 @@ export function useFerryCall() {
       onTranslation: (message) => {
         setConversation((prev) => [
           ...prev,
-          { speaker: Speaker.Agent, text: message.text },
+          { speaker: LiveSpeaker.Agent, text: message.text },
         ]);
       },
       onError: setError,

@@ -19,8 +19,13 @@ use crate::transport::webrtc::transport::WebRtcClient;
 use tracing::Instrument;
 use uuid::Uuid;
 
-#[derive(Deserialize, Validate)]
-pub struct WebrtcOfferRequest {
+/// The one-way demo's offer. Distinct from `call::WebrtcOfferRequest`, which
+/// is the two-leg flow and additionally carries `to_number` — they were both
+/// called `WebrtcOffer*` while having different shapes.
+#[derive(Deserialize, Validate, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TryAgentOfferRequest {
     #[validate(length(min = 1, message = "offer_sdp is required"))]
     pub offer_sdp: String,
 
@@ -28,8 +33,10 @@ pub struct WebrtcOfferRequest {
     pub agent_id: String,
 }
 
-#[derive(Serialize)]
-pub struct WebrtcOfferResponse {
+#[derive(Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TryAgentOfferResponse {
     pub answer_sdp: String,
 }
 
@@ -39,14 +46,14 @@ pub struct WebrtcOfferResponse {
 pub async fn webrtc_offer(
     Extension(session): Extension<UserSession>,
     req: Request,
-) -> Result<ApiResponse<WebrtcOfferResponse>, ApiResponse<()>> {
+) -> Result<ApiResponse<TryAgentOfferResponse>, ApiResponse<()>> {
     tracing::info!(user_id = %session.user_id, "webrtc_offer: request from authenticated user");
 
     let body = to_bytes(req.into_body(), MAX_REQUEST_BODY_SIZE)
         .await
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid body: {e}")))?;
 
-    let req: WebrtcOfferRequest = serde_json::from_slice(&body)
+    let req: TryAgentOfferRequest = serde_json::from_slice(&body)
         .map_err(|e| ApiResponse::fail(StatusCode::BAD_REQUEST, format!("invalid json: {e}")))?;
 
     req.validate()
@@ -82,7 +89,10 @@ pub async fn webrtc_offer(
     let call_id = Uuid::new_v4();
     let span = call_span(call_id, "solo");
 
-    let frame_io = build_translation_pipeline(config, Some(&agent), false, span.clone());
+    // No recorder: try-agent is a one-way demo with no registry entry and no
+    // `calls` row to attach a transcript to.
+    let frame_io =
+        build_translation_pipeline(config, Some(&agent), false, span.clone(), Vec::new());
     let serializer = WebRtcSerializer;
     let base = BaseTransport::new(frame_io, serializer);
 
@@ -106,6 +116,6 @@ pub async fn webrtc_offer(
 
     Ok(ApiResponse::ok(
         StatusCode::OK,
-        WebrtcOfferResponse { answer_sdp },
+        TryAgentOfferResponse { answer_sdp },
     ))
 }

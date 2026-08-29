@@ -1,20 +1,23 @@
 import { useState } from "react";
-import { View, Pressable, ScrollView, ActivityIndicator } from "react-native";
+import { View, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bot, ChevronLeft, Pencil, Trash2 } from "lucide-react-native";
+import { ChevronLeft, Pencil, Trash2 } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DeleteAlert } from "@/components/delete-alert";
-import { SignInPrompt } from "@/components/SignInPrompt";
 import { Rise } from "@/components/ui/rise";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { deleteAgent } from "@/lib/agents/api";
-import { agentsQueryKey, useAgents } from "@/lib/agents/hooks";
-import { useAuth } from "@/hooks/use-auth";
+import {
+  agentsQueryKey,
+  recentAgentsQueryKey,
+  useAgent,
+} from "@/lib/agents/hooks";
+import { AgentDetailSkeleton } from "./skeleton";
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
@@ -51,62 +54,49 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 export default function AgentDetailScreen() {
   const colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { isAuthenticated, isBootstrapping } = useAuth();
-  const { data: agents, isPending } = useAgents();
-  const agent = agents?.find((a) => a.id === id);
+  // Fetched by id, not found in the agents list: arriving from Home's
+  // recently-used rows there is no list in cache to search, and those rows
+  // carry only a name and a mascot.
+  const { data: agent, isPending, isError } = useAgent(id);
   const queryClient = useQueryClient();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const deleteMutation = useMutation({
     mutationFn: deleteAgent,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
+      // Both lists carried this agent, and the recent one is the section a
+      // user lands back on.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: agentsQueryKey }),
+        queryClient.invalidateQueries({ queryKey: recentAgentsQueryKey }),
+      ]);
       router.back();
     },
   });
 
-  // useAgents() disables its query while signed out, which leaves
-  // react-query's isPending stuck at true forever — it never actually
-  // fetches, so that alone can't be used to tell "still loading" apart
-  // from "signed out". Check auth first: isBootstrapping keeps the normal
-  // spinner (session restore is still in flight), a confirmed signed-out
-  // state gets its own prompt instead of hanging on a spinner or falling
-  // through to a false "Agent not found", and only once authenticated does
-  // isPending mean what it normally means.
-  if (isBootstrapping) {
-    return (
-      <SafeAreaView
-        className="flex-1 items-center justify-center bg-canvas"
-        edges={["top"]}
-      >
-        <ActivityIndicator color={colors.muted} />
-      </SafeAreaView>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["top"]}>
-        <SignInPrompt
-          icon={<Bot size={22} strokeWidth={1.75} color={colors.faint} />}
-          message="Sign in to see this agent"
-        />
-      </SafeAreaView>
-    );
-  }
-
   if (isPending) {
     return (
-      <SafeAreaView
-        className="flex-1 items-center justify-center bg-canvas"
-        edges={["top"]}
-      >
-        <ActivityIndicator color={colors.muted} />
+      <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
+        <View className="flex-row items-center px-4 py-3">
+          <Pressable
+            onPress={() => router.back()}
+            className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
+            hitSlop={8}
+          >
+            <ChevronLeft size={22} strokeWidth={1.75} color={colors.ink} />
+          </Pressable>
+          <Text className="flex-1 text-center text-[17px] font-semibold">
+            Agent
+          </Text>
+          <View className="w-9" />
+        </View>
+
+        <AgentDetailSkeleton />
       </SafeAreaView>
     );
   }
 
-  if (!agent) {
+  if (isError || !agent) {
     return (
       <SafeAreaView
         className="flex-1 items-center justify-center bg-canvas px-5"
@@ -172,8 +162,8 @@ export default function AgentDetailScreen() {
 
             <Text className="mt-3 text-[20px] font-semibold">{agent.name}</Text>
             <Text variant="muted" className="mt-1 text-center text-sm">
-              {LANGUAGE_LABELS[agent.input_language] ?? agent.input_language} →{" "}
-              {LANGUAGE_LABELS[agent.output_language] ?? agent.output_language}
+              {LANGUAGE_LABELS[agent.inputLanguage] ?? agent.inputLanguage} →{" "}
+              {LANGUAGE_LABELS[agent.outputLanguage] ?? agent.outputLanguage}
             </Text>
           </Card>
         </Rise>
@@ -195,13 +185,13 @@ export default function AgentDetailScreen() {
             <InfoRow
               label="Input language"
               value={
-                LANGUAGE_LABELS[agent.input_language] ?? agent.input_language
+                LANGUAGE_LABELS[agent.inputLanguage] ?? agent.inputLanguage
               }
             />
             <InfoRow
               label="Output language"
               value={
-                LANGUAGE_LABELS[agent.output_language] ?? agent.output_language
+                LANGUAGE_LABELS[agent.outputLanguage] ?? agent.outputLanguage
               }
             />
             {agent.mode ? (

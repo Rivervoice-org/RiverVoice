@@ -33,8 +33,6 @@ import type {
   Mode,
   UpdateAgentRequest,
 } from "@/lib/agents/types";
-import { useAuth } from "@/hooks/use-auth";
-import { useRequireAuth } from "@/hooks/use-require-auth";
 
 const LANGUAGES = [
   { value: "en", label: "English" },
@@ -327,11 +325,11 @@ function buildPatch(value: AgentValues, editingAgent: AgentResponse): UpdateAgen
   if (value.name.trim() !== editingAgent.name) {
     patch.name = value.name.trim();
   }
-  if (value.inputLang !== editingAgent.input_language) {
-    patch.input_language = value.inputLang as Language;
+  if (value.inputLang !== editingAgent.inputLanguage) {
+    patch.inputLanguage = value.inputLang as Language;
   }
-  if (value.outputLang !== editingAgent.output_language) {
-    patch.output_language = value.outputLang as Language;
+  if (value.outputLang !== editingAgent.outputLanguage) {
+    patch.outputLanguage = value.outputLang as Language;
   }
   if (value.mode && value.mode !== editingAgent.mode) {
     patch.mode = value.mode as Mode;
@@ -440,8 +438,6 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
   const savingRef = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuth();
-  const { requireAuth } = useRequireAuth();
 
   useEffect(() => {
     return () => {
@@ -461,9 +457,9 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
     }
     setPreviewingVoice(voice);
     try {
-      const { audio_base64 } = await previewVoice(voice);
+      const { audioBase64 } = await previewVoice(voice);
       previewPlayerRef.current?.release();
-      const player = createAudioPlayer(`data:audio/wav;base64,${audio_base64}`);
+      const player = createAudioPlayer(`data:audio/wav;base64,${audioBase64}`);
       previewPlayerRef.current = player;
       player.addListener("playbackStatusUpdate", (status) => {
         if (status.didJustFinish) {
@@ -483,8 +479,8 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
     defaultValues: editingAgent
       ? {
           name: editingAgent.name,
-          inputLang: editingAgent.input_language,
-          outputLang: editingAgent.output_language,
+          inputLang: editingAgent.inputLanguage,
+          outputLang: editingAgent.outputLanguage,
           mode: editingAgent.mode,
           gender: editingAgent.gender,
           mascot: editingAgent.mascot ?? undefined,
@@ -518,19 +514,13 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
           router.back();
           return;
         }
-        // Backstop for the New button's own requireAuth gate — a direct
-        // deep link to /agent-new skips that check entirely.
-        if (!isAuthenticated) {
-          requireAuth(() => {});
-          return;
-        }
         // Guaranteed non-null by the form's onMount/onChange validators,
         // which block canSubmit (and thus this handler) until every one of
         // these is picked — see CreateAgentRequest's required fields.
         await createAgent({
           name: value.name.trim(),
-          input_language: value.inputLang as Language,
-          output_language: value.outputLang as Language,
+          inputLanguage: value.inputLang as Language,
+          outputLanguage: value.outputLang as Language,
           mode: value.mode as Mode,
           gender: value.gender as Gender,
           mascot: value.mascot as string,
@@ -555,10 +545,6 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
   // agent has no id at all yet, and an edited one might have changes that
   // were never explicitly saved — both cases just prompt to go save first.
   function handleTryAgent() {
-    if (!isAuthenticated) {
-      requireAuth(() => {});
-      return;
-    }
     // Read the form's current values directly rather than subscribing —
     // this only runs on tap, so there's no render to keep in sync.
     const currentValues = form.store.state.values as AgentValues;

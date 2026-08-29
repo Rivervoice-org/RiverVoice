@@ -11,7 +11,6 @@ import { PortalHost } from "@rn-primitives/portal";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/query-client";
 import { SessionProvider } from "@/state/session";
-import { SignInPromptProvider } from "@/providers/sign-in-prompt-provider";
 import { AgentPickerProvider } from "@/providers/agent-picker-provider";
 import { ContactsProvider } from "@/state/contacts";
 import { Splash } from "@/components/Splash";
@@ -35,25 +34,23 @@ function AppShell({ booted, onBooted }: { booted: boolean; onBooted: () => void 
 
   return (
     <SessionProvider>
-      <SignInPromptProvider>
         <AgentPickerProvider>
           <ContactsProvider>
+            {/* Two halves, and the only two: `(auth)` is what a signed-out
+                user can reach, `(protected)` is everything else. The split
+                is the app's whole authorization story — no screen below
+                repeats it. */}
             <Stack
               screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}
             >
               <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="call-detail" />
-              <Stack.Screen name="transcript" />
-              <Stack.Screen name="agent-new" />
-              <Stack.Screen name="in-call" />
+              <Stack.Screen name="(protected)" />
             </Stack>
             <PortalHost />
             <StatusBar style={scheme === "dark" ? "light" : "dark"} />
             {!booted && <Splash onDone={onBooted} />}
           </ContactsProvider>
         </AgentPickerProvider>
-      </SignInPromptProvider>
     </SessionProvider>
   );
 }

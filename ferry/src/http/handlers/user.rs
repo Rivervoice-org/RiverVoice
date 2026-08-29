@@ -18,12 +18,16 @@ use crate::http::response::ApiResponse;
 const DEFAULT_MASCOT: &str = "notionists:new-agent";
 const GENERIC_SERVER_ERROR: &str = "Something went wrong. Please try again.";
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct GoogleSignInRequest {
     pub id_token: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct GoogleSignInResponse {
     pub id: String,
     pub email: String,
@@ -33,7 +37,9 @@ pub struct GoogleSignInResponse {
     pub refresh_token: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct UserResponse {
     pub id: String,
     pub email: String,
