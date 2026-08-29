@@ -7,7 +7,7 @@ use axum::{
     middleware,
     middleware::Next,
     response::Response,
-    routing::{get, patch, post},
+    routing::{get, post},
 };
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -81,9 +81,14 @@ fn agent_routes() -> Router<AppState> {
             "/v1/agents",
             post(handlers::create_agent).get(handlers::get_agents),
         )
+        // Ahead of `/v1/agents/{id}` so the literal segment wins the match
+        // rather than being read as an agent id.
+        .route("/v1/agents/recent", get(handlers::get_recent_agents))
         .route(
             "/v1/agents/{id}",
-            patch(handlers::update_agent).delete(handlers::delete_agent),
+            get(handlers::get_agent)
+                .patch(handlers::update_agent)
+                .delete(handlers::delete_agent),
         )
         .route_layer(middleware::from_fn(require_user))
 }

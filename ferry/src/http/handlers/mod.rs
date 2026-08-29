@@ -6,7 +6,9 @@ pub mod user;
 pub mod voice;
 pub mod webrtc;
 
-pub use agent::{create_agent, delete_agent, get_agents, update_agent};
+pub use agent::{
+    create_agent, delete_agent, get_agent, get_agents, get_recent_agents, update_agent,
+};
 pub use auth::{refresh, sign_out};
 pub use call::{get_call_detail, get_recent_calls, start_call};
 pub use twilio::{twilio_status, twilio_ws};
