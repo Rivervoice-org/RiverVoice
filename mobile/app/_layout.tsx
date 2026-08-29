@@ -45,6 +45,7 @@ function AppShell({ booted, onBooted }: { booted: boolean; onBooted: () => void 
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="call-detail" />
               <Stack.Screen name="transcript" />
+              <Stack.Screen name="call-chat-preview" />
               <Stack.Screen name="agent-new" />
               <Stack.Screen name="in-call" />
             </Stack>
