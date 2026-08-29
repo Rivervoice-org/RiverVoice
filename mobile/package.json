@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "@config-plugins/react-native-webrtc": "^13.0.0",
-    "@react-native-google-signin/google-signin": "^13.2.0",
     "@gorhom/bottom-sheet": "^5.2.14",
+    "@react-native-google-signin/google-signin": "^13.2.0",
     "@rn-primitives/avatar": "^1.5.2",
     "@rn-primitives/checkbox": "^1.5.2",
     "@rn-primitives/dialog": "^1.5.2",
@@ -66,6 +66,7 @@
     "babel-preset-expo": "~54.0.10",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~10.0.0",
+    "prettier": "3.9.6",
     "typescript": "~5.9.2"
   },
   "scripts": {
@@ -74,7 +75,9 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "private": true
 }

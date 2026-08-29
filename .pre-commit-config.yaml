@@ -8,6 +8,16 @@ repos:
         additional_dependencies: ["prettier@3.9.6"]
         files: ^web/.*\.(ts|tsx|js|jsx|mjs|css|json|md)$
 
+      # Mobile keeps its own prettier config: it is hand-wrapped at 80
+      # columns where web sits at 100, and its generated ts-rs bindings have
+      # to stay out of prettier's way (see mobile/.prettierignore).
+      - id: prettier-mobile
+        name: prettier (mobile)
+        entry: prettier --write --config mobile/.prettierrc.json --ignore-path mobile/.prettierignore
+        language: node
+        additional_dependencies: ["prettier@3.9.6"]
+        files: ^mobile/.*\.(ts|tsx|js|jsx|mjs|css|json)$
+
       - id: rustfmt
         name: rustfmt (ferry)
         entry: rustfmt --edition 2024

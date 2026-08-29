@@ -1,0 +1,15 @@
+node_modules/
+.expo/
+android/
+ios/
+dist/
+package-lock.json
+
+# Written by ts-rs from ferry's Rust types (`cargo test export_bindings`).
+# Formatting them would put prettier and the generator in a loop, each
+# undoing the other on every regeneration.
+lib/bindings/
+
+# Generated type shims.
+nativewind-env.d.ts
+expo-env.d.ts
