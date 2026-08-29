@@ -13,6 +13,8 @@ import {
   AudioLines,
   MessageSquareText,
   ChevronRight,
+  CloudOff,
+  RotateCw,
 } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
@@ -20,12 +22,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Rise } from "@/components/ui/rise";
-import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useThemeColors, type ThemeColors } from "@/lib/theme";
 import { formatDuration } from "@/lib/call-status";
 import { useCallDetail } from "@/lib/calls/hooks";
+import { CallDetailSkeleton } from "./skeleton";
 import { languageLabel, outcomeOf, relativeTime } from "@/lib/calls/format";
 
 const OUTCOME_CONFIG = {
@@ -86,7 +88,7 @@ export default function CallDetailScreen() {
   // `id` addresses the call; `name` is the address-book match the server has
   // never seen, so it can only come from the screen that had it.
   const params = useLocalSearchParams<{ id: string; name?: string }>();
-  const { data: call, isLoading, isError, error } = useCallDetail(params.id);
+  const { data: call, isLoading, isError, error, refetch } = useCallDetail(params.id);
 
   const header = (
     <View className="flex-row items-center px-4 py-3">
@@ -108,15 +110,34 @@ export default function CallDetailScreen() {
     return (
       <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
         {header}
-        <View className="flex-1 items-center justify-center px-10">
-          {isLoading ? (
-            <Spinner size={22} />
-          ) : (
-            <Text variant="muted" className="text-center text-sm">
-              {error instanceof Error ? error.message : "Couldn't load this call"}
+        {isLoading ? (
+          <CallDetailSkeleton />
+        ) : (
+          <View className="flex-1 items-center justify-center px-10">
+            <View className="h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+              <CloudOff size={22} strokeWidth={1.75} color={colors.destructive} />
+            </View>
+            <Text className="mt-3 text-center text-sm font-medium">
+              Couldn&apos;t load this call
             </Text>
-          )}
-        </View>
+            {error instanceof Error ? (
+              <Text variant="muted" className="mt-1 text-center text-xs">
+                {error.message}
+              </Text>
+            ) : null}
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-4"
+              onPress={() => void refetch()}
+            >
+              <RotateCw size={14} strokeWidth={2} color={colors.muted} />
+              <Text className="text-xs font-medium text-foreground">
+                Try again
+              </Text>
+            </Button>
+          </View>
+        )}
       </SafeAreaView>
     );
   }
