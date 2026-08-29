@@ -1,5 +1,14 @@
-import { TranscriptPhase } from "@/components/Transcript";
 import { CallStatus } from "@/lib/webrtc/ferry-call";
+
+/**
+ * How much of a conversation there is to show. Lives here beside
+ * `callStatusToPhase`, the only thing that produces one.
+ */
+export enum TranscriptPhase {
+  Connecting = "connecting",
+  Live = "live",
+  Ended = "ended",
+}
 
 export function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
