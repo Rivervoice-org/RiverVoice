@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import {
   ChevronRight,
-  Clock,
+  Coins,
   CloudOff,
   Phone,
   PhoneOutgoing,
@@ -31,6 +31,17 @@ import { useRecentAgents } from "@/lib/agents/hooks";
 import type { RecentAgent } from "@/lib/agents/types";
 import { useContacts } from "@/state/contacts";
 import { RecentAgentsSkeleton, RecentCallsSkeleton } from "./skeleton";
+
+/**
+ * Stand-in for the credit balance until ferry exposes one. Kept as a single
+ * object so the shape of what the card needs is obvious, and swapping it for
+ * a query is a one-line change here rather than an edit to the markup.
+ */
+const CREDITS = {
+  remaining: 3580,
+  total: 12000,
+  used: 8420,
+};
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -200,9 +211,10 @@ function HomeHeader({
         </View>
       </Rise>
 
-      {/* Minutes used. Still the only placeholder left on this screen —
-          ferry has no quota or usage endpoint, so these figures are fixed
-          until one exists. */}
+      {/* Credits. Mocked: nothing on ferry reports a balance yet, so these
+          figures are fixed until an endpoint exists to replace CREDITS
+          with. Reads as a balance rather than a usage meter — what is left
+          is the number that decides whether you can place a call. */}
       <Rise index={1}>
         <Card className="mx-5 mt-4 p-4">
           <View className="flex-row items-center justify-between">
@@ -210,24 +222,29 @@ function HomeHeader({
               variant="muted"
               className="text-[11px] font-medium uppercase tracking-[0.14em]"
             >
-              Minutes used
+              Credits
             </Text>
-            <Clock size={14} strokeWidth={1.75} color={colors.muted} />
+            <Coins size={14} strokeWidth={1.75} color={colors.muted} />
           </View>
 
           <View className="mt-3 flex-row items-baseline gap-1.5">
             <Text font="mono" className="text-lg font-semibold">
-              8,420
+              {CREDITS.remaining.toLocaleString()}
             </Text>
             <Text variant="muted" className="text-sm">
-              of 12,000
+              of {CREDITS.total.toLocaleString()}
             </Text>
           </View>
 
-          <Progress value={70} className="mt-2.5" />
+          {/* Fills with what is left, not what is spent, so a nearly empty
+              balance reads as a nearly empty bar. */}
+          <Progress
+            value={(CREDITS.remaining / CREDITS.total) * 100}
+            className="mt-2.5"
+          />
 
           <Text variant="muted" className="mt-2 text-xs">
-            3,580 minutes remaining this month
+            {CREDITS.used.toLocaleString()} credits used this month
           </Text>
         </Card>
       </Rise>
