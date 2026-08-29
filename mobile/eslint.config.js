@@ -5,7 +5,11 @@ const expoConfig = require("eslint-config-expo/flat");
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ["dist/*"],
+    // lib/bindings is written by ts-rs from ferry's Rust types
+    // (`cargo test export_bindings`). Linting generated output only
+    // produces warnings nobody can act on without editing a file whose
+    // header says not to.
+    ignores: ["dist/*", "lib/bindings/*"],
   },
   {
     files: ["**/*.ts", "**/*.tsx"],

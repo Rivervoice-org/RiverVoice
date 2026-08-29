@@ -29,5 +29,5 @@ export function getMe(): Promise<UserResponse> {
  * token in the body, not a Bearer access token.
  */
 export function signOutRequest(refreshToken: string): Promise<null> {
-  return ferry.post<null>("/v1/auth/signout", { refresh_token: refreshToken });
+  return ferry.post<null>("/v1/auth/signout", { refreshToken: refreshToken });
 }

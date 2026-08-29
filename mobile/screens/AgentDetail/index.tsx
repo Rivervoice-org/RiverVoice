@@ -172,8 +172,8 @@ export default function AgentDetailScreen() {
 
             <Text className="mt-3 text-[20px] font-semibold">{agent.name}</Text>
             <Text variant="muted" className="mt-1 text-center text-sm">
-              {LANGUAGE_LABELS[agent.input_language] ?? agent.input_language} →{" "}
-              {LANGUAGE_LABELS[agent.output_language] ?? agent.output_language}
+              {LANGUAGE_LABELS[agent.inputLanguage] ?? agent.inputLanguage} →{" "}
+              {LANGUAGE_LABELS[agent.outputLanguage] ?? agent.outputLanguage}
             </Text>
           </Card>
         </Rise>
@@ -195,13 +195,13 @@ export default function AgentDetailScreen() {
             <InfoRow
               label="Input language"
               value={
-                LANGUAGE_LABELS[agent.input_language] ?? agent.input_language
+                LANGUAGE_LABELS[agent.inputLanguage] ?? agent.inputLanguage
               }
             />
             <InfoRow
               label="Output language"
               value={
-                LANGUAGE_LABELS[agent.output_language] ?? agent.output_language
+                LANGUAGE_LABELS[agent.outputLanguage] ?? agent.outputLanguage
               }
             />
             {agent.mode ? (

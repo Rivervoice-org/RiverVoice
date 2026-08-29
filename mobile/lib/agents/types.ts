@@ -1,42 +1,16 @@
-/** Mirrors ferry/src/db/entity/agents.rs Language/Mode/Gender. */
-export type Language = "en" | "hi" | "te" | "ta" | "kn";
-export type Mode = "formal" | "modern-colloquial" | "classic-colloquial" | "code-mixed";
-export type Gender = "female" | "male" | "neutral";
+/**
+ * Generated from ferry's Rust types by ts-rs (`cargo test export_bindings`) —
+ * see ferry/src/http/handlers/agent.rs and ferry/src/db/entity/agents.rs.
+ *
+ * Re-exported under these names so existing `@/lib/agents/types` imports keep
+ * resolving, and so the option sets can never drift from the database enums
+ * they came from.
+ */
+export type { Language } from "@/lib/bindings/Language";
+export type { Mode } from "@/lib/bindings/Mode";
+export type { Gender } from "@/lib/bindings/Gender";
 
-/** Mirrors ferry/src/http/handlers/agent.rs CreateAgentRequest — all of
- * `agents`' columns are NOT NULL, so every field here is required. */
-export type CreateAgentRequest = {
-  name: string;
-  input_language: Language;
-  output_language: Language;
-  mode: Mode;
-  gender: Gender;
-  mascot: string;
-  voice: string;
-};
-
-/** Mirrors ferry/src/http/handlers/agent.rs UpdateAgentRequest — every field
- * optional, and omitted fields leave that column untouched server-side.
- * Unlike CreateAgentRequest there's no "clear to null" case to represent,
- * since none of `agents`' columns are nullable. */
-export type UpdateAgentRequest = {
-  name?: string;
-  input_language?: Language;
-  output_language?: Language;
-  mode?: Mode;
-  gender?: Gender;
-  mascot?: string;
-  voice?: string;
-};
-
-/** Mirrors ferry/src/http/handlers/agent.rs AgentResponse. */
-export type AgentResponse = {
-  id: string;
-  name: string;
-  input_language: Language;
-  output_language: Language;
-  mode: Mode;
-  gender: Gender;
-  mascot: string;
-  voice: string;
-};
+export type { CreateAgentRequest } from "@/lib/bindings/CreateAgentRequest";
+export type { UpdateAgentRequest } from "@/lib/bindings/UpdateAgentRequest";
+export type { AgentResponse } from "@/lib/bindings/AgentResponse";
+export type { PreviewVoiceResponse } from "@/lib/bindings/PreviewVoiceResponse";

@@ -98,7 +98,7 @@ export default function AgentsScreen() {
                   <CallRow
                     avatar={<Mascot ref={agent.mascot ?? undefined} seed={agent.name} size={32} />}
                     title={agent.name}
-                    subtitle={`${agent.input_language.toUpperCase()} → ${agent.output_language.toUpperCase()}`}
+                    subtitle={`${agent.inputLanguage.toUpperCase()} → ${agent.outputLanguage.toUpperCase()}`}
                     trailing={
                       <ChevronRight size={16} strokeWidth={1.75} color={colors.muted} />
                     }

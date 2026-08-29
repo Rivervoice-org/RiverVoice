@@ -83,7 +83,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Google sign-in did not return an ID token");
     }
 
-    const result = await googleSignInMutation({ id_token: idToken });
+    const result = await googleSignInMutation({ idToken: idToken });
     await saveTokens(result);
     setUser({ name: result.name, email: result.email });
     setIsAuthenticated(true);

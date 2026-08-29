@@ -327,11 +327,11 @@ function buildPatch(value: AgentValues, editingAgent: AgentResponse): UpdateAgen
   if (value.name.trim() !== editingAgent.name) {
     patch.name = value.name.trim();
   }
-  if (value.inputLang !== editingAgent.input_language) {
-    patch.input_language = value.inputLang as Language;
+  if (value.inputLang !== editingAgent.inputLanguage) {
+    patch.inputLanguage = value.inputLang as Language;
   }
-  if (value.outputLang !== editingAgent.output_language) {
-    patch.output_language = value.outputLang as Language;
+  if (value.outputLang !== editingAgent.outputLanguage) {
+    patch.outputLanguage = value.outputLang as Language;
   }
   if (value.mode && value.mode !== editingAgent.mode) {
     patch.mode = value.mode as Mode;
@@ -461,9 +461,9 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
     }
     setPreviewingVoice(voice);
     try {
-      const { audio_base64 } = await previewVoice(voice);
+      const { audioBase64 } = await previewVoice(voice);
       previewPlayerRef.current?.release();
-      const player = createAudioPlayer(`data:audio/wav;base64,${audio_base64}`);
+      const player = createAudioPlayer(`data:audio/wav;base64,${audioBase64}`);
       previewPlayerRef.current = player;
       player.addListener("playbackStatusUpdate", (status) => {
         if (status.didJustFinish) {
@@ -483,8 +483,8 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
     defaultValues: editingAgent
       ? {
           name: editingAgent.name,
-          inputLang: editingAgent.input_language,
-          outputLang: editingAgent.output_language,
+          inputLang: editingAgent.inputLanguage,
+          outputLang: editingAgent.outputLanguage,
           mode: editingAgent.mode,
           gender: editingAgent.gender,
           mascot: editingAgent.mascot ?? undefined,
@@ -529,8 +529,8 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
         // these is picked — see CreateAgentRequest's required fields.
         await createAgent({
           name: value.name.trim(),
-          input_language: value.inputLang as Language,
-          output_language: value.outputLang as Language,
+          inputLanguage: value.inputLang as Language,
+          outputLanguage: value.outputLang as Language,
           mode: value.mode as Mode,
           gender: value.gender as Gender,
           mascot: value.mascot as string,

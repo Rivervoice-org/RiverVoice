@@ -11,13 +11,23 @@
 
 import { authHeader } from "@/lib/auth/tokens";
 import { ferry, FerryApiError } from "@/lib/ferry";
+import type { TryAgentOfferRequest } from "@/lib/bindings/TryAgentOfferRequest";
+import type { TryAgentOfferResponse } from "@/lib/bindings/TryAgentOfferResponse";
+import type { WebrtcOfferRequest } from "@/lib/bindings/WebrtcOfferRequest";
+import type { WebrtcOfferResponse } from "@/lib/bindings/WebrtcOfferResponse";
 
 export class SignalingError extends Error {}
 
-async function post(path: string, body: Record<string, string>): Promise<string> {
+/** Both endpoints answer with an SDP; `/v1/call/start` additionally returns a
+ * `callId` that signaling has no use for, so the response type is a parameter
+ * rather than the intersection of the two. */
+async function post<T extends { answerSdp: string }>(
+  path: string,
+  body: TryAgentOfferRequest | WebrtcOfferRequest,
+): Promise<string> {
   try {
-    const result = await ferry.post<{ answer_sdp: string }>(path, body, authHeader());
-    return result.answer_sdp;
+    const result = await ferry.post<T>(path, body, authHeader());
+    return result.answerSdp;
   } catch (err) {
     if (err instanceof FerryApiError) {
       throw new SignalingError(err.message);
@@ -32,7 +42,10 @@ async function post(path: string, body: Record<string, string>): Promise<string>
  * require_user-protected and looks the agent up server-side) to the one-way
  * try-agent demo, returns ferry's SDP answer. */
 export function postTryAgentOffer(offerSdp: string, agentId: string): Promise<string> {
-  return post("/v1/try-agent/offer", { offer_sdp: offerSdp, agent_id: agentId });
+  return post<TryAgentOfferResponse>("/v1/try-agent/offer", {
+    offerSdp: offerSdp,
+    agentId: agentId,
+  });
 }
 
 /** Posts our SDP offer for a real two-leg call — `agentId` handles the
@@ -43,5 +56,9 @@ export function postCallOffer(
   agentId: string,
   toNumber: string,
 ): Promise<string> {
-  return post("/v1/call/start", { offer_sdp: offerSdp, agent_id: agentId, to_number: toNumber });
+  return post<WebrtcOfferResponse>("/v1/call/start", {
+    offerSdp: offerSdp,
+    agentId: agentId,
+    toNumber: toNumber,
+  });
 }

@@ -1,6 +1,11 @@
 import { authHeader } from "@/lib/auth/tokens";
 import { ferry } from "@/lib/ferry";
-import type { AgentResponse, CreateAgentRequest, UpdateAgentRequest } from "@/lib/agents/types";
+import type {
+  AgentResponse,
+  CreateAgentRequest,
+  PreviewVoiceResponse,
+  UpdateAgentRequest,
+} from "@/lib/agents/types";
 
 /**
  * Hits ferry's `POST /v1/agents` (see ferry/src/http/handlers/agent.rs).
@@ -41,6 +46,6 @@ export function updateAgent(id: string, payload: UpdateAgentRequest): Promise<Ag
  * ferry/src/http/handlers/voice.rs). Also protected. Returns a base64-encoded
  * WAV clip of `voice` speaking a fixed sample sentence.
  */
-export function previewVoice(voice: string): Promise<{ audio_base64: string }> {
-  return ferry.post<{ audio_base64: string }>("/v1/voices/preview", { voice }, authHeader());
+export function previewVoice(voice: string): Promise<PreviewVoiceResponse> {
+  return ferry.post<PreviewVoiceResponse>("/v1/voices/preview", { voice }, authHeader());
 }

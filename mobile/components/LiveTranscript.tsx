@@ -6,7 +6,7 @@ import { TranscriptPhase } from "@/components/Transcript";
 import { TypingDots } from "@/components/TypingDots";
 import { KaraokeText } from "@/components/KaraokeText";
 import { useThemeColors } from "@/lib/theme";
-import { Speaker, type ConversationLine } from "@/hooks/use-ferry-call";
+import { LiveSpeaker, type ConversationLine } from "@/hooks/use-ferry-call";
 
 /**
  * One bubble. Memoized on purpose, separately from the list: while a line
@@ -32,7 +32,7 @@ const TranscriptBubble = memo(function TranscriptBubble({
   playingWordIndex: number;
 }) {
   const colors = useThemeColors();
-  const isAgent = line.speaker === Speaker.Agent;
+  const isAgent = line.speaker === LiveSpeaker.Agent;
 
   return (
     <View className={isAgent ? "items-end" : "items-start"}>
@@ -111,7 +111,7 @@ export const LiveTranscript = memo(function LiveTranscript({
 }) {
   const colors = useThemeColors();
   const lastAgentIndex = conversation.reduce(
-    (last, line, index) => (line.speaker === Speaker.Agent ? index : last),
+    (last, line, index) => (line.speaker === LiveSpeaker.Agent ? index : last),
     -1,
   );
 
@@ -119,7 +119,7 @@ export const LiveTranscript = memo(function LiveTranscript({
     <View className="gap-3">
       {conversation.map((line, index) => {
         const isPlaying =
-          line.speaker === Speaker.Agent && index === lastAgentIndex && isAgentAudioPlaying;
+          line.speaker === LiveSpeaker.Agent && index === lastAgentIndex && isAgentAudioPlaying;
         return (
           <TranscriptBubble
             key={index}
