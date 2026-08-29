@@ -2,6 +2,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentRef,
@@ -12,6 +13,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   BottomSheetModal,
   BottomSheetScrollView,
@@ -22,7 +24,10 @@ import { PhoneOff, Phone, Mic, MicOff, Captions } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { PulsingRing } from "@/components/PulsingRing";
-import { LiveTranscript } from "@/components/LiveTranscript";
+import {
+  CallTranscript,
+  type CallTranscriptLine,
+} from "@/components/call-transcript";
 import {
   AudioRoutePickerSheet,
   type AudioRoutePickerHandle,
@@ -30,9 +35,11 @@ import {
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { AudioDevice, CallStatus } from "@/lib/webrtc/ferry-call";
-import { callStatusLabel, callStatusToPhase } from "@/lib/call-status";
+import { callStatusLabel } from "@/lib/call-status";
 import { AUDIO_ROUTE_ICONS, AUDIO_ROUTE_LABELS } from "@/lib/audio-route";
-import { useFerryCall } from "@/hooks/use-ferry-call";
+import { LiveSpeaker, useFerryCall } from "@/hooks/use-ferry-call";
+import { recentCallsQueryKey } from "@/lib/calls/hooks";
+import { recentAgentsQueryKey } from "@/lib/agents/hooks";
 
 const CallStatusLine = memo(function CallStatusLine({
   status,
@@ -210,7 +217,6 @@ export default function InCallScreen() {
     toggleMute,
     chooseAudioRoute,
   } = useFerryCall();
-  const phase = callStatusToPhase(status);
   const callInProgress =
     status === CallStatus.Connecting ||
     status === CallStatus.Ringing ||
@@ -220,10 +226,25 @@ export default function InCallScreen() {
   const scrollRef = useRef<ComponentRef<typeof BottomSheetScrollView>>(null);
   const captionsSheetRef = useRef<BottomSheetModal>(null);
   const audioRouteSheetRef = useRef<AudioRoutePickerHandle>(null);
+  const queryClient = useQueryClient();
   const leavingRef = useRef(false);
   const sheetOpenRef = useRef(false);
   const [seenCount, setSeenCount] = useState(0);
   const hasUnseen = !sheetOpenRef.current && conversation.length > seenCount;
+
+  // A live call gives one language per line — your caption, then the
+  // translation the other side hears — so there is no second language to
+  // reveal under a bubble the way a finished transcript has. `spoken` stays
+  // null and the shared renderer simply draws one text per bubble.
+  const captionLines = useMemo<CallTranscriptLine[]>(
+    () =>
+      conversation.map((line, index) => ({
+        key: String(index),
+        mine: line.speaker === LiveSpeaker.Caller,
+        text: line.text,
+      })),
+    [conversation],
+  );
 
   useEffect(() => {
     if (params.agentId) {
@@ -238,9 +259,14 @@ export default function InCallScreen() {
   const leaveScreen = useCallback(() => {
     if (leavingRef.current) return;
     leavingRef.current = true;
+    // The call that just ended is a new row in the history, and it moved its
+    // agent to the top of "recently used" with one more call to its name —
+    // both of Home's lists are stale the moment this screen closes.
+    void queryClient.invalidateQueries({ queryKey: recentCallsQueryKey });
+    void queryClient.invalidateQueries({ queryKey: recentAgentsQueryKey });
     captionsSheetRef.current?.dismiss();
     requestAnimationFrame(() => router.back());
-  }, []);
+  }, [queryClient]);
 
   const endCall = useCallback(() => {
     end();
@@ -366,12 +392,7 @@ export default function InCallScreen() {
           contentContainerStyle={{ paddingBottom: 24 }}
         >
           <Text className="mb-3 px-1 text-[15px] font-semibold">Captions</Text>
-          <LiveTranscript
-            conversation={conversation}
-            interim={interimCaption}
-            phase={phase}
-            agentName={agentName}
-          />
+          <CallTranscript lines={captionLines} interim={interimCaption} />
         </BottomSheetScrollView>
       </BottomSheetModal>
 
