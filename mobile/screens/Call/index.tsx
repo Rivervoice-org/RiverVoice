@@ -16,7 +16,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { useAgentPicker } from "@/hooks/use-agent-picker";
-import { useRequireAuth } from "@/hooks/use-require-auth";
 import { useContacts, type Contact } from "@/state/contacts";
 
 type Section = {
@@ -56,7 +55,6 @@ const ContactRow = memo(function ContactRow({
 }) {
   const colors = useThemeColors();
   const { pickAgentForCall } = useAgentPicker();
-  const { requireAuth } = useRequireAuth();
   return (
     <View className="px-5">
       <CallRow
@@ -78,7 +76,7 @@ const ContactRow = memo(function ContactRow({
           </View>
         }
         showDivider={showDivider}
-        onPress={() => requireAuth(() => pickAgentForCall(contact))}
+        onPress={() => pickAgentForCall(contact)}
       />
     </View>
   );

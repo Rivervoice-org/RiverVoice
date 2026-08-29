@@ -14,7 +14,6 @@ import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { useAgentPicker } from "@/hooks/use-agent-picker";
-import { useRequireAuth } from "@/hooks/use-require-auth";
 import { useDialTones } from "@/hooks/use-dial-tones";
 
 /** Keeps a pasted number to what the keypad itself can produce — digits,
@@ -148,7 +147,7 @@ const CallAction = memo(function CallAction({
  *
  * Theme and safe-area context reach this far: both providers sit above
  * BottomSheetModalProvider in app/_layout. Session-scoped context
- * (useAgentPicker, useRequireAuth) does not, which is why placing the call is
+ * (useAgentPicker) does not, which is why placing the call is
  * a callback handed down from `DialPadSheet` rather than a hook here.
  */
 const DialPadBody = memo(function DialPadBody({
@@ -279,7 +278,6 @@ export function DialPadSheet({
   // the portal host that @gorhom/bottom-sheet renders sheet content into, so a
   // hook call from there throws "must be used within AgentPickerProvider".
   const { pickAgentForCall } = useAgentPicker();
-  const { requireAuth } = useRequireAuth();
   // Remounts the body on each open, which is what clears the previous number —
   // cheaper and less racy than a `setDigits("")` living in the same effect that
   // presents the sheet.
@@ -339,9 +337,9 @@ export function DialPadSheet({
   const startCall = useCallback(
     (phone: string) => {
       onClose();
-      requireAuth(() => pickAgentForCall({ phone }));
+      pickAgentForCall({ phone });
     },
-    [onClose, requireAuth, pickAgentForCall],
+    [onClose, pickAgentForCall],
   );
 
   const renderBackdrop = useCallback(

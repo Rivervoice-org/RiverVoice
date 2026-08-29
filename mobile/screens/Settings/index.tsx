@@ -6,7 +6,6 @@ import {
   Bell,
   ChevronRight,
   CircleHelp,
-  CircleUserRound,
   FileText,
   Headphones,
   LogOut,
@@ -18,7 +17,6 @@ import {
 } from "lucide-react-native";
 import { useAuth } from "@/hooks/use-auth";
 import { MascotPicker } from "@/components/MascotPicker";
-import { SignInPrompt } from "@/components/SignInPrompt";
 import { Card } from "@/components/ui/card";
 import { Rise } from "@/components/ui/rise";
 import { Switch } from "@/components/ui/switch";
@@ -133,18 +131,8 @@ const Row = memo(function Row({
  * in SettingsScreen.
  */
 function ProfileSection() {
-  const { user, isAuthenticated } = useAuth();
-  const colors = useThemeColors();
+  const { user } = useAuth();
   const [mascot, setMascot] = useState<string | undefined>(undefined);
-
-  if (!isAuthenticated) {
-    return (
-      <SignInPrompt
-        icon={<CircleUserRound size={22} strokeWidth={1.75} color={colors.faint} />}
-        message="Sign in to see your profile"
-      />
-    );
-  }
 
   return (
     <View className="items-center px-6 pt-6 pb-8">
@@ -202,7 +190,7 @@ function AppearancePicker() {
 }
 
 export default function SettingsScreen() {
-  const { signOut, isAuthenticated } = useAuth();
+  const { signOut } = useAuth();
   const colors = useThemeColors();
   const ICONS = useMemo(() => buildIcons(colors.ink), [colors.ink]);
   const [transcribeVoicemails, setTranscribeVoicemails] = useState(true);
@@ -245,8 +233,7 @@ export default function SettingsScreen() {
         </Rise>
 
         {/* Calls */}
-        {isAuthenticated ? (
-          <Rise index={3}>
+        <Rise index={3}>
             <View className="mt-8">
               <SectionLabel>Calls</SectionLabel>
               <Card className="mx-5 mt-2.5 overflow-hidden">
@@ -267,12 +254,10 @@ export default function SettingsScreen() {
                 />
               </Card>
             </View>
-          </Rise>
-        ) : null}
+        </Rise>
 
         {/* Privacy */}
-        {isAuthenticated ? (
-          <Rise index={4}>
+        <Rise index={4}>
             <View className="mt-8">
               <SectionLabel>Privacy</SectionLabel>
               <Card className="mx-5 mt-2.5 overflow-hidden">
@@ -293,8 +278,7 @@ export default function SettingsScreen() {
                 />
               </Card>
             </View>
-          </Rise>
-        ) : null}
+        </Rise>
 
         {/* Support */}
         <Rise index={5}>
@@ -317,16 +301,14 @@ export default function SettingsScreen() {
               <Row label="Version" value={Constants.expoConfig?.version ?? "1.0.0"} last />
             </Card>
 
-            {isAuthenticated ? (
-              <View className="items-center pt-8">
-                <Button variant="outline" onPress={signOut} className="px-5">
-                  <LogOut size={16} strokeWidth={1.75} color={colors.destructive} />
-                  <Text variant="destructive" className="text-sm font-medium">
-                    Sign out
-                  </Text>
-                </Button>
-              </View>
-            ) : null}
+            <View className="items-center pt-8">
+              <Button variant="outline" onPress={signOut} className="px-5">
+                <LogOut size={16} strokeWidth={1.75} color={colors.destructive} />
+                <Text variant="destructive" className="text-sm font-medium">
+                  Sign out
+                </Text>
+              </Button>
+            </View>
           </View>
         </Rise>
       </ScrollView>
