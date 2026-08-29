@@ -21,6 +21,7 @@ pub struct Config {
     pub twilio_from_number: String,
     pub public_base_url: String,
     pub webrtc_bind_ip: String,
+    pub google_client_id: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -63,6 +64,8 @@ struct RawConfig {
     // but must be a real, routable interface address (e.g. the LAN IP
     // mobile clients reach ferry on) for WebRTC audio to actually work.
     webrtc_bind_ip: String,
+    #[validate(length(min = 1, message = "GOOGLE_CLIENT_ID is not set"))]
+    google_client_id: String,
 }
 
 #[derive(Clone)]
@@ -98,6 +101,7 @@ impl Config {
             public_base_url: std::env::var("PUBLIC_BASE_URL").unwrap_or_default(),
             webrtc_bind_ip: std::env::var("WEBRTC_BIND_IP")
                 .unwrap_or_else(|_| "0.0.0.0".to_string()),
+            google_client_id: std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default(),
         };
 
         raw.validate().map_err(ConfigError)?;
@@ -115,6 +119,7 @@ impl Config {
             twilio_from_number: raw.twilio_from_number,
             public_base_url: raw.public_base_url,
             webrtc_bind_ip: raw.webrtc_bind_ip,
+            google_client_id: raw.google_client_id,
         })
     }
 }

@@ -1,23 +1,31 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { createUser, getMe, signOutRequest } from "@/lib/auth/api";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
+import { googleSignIn, getMe, signOutRequest } from "@/lib/auth/api";
+import { config } from "@/lib/config";
 import { ferry } from "@/lib/ferry";
 import { clearTokens, getRefreshToken, saveTokens, setAccessToken } from "@/lib/auth/tokens";
 import { SessionContext, type SessionUser } from "@/state/session/context";
 
-const COUNTRY_CODE = "+91";
-
 /**
  * Owns the session: who is signed in, and the login call behind it.
- * ferry has no OTP/login endpoint yet (see lib/auth/api.ts) —
- * continueWithNumber calls the one auth route it exposes, POST /v1/users,
- * which creates the user if the number is new and issues an access +
- * refresh token pair either way.
+ * "Continue with Google" is the only sign-in path — continueWithGoogle
+ * gets an ID token from the native Google Sign-In SDK and exchanges it at
+ * ferry's POST /v1/auth/google (see ferry/src/http/handlers/user.rs),
+ * which finds-or-creates the account and issues an access + refresh token
+ * pair either way.
  */
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [user, setUser] = useState<SessionUser | null>(null);
+
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: config.googleWebClientId,
+      offlineAccess: false,
+    });
+  }, []);
 
   // Restores the session on app launch from the refresh token in
   // SecureStore — without this, isAuthenticated starts false on every cold
@@ -34,16 +42,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         if (refreshToken) {
           const me = await ferry.refreshSession().then(getMe);
           if (!cancelled) {
-            setUser({ name: me.name, phone: me.mobile_number });
+            setUser({ name: me.name, email: me.email });
             setIsAuthenticated(true);
           }
         }
-      } catch {
+      } catch (err) {
         // Refresh token dead, the /me fetch failed, or SecureStore itself
         // threw (corrupted entry, etc.) — nothing to restore either way.
         // Falling through to the finally below is what matters: bootstrap
         // must resolve regardless of what failed, or the app is stuck on
         // the splash screen forever.
+        console.error("session bootstrap failed:", err);
       } finally {
         if (!cancelled) setIsBootstrapping(false);
       }
@@ -54,21 +63,32 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const { mutateAsync: createUserMutation } = useMutation({
-    mutationFn: createUser,
+  const { mutateAsync: googleSignInMutation } = useMutation({
+    mutationFn: googleSignIn,
   });
 
-  const continueWithNumber = useCallback(
-    async (phone: string) => {
-      const result = await createUserMutation({
-        mobile_number: `${COUNTRY_CODE}${phone}`,
-      });
-      await saveTokens(result);
-      setUser({ name: result.name, phone });
-      setIsAuthenticated(true);
-    },
-    [createUserMutation],
-  );
+  const continueWithGoogle = useCallback(async (): Promise<boolean> => {
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    const response = await GoogleSignin.signIn();
+
+    // User closed the Google account picker — not an error, but callers
+    // need to know sign-in didn't actually happen (e.g. so a deferred
+    // action doesn't run as if it had).
+    if (response.type !== "success") {
+      return false;
+    }
+
+    const idToken = response.data.idToken;
+    if (!idToken) {
+      throw new Error("Google sign-in did not return an ID token");
+    }
+
+    const result = await googleSignInMutation({ id_token: idToken });
+    await saveTokens(result);
+    setUser({ name: result.name, email: result.email });
+    setIsAuthenticated(true);
+    return true;
+  }, [googleSignInMutation]);
 
   const signOut = useCallback(() => {
     setUser(null);
@@ -81,13 +101,19 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     void (async () => {
       const refreshToken = await getRefreshToken();
       await clearTokens();
+      await GoogleSignin.signOut().catch((err) => {
+        // Best-effort — clearing the local Google session isn't load-bearing
+        // for RiverVoice's own sign-out.
+        console.error("GoogleSignin.signOut failed:", err);
+      });
       if (refreshToken) {
         try {
           await signOutRequest(refreshToken);
-        } catch {
+        } catch (err) {
           // Best-effort — the local session is already cleared either way,
           // so a network failure here just leaves the old refresh token
           // valid server-side until it naturally expires.
+          console.error("signOutRequest failed:", err);
         }
       }
     })();
@@ -95,7 +121,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionContext.Provider
-      value={{ isAuthenticated, isBootstrapping, user, continueWithNumber, signOut }}
+      value={{ isAuthenticated, isBootstrapping, user, continueWithGoogle, signOut }}
     >
       {children}
     </SessionContext.Provider>

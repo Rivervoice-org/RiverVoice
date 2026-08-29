@@ -1,5 +1,5 @@
+import { useState } from "react";
 import { View } from "react-native";
-import { router } from "expo-router";
 import { Mascot } from "@/components/Mascot";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,13 +13,40 @@ import { Text } from "@/components/ui/text";
 interface SignInRequiredDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Called when the user chooses to proceed to sign-in, before navigating —
-   * lets the provider know to keep the deferred action instead of dropping it. */
-  onConfirm: () => void;
+  continueWithGoogle: () => Promise<boolean>;
+  /** Called once continueWithGoogle actually succeeds, so the provider can
+   * run whatever action was deferred behind this prompt. */
+  onSignedIn: () => void;
 }
 
 /** Presentational only — SignInPromptProvider owns when this opens. */
-export function SignInRequiredDialog({ open, onOpenChange, onConfirm }: SignInRequiredDialogProps) {
+export function SignInRequiredDialog({
+  open,
+  onOpenChange,
+  continueWithGoogle,
+  onSignedIn,
+}: SignInRequiredDialogProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleContinueWithGoogle() {
+    setError("");
+    setLoading(true);
+    try {
+      const signedIn = await continueWithGoogle();
+      // Cancelled the account picker — not an error, just leave the dialog
+      // open so they can try again; the pending action must not run.
+      if (signedIn) {
+        onSignedIn();
+      }
+    } catch (err) {
+      console.error("continueWithGoogle failed:", err);
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -28,22 +55,21 @@ export function SignInRequiredDialog({ open, onOpenChange, onConfirm }: SignInRe
           <View className="items-center gap-1">
             <DialogTitle>Sign in required</DialogTitle>
             <DialogDescription className="text-center">
-              Create an account or sign in with your number to do that.
+              Continue with Google to do that.
             </DialogDescription>
           </View>
         </View>
 
+        {error ? (
+          <Text variant="destructive" className="mt-3 text-center text-[13px]">
+            {error}
+          </Text>
+        ) : null}
+
         <View className="mt-5 w-full gap-2">
-          <Button
-            size="lg"
-            onPress={() => {
-              onConfirm();
-              onOpenChange(false);
-              router.push("/(auth)/continue-with-number");
-            }}
-          >
+          <Button size="lg" onPress={handleContinueWithGoogle} loading={loading}>
             <Text className="text-sm font-medium text-primary-foreground">
-              Continue with number
+              Continue with Google
             </Text>
           </Button>
           <Button variant="ghost" size="lg" onPress={() => onOpenChange(false)}>

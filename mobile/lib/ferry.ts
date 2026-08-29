@@ -7,8 +7,8 @@
 
 import type { ApiResponse } from "@/lib/api-types";
 import { authHeader, clearTokens, getRefreshToken, saveTokens } from "@/lib/auth/tokens";
+import { config } from "@/lib/config";
 
-const DEFAULT_FERRY_URL = "http://127.0.0.1:8085";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_AUTH_RETRIES = 3;
 const AUTH_RETRY_BASE_DELAY_MS = 300;
@@ -33,7 +33,7 @@ class FerryClient {
   private refreshPromise: Promise<void> | null = null;
 
   baseUrl(): string {
-    return process.env["EXPO_PUBLIC_FERRY_URL"] ?? DEFAULT_FERRY_URL;
+    return config.ferryUrl;
   }
 
   /** The actual network call — no 401/refresh handling, so refreshTokens()

@@ -6,6 +6,7 @@ mod m20260821_180531_create_refresh_tokens_table;
 mod m20260822_070700_add_user_id_to_agents;
 mod m20260822_120000_add_voice_to_agents;
 mod m20260822_130000_require_agent_fields;
+mod m20260828_000000_google_auth_users;
 
 pub struct Migrator;
 
@@ -19,6 +20,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260822_070700_add_user_id_to_agents::Migration),
             Box::new(m20260822_120000_add_voice_to_agents::Migration),
             Box::new(m20260822_130000_require_agent_fields::Migration),
+            Box::new(m20260828_000000_google_auth_users::Migration),
         ]
     }
 }
