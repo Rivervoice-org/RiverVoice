@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Instant;
 
 use axum::body::to_bytes;
 use axum::extract::{Extension, Path, Query, Request, State};
@@ -16,7 +15,7 @@ use validator::Validate;
 
 use crate::auth::token::UserSession;
 use crate::call::{
-    ActiveSession, CallHandle, CallId, CallStatus, EndReason, MAX_SESSION_AGE, call_span,
+    ActiveSession, CallHandle, CallId, CallStatus, EndReason, MAX_LEASE_AGE, call_span,
 };
 use crate::codec::transport::webrtc_dc::WebRtcSerializer;
 use crate::config::{self, Config};
@@ -263,11 +262,8 @@ pub async fn start_call(
         .user_sessions
         .try_register(
             session.user_id,
-            ActiveSession::Call {
-                call_id,
-                started_at: Instant::now(),
-            },
-            MAX_SESSION_AGE,
+            ActiveSession::Call { call_id },
+            MAX_LEASE_AGE,
         )
         .map_err(|existing| {
             tracing::warn!(
