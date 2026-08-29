@@ -16,7 +16,7 @@ use tracing::Instrument;
 use super::handlers;
 use super::state::AppState;
 use crate::auth::middleware::require_user;
-use crate::call::CallRegistry;
+use crate::call::{CallRegistry, UserSessionRegistry};
 use crate::config;
 use crate::services::twilio::TwilioClient;
 
@@ -56,7 +56,7 @@ fn http_routes() -> Router<AppState> {
 
 fn protected_call_routes() -> Router<AppState> {
     Router::new()
-        .route("/v1/try-agent/offer", post(handlers::webrtc_offer))
+        .route("/v1/try-agent/offer", post(handlers::try_agent_offer))
         .route("/v1/call/start", post(handlers::start_call))
         .route("/v1/calls", get(handlers::get_recent_calls))
         .route("/v1/calls/{id}", get(handlers::get_call_detail))
@@ -111,6 +111,7 @@ pub async fn start_server() -> anyhow::Result<()> {
 
     let app_state = AppState {
         call_registry: CallRegistry::new(),
+        user_sessions: UserSessionRegistry::new(),
         twilio: Arc::new(TwilioClient::new(
             config.twilio_account_sid.clone(),
             config.twilio_auth_token.clone(),

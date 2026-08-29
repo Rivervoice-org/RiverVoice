@@ -14,7 +14,9 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::auth::token::UserSession;
-use crate::call::{CallHandle, CallId, CallStatus, EndReason, call_span};
+use crate::call::{
+    ActiveSession, CallHandle, CallId, CallStatus, EndReason, MAX_LEASE_AGE, call_span,
+};
 use crate::codec::transport::webrtc_dc::WebRtcSerializer;
 use crate::config::{self, Config};
 use crate::db;
@@ -250,14 +252,37 @@ pub async fn start_call(
         return Err(ApiResponse::fail(StatusCode::FORBIDDEN, "not authorized"));
     }
 
+    let call_id = CallId::new();
+
+    // Reserve this user's one active session before doing any of the real
+    // work below — same guard as try-agent, so a stuck UI retrying
+    // /v1/call/start can't dial a second real phone call on top of one
+    // that's still live.
+    let session_guard = app
+        .user_sessions
+        .try_register(
+            session.user_id,
+            ActiveSession::Call { call_id },
+            MAX_LEASE_AGE,
+        )
+        .map_err(|existing| {
+            tracing::warn!(
+                user_id = %session.user_id,
+                ?existing,
+                "start_call: rejected, user already has an active session"
+            );
+            ApiResponse::fail(
+                StatusCode::CONFLICT,
+                "You already have an active session. End it before starting another.",
+            )
+        })?;
+
     let config = config::get().map_err(|e| {
         ApiResponse::fail(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("server misconfigured: {e}"),
         )
     })?;
-
-    let call_id = CallId::new();
 
     // Written before anything can move the call's state: every later update
     // (ringing, connected, ended) is a primary-key UPDATE from the recorder's
@@ -346,6 +371,10 @@ pub async fn start_call(
         let handle = handle.clone();
         tokio::spawn(
             async move {
+                // Held for the task's whole lifetime and dropped when it
+                // ends — including via panic unwind — which is what clears
+                // this user's reservation from `try_register` above.
+                let _session_guard = session_guard;
                 client.run().await;
                 // A's leg ended (hangup, ICE failure, ...) — tear down B's leg
                 // too, since nothing else will notice A is gone.
