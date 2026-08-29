@@ -13,4 +13,5 @@ export type { Gender } from "@/lib/bindings/Gender";
 export type { CreateAgentRequest } from "@/lib/bindings/CreateAgentRequest";
 export type { UpdateAgentRequest } from "@/lib/bindings/UpdateAgentRequest";
 export type { AgentResponse } from "@/lib/bindings/AgentResponse";
+export type { RecentAgentResponse as RecentAgent } from "@/lib/bindings/RecentAgentResponse";
 export type { PreviewVoiceResponse } from "@/lib/bindings/PreviewVoiceResponse";
