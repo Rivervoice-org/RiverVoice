@@ -2,7 +2,7 @@ import { memo } from "react";
 import { View } from "react-native";
 import { Mic, Volume2 } from "lucide-react-native";
 import { Text } from "@/components/ui/text";
-import { TranscriptPhase } from "@/components/Transcript";
+import { TranscriptPhase } from "@/lib/call-status";
 import { TypingDots } from "@/components/TypingDots";
 import { KaraokeText } from "@/components/KaraokeText";
 import { useThemeColors } from "@/lib/theme";
@@ -45,7 +45,11 @@ const TranscriptBubble = memo(function TranscriptBubble({
       >
         <View className="flex-row items-center gap-1.5">
           {isAgent ? (
-            <Volume2 size={10} strokeWidth={2} color={isPlaying ? colors.ink : colors.muted} />
+            <Volume2
+              size={10}
+              strokeWidth={2}
+              color={isPlaying ? colors.ink : colors.muted}
+            />
           ) : (
             <Mic size={10} strokeWidth={2} color={colors.muted} />
           )}
@@ -62,11 +66,15 @@ const TranscriptBubble = memo(function TranscriptBubble({
             <KaraokeText text={line.text} activeIndex={playingWordIndex} />
             <View className="mt-1 flex-row items-center gap-1.5">
               <TypingDots color={colors.muted} size={4} />
-              <Text className="text-[10px] text-muted-foreground">Speaking…</Text>
+              <Text className="text-[10px] text-muted-foreground">
+                Speaking…
+              </Text>
             </View>
           </>
         ) : (
-          <Text className="mt-1 text-sm leading-snug text-foreground">{line.text}</Text>
+          <Text className="mt-1 text-sm leading-snug text-foreground">
+            {line.text}
+          </Text>
         )}
       </View>
     </View>
@@ -83,11 +91,14 @@ const TranscriptBubble = memo(function TranscriptBubble({
  * the WebRTC audio track, not through this data channel.
  *
  * Memoized so a per-second duration tick elsewhere never re-renders the
- * bubbles — this only changes when a new line arrives. Distinct from
- * `components/Transcript.tsx`'s `Transcript`, which renders a finished,
- * pre-scripted history rather than a live `ConversationLine[]`.
+ * bubbles — this only changes when a new line arrives.
+ *
+ * The try-agent demo's own renderer, deliberately not `CallTranscript`. A
+ * demo has one agent and no second party, so it labels bubbles by name and
+ * shows which one is speaking; a real call has two people and labels nothing,
+ * because side alone says who spoke.
  */
-export const LiveTranscript = memo(function LiveTranscript({
+export const TryAgentTranscript = memo(function TryAgentTranscript({
   conversation,
   interim,
   phase,
@@ -119,7 +130,9 @@ export const LiveTranscript = memo(function LiveTranscript({
     <View className="gap-3">
       {conversation.map((line, index) => {
         const isPlaying =
-          line.speaker === LiveSpeaker.Agent && index === lastAgentIndex && isAgentAudioPlaying;
+          line.speaker === LiveSpeaker.Agent &&
+          index === lastAgentIndex &&
+          isAgentAudioPlaying;
         return (
           <TranscriptBubble
             key={index}
@@ -141,7 +154,9 @@ export const LiveTranscript = memo(function LiveTranscript({
               </Text>
               <TypingDots color={colors.green} size={4} />
             </View>
-            <Text className="mt-1 text-sm leading-snug text-muted-foreground">{interim}</Text>
+            <Text className="mt-1 text-sm leading-snug text-muted-foreground">
+              {interim}
+            </Text>
           </View>
         </View>
       )}

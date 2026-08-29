@@ -9,7 +9,28 @@ import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
 import { useCallDetail } from "@/lib/calls/hooks";
+import {
+  CallTranscript,
+  type CallTranscriptLine,
+} from "@/components/call-transcript";
 import type { Utterance } from "@/lib/calls/types";
+
+/**
+ * A persisted utterance as the shared renderer wants it. `caller` is the app
+ * user, so their `originalText` is what they said and the translation is what
+ * the other side heard; for `callee` those roles swap, which is what keeps
+ * the whole thread in one language.
+ */
+function toLine(line: Utterance): CallTranscriptLine {
+  const mine = line.speaker === "caller";
+  return {
+    key: String(line.seq),
+    mine,
+    text: mine ? line.originalText : (line.translatedText ?? line.originalText),
+    spoken: mine ? line.translatedText : line.originalText,
+    time: line.offsetMs === null ? null : formatOffset(line.offsetMs),
+  };
+}
 
 function formatOffset(ms: number | null): string {
   if (ms === null) return "";
@@ -17,87 +38,6 @@ function formatOffset(ms: number | null): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-/**
- * You always read the call in your own language: your own lines are what you
- * said (`originalText`), theirs are what you heard (`translatedText`).
- * Because every row stores both, the same rows would read as a pure
- * English thread from the other side.
- */
-function Bubble({
-  line,
-  showOriginal,
-}: {
-  line: Utterance;
-  showOriginal: boolean;
-}) {
-  const colors = useThemeColors();
-  const isMine = line.speaker === "caller";
-  const text = isMine ? line.originalText : (line.translatedText ?? line.originalText);
-  const spoken = isMine ? line.translatedText : line.originalText;
-  const reveal = showOriginal && spoken && spoken !== text;
-
-  return (
-    <View className={isMine ? "items-end" : "items-start"}>
-      <View
-        className={cn(
-          "max-w-[82%] rounded-2xl px-3.5 py-2.5",
-          isMine
-            ? "rounded-br-md bg-foreground"
-            : "rounded-bl-md border border-border bg-card",
-        )}
-      >
-        <Text
-          className={cn(
-            "text-[15px] leading-snug",
-            isMine ? "text-primary-foreground" : "text-foreground",
-          )}
-        >
-          {text}
-        </Text>
-
-        {reveal ? (
-          <View
-            className={cn(
-              "mt-2 border-t pt-2",
-              isMine ? "border-white/15" : "border-border",
-            )}
-          >
-            <View className="flex-row items-center gap-1">
-              <Languages
-                size={10}
-                strokeWidth={2}
-                color={isMine ? colors.onInk : colors.river}
-              />
-              <Text
-                className={cn(
-                  "text-[10px] font-medium uppercase tracking-[0.08em]",
-                  isMine ? "text-primary-foreground/70" : "text-river",
-                )}
-              >
-                {isMine ? "They heard" : "They said"}
-              </Text>
-            </View>
-            <Text
-              className={cn(
-                "mt-0.5 text-[13px] leading-snug",
-                isMine ? "text-primary-foreground/70" : "text-muted-foreground",
-              )}
-            >
-              {spoken}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      {line.offsetMs !== null ? (
-        <Text font="mono" variant="muted" className="mt-1 px-1 text-[10px]">
-          {formatOffset(line.offsetMs)}
-        </Text>
-      ) : null}
-    </View>
-  );
 }
 
 export default function TranscriptScreen() {
@@ -182,11 +122,10 @@ export default function TranscriptScreen() {
           }}
           showsVerticalScrollIndicator={false}
         >
-          <View className="gap-3">
-            {call.utterances.map((line) => (
-              <Bubble key={line.seq} line={line} showOriginal={showOriginal} />
-            ))}
-          </View>
+          <CallTranscript
+            lines={call.utterances.map(toLine)}
+            showSpoken={showOriginal}
+          />
         </ScrollView>
       )}
     </SafeAreaView>

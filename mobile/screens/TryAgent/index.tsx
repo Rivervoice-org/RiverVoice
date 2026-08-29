@@ -8,8 +8,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { X, PhoneOff, Mic, MicOff } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { PulsingRing } from "@/components/PulsingRing";
-import { LiveTranscript } from "@/components/LiveTranscript";
-import { TranscriptPhase } from "@/components/Transcript";
+import { TryAgentTranscript } from "@/components/try-agent-transcript";
 import {
   AudioRoutePickerSheet,
   type AudioRoutePickerHandle,
@@ -17,7 +16,11 @@ import {
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { AudioDevice, CallStatus } from "@/lib/webrtc/ferry-call";
-import { formatDuration, callStatusToPhase } from "@/lib/call-status";
+import {
+  formatDuration,
+  callStatusToPhase,
+  TranscriptPhase,
+} from "@/lib/call-status";
 import { AUDIO_ROUTE_ICONS } from "@/lib/audio-route";
 import { useFerryCall } from "@/hooks/use-ferry-call";
 
@@ -96,7 +99,6 @@ export default function TryAgentScreen() {
   return (
     <>
       <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
-        {/* Header */}
         <View className="flex-row items-center px-4 py-3">
           <Pressable
             onPress={endCall}
@@ -111,7 +113,6 @@ export default function TryAgentScreen() {
           <View className="w-9" />
         </View>
 
-        {/* Live status block */}
         <View className="items-center pt-4 pb-5">
           <PulsingRing active={status === CallStatus.Connected}>
             <View className="h-20 w-20 items-center justify-center rounded-full bg-secondary">
@@ -163,7 +164,7 @@ export default function TryAgentScreen() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
         >
-          <LiveTranscript
+          <TryAgentTranscript
             conversation={conversation}
             interim={interimCaption}
             phase={phase}
@@ -171,7 +172,6 @@ export default function TryAgentScreen() {
           />
         </ScrollView>
 
-        {/* Footer */}
         <View
           className="flex-row items-center justify-center gap-4 border-t border-border bg-canvas px-5 pt-4"
           style={{ paddingBottom: insets.bottom + 16 }}
