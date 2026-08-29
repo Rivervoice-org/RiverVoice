@@ -2,7 +2,13 @@
 import type { EndReason } from "./EndReason";
 import type { Language } from "./Language";
 
-export type CallListItemResponse = { id: string, fromNumber: string, toNumber: string, agentName: string | null, inputLanguage: Language | null, outputLanguage: Language | null,
+export type CallListItemResponse = { id: string, fromNumber: string, toNumber: string,
+/**
+ * What "call again" dials. Null once the agent is deleted, while
+ * `agent_name` survives as the history snapshot — the row still reads
+ * correctly, it just can no longer be redialled.
+ */
+agentId: string | null, agentName: string | null, inputLanguage: Language | null, outputLanguage: Language | null,
 /**
  * The call's real terminal state. Deriving a display "outcome" from it
  * is the client's job — storing one would let the two drift.

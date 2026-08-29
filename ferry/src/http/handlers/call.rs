@@ -73,6 +73,7 @@ struct CallListRow {
     id: Uuid,
     from_number: String,
     to_number: String,
+    agent_id: Option<Uuid>,
     agent_name: Option<String>,
     input_language: Option<agents::Language>,
     output_language: Option<agents::Language>,
@@ -88,6 +89,10 @@ pub struct CallListItemResponse {
     pub id: String,
     pub from_number: String,
     pub to_number: String,
+    /// What "call again" dials. Null once the agent is deleted, while
+    /// `agent_name` survives as the history snapshot — the row still reads
+    /// correctly, it just can no longer be redialled.
+    pub agent_id: Option<String>,
     pub agent_name: Option<String>,
     pub input_language: Option<agents::Language>,
     pub output_language: Option<agents::Language>,
@@ -104,6 +109,7 @@ impl From<CallListRow> for CallListItemResponse {
             id: row.id.to_string(),
             from_number: row.from_number,
             to_number: row.to_number,
+            agent_id: row.agent_id.map(|id| id.to_string()),
             agent_name: row.agent_name,
             input_language: row.input_language,
             output_language: row.output_language,
@@ -386,6 +392,7 @@ fn recent_calls_query(
             calls::Column::Id,
             calls::Column::FromNumber,
             calls::Column::ToNumber,
+            calls::Column::AgentId,
             calls::Column::AgentName,
             calls::Column::InputLanguage,
             calls::Column::OutputLanguage,
