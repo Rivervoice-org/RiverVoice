@@ -1,0 +1,7 @@
+# Where ts-rs writes the TypeScript bindings it generates from the types in
+# this crate (`cargo test export_bindings`). Set here so the path appears once
+# instead of on every #[ts(...)] attribute. `relative = true` resolves it
+# against this file's package directory, so it does not depend on the cwd
+# cargo happens to be invoked from.
+[env]
+TS_RS_EXPORT_DIR = { value = "../mobile/lib/bindings", relative = true }
