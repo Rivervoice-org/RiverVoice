@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -67,7 +68,7 @@ impl TurnLatencyRecorder {
             tx: self.tx.clone(),
             seq: Arc::clone(&self.seq),
             pending_stt_ms: Mutex::new(None),
-            open: Mutex::new(None),
+            open: Mutex::new(VecDeque::new()),
         })
     }
 
@@ -113,7 +114,17 @@ pub struct TurnLatencyObserver {
     /// same turn (see `stt.rs`) — so there's no open row yet when it arrives.
     /// Held here and folded into the row `UserTurnAggregation` opens next.
     pending_stt_ms: Mutex<Option<u64>>,
-    open: Mutex<Option<Open>>,
+    /// FIFO of turns awaiting mt/tts metrics and a close. STT runs ahead of
+    /// MT/TTS as an independent task, so a second `UserTurnAggregation` can
+    /// arrive while the first turn is still being translated/synthesized
+    /// (translation+synthesis alone routinely takes over a second) — a
+    /// single `Option` slot would let that second turn silently clobber the
+    /// first. Both mt and tts process turns in the order they were
+    /// aggregated, so each stage's metric always belongs to the oldest entry
+    /// still missing that field — not necessarily the very front, since an
+    /// older entry can still be waiting on tts after a newer one already got
+    /// its mt metric.
+    open: Mutex<VecDeque<Open>>,
 }
 
 impl FrameObserver for TurnLatencyObserver {
@@ -128,7 +139,7 @@ impl FrameObserver for TurnLatencyObserver {
             (Stage::Stt, FrameKind::UserTurnAggregation(_)) => {
                 let seq = self.seq.fetch_add(1, Ordering::Relaxed);
                 let stt_ms = self.pending_stt_ms.lock().unwrap().take();
-                *self.open.lock().unwrap() = Some(Open {
+                self.open.lock().unwrap().push_back(Open {
                     seq,
                     stt_ms,
                     mt_ms: None,
@@ -139,17 +150,32 @@ impl FrameObserver for TurnLatencyObserver {
             // stage that doesn't handle a frame kind forwards it as-is, so
             // e.g. mt's `Metrics` frame gets re-pushed by tts too.
             (Stage::Mt, FrameKind::Metrics(m)) if m.stage == Stage::Mt => {
-                if let Some(row) = self.open.lock().unwrap().as_mut() {
+                if let Some(row) = self
+                    .open
+                    .lock()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|o| o.mt_ms.is_none())
+                {
                     row.mt_ms = Some(m.ttfb_ms);
                 }
             }
             (Stage::Tts, FrameKind::Metrics(m)) if m.stage == Stage::Tts => {
-                if let Some(row) = self.open.lock().unwrap().as_mut() {
+                if let Some(row) = self
+                    .open
+                    .lock()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|o| o.tts_ttfb_ms.is_none())
+                {
                     row.tts_ttfb_ms = Some(m.ttfb_ms);
                 }
             }
+            // Unlike the metrics above, this closes a turn outright, so it
+            // must be the oldest one, period — tts starts turns strictly in
+            // aggregation order, so the first to finish is always the front.
             (Stage::Tts, FrameKind::TtsAudioStart) => {
-                if let Some(o) = self.open.lock().unwrap().take() {
+                if let Some(o) = self.open.lock().unwrap().pop_front() {
                     let _ = self.tx.send(Row {
                         seq: o.seq,
                         direction: self.direction,
@@ -161,6 +187,69 @@ impl FrameObserver for TurnLatencyObserver {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frames::{MetricsFrame, UserTurnAggregationFrame};
+
+    fn metrics(stage: Stage, ttfb_ms: u64) -> Frame {
+        Frame::new(FrameKind::Metrics(MetricsFrame { stage, ttfb_ms }))
+    }
+
+    fn turn_aggregation() -> Frame {
+        Frame::new(FrameKind::UserTurnAggregation(UserTurnAggregationFrame {
+            text: String::new(),
+        }))
+    }
+
+    fn tts_audio_start() -> Frame {
+        Frame::new(FrameKind::TtsAudioStart)
+    }
+
+    /// Two turns aggregate back-to-back (STT running ahead of MT/TTS) before
+    /// either one closes — the exact scenario a single `Option` slot would
+    /// have dropped or cross-attributed.
+    #[test]
+    fn two_open_turns_close_independently_in_order() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let observer = TurnLatencyObserver {
+            direction: "solo",
+            tx,
+            seq: Arc::new(AtomicI32::new(0)),
+            pending_stt_ms: Mutex::new(None),
+            open: Mutex::new(VecDeque::new()),
+        };
+
+        observer.on_push(Stage::Stt, &metrics(Stage::Stt, 100));
+        observer.on_push(Stage::Stt, &turn_aggregation()); // turn 0 opens
+        observer.on_push(Stage::Mt, &metrics(Stage::Mt, 200)); // turn 0's mt
+
+        observer.on_push(Stage::Stt, &metrics(Stage::Stt, 150));
+        observer.on_push(Stage::Stt, &turn_aggregation()); // turn 1 opens, turn 0 still open
+        observer.on_push(Stage::Mt, &metrics(Stage::Mt, 250)); // turn 1's mt — must not overwrite turn 0's
+
+        observer.on_push(Stage::Tts, &metrics(Stage::Tts, 300)); // turn 0's tts
+        observer.on_push(Stage::Tts, &tts_audio_start()); // closes turn 0
+
+        observer.on_push(Stage::Tts, &metrics(Stage::Tts, 350)); // turn 1's tts
+        observer.on_push(Stage::Tts, &tts_audio_start()); // closes turn 1
+
+        let turn0 = rx.try_recv().expect("turn 0 should have been emitted");
+        assert_eq!(turn0.seq, 0);
+        assert_eq!(turn0.stt_ms, Some(100));
+        assert_eq!(turn0.mt_ms, Some(200));
+        assert_eq!(turn0.tts_ttfb_ms, Some(300));
+
+        let turn1 = rx.try_recv().expect("turn 1 should have been emitted");
+        assert_eq!(turn1.seq, 1);
+        assert_eq!(turn1.stt_ms, Some(150));
+        assert_eq!(turn1.mt_ms, Some(250));
+        assert_eq!(turn1.tts_ttfb_ms, Some(350));
+
+        assert!(rx.try_recv().is_err(), "no extra turns should be emitted");
     }
 }
 
