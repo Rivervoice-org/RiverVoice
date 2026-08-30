@@ -11,6 +11,9 @@ next-env.d.ts
 # rust
 target/
 
+# supabase CLI
+supabase/.temp/
+
 # production
 build/
 dist/

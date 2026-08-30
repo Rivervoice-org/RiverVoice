@@ -1,15 +1,107 @@
 services:
-  postgres:
-    image: postgres:17-alpine
+  db:
+    # supabase/postgres, not vanilla postgres — auth/rest/storage all expect
+    # the roles (anon, authenticated, service_role, authenticator) and
+    # extensions this image provisions on first boot.
+    image: supabase/postgres:15.8.1.060
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ferry
-      POSTGRES_PASSWORD: ferry
-      POSTGRES_DB: ferry
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXP: 3600
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth:
+    image: supabase/gotrue:v2.170.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL}
+      GOTRUE_SITE_URL: ${SITE_URL}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      # Native Google Sign-In (mobile SDK, ID-token flow) verifies the token
+      # directly against Google — no OAuth redirect, so no client secret or
+      # redirect URI needed here. Only fill these in if a web-side redirect
+      # flow is ever added on top.
+      GOTRUE_EXTERNAL_GOOGLE_ENABLED: "true"
+      GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+
+  rest:
+    image: postgrest/postgrest:v12.2.8
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+
+  storage:
+    image: supabase/storage-api:v1.19.3
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      rest:
+        condition: service_started
+    environment:
+      ANON_KEY: ${ANON_KEY}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      POSTGREST_URL: http://rest:3000
+      FILE_SIZE_LIMIT: "52428800"
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: stub
+      REGION: stub
+      GLOBAL_S3_BUCKET: stub
+    volumes:
+      - storage_data:/var/lib/storage
+
+  kong:
+    # The one public entrypoint — auth/rest/storage above have no published
+    # ports, only kong does, so nothing can bypass its routing/API-key check.
+    image: kong:2.8.1
+    restart: unless-stopped
+    depends_on:
+      - auth
+      - rest
+      - storage
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+    volumes:
+      - ./supabase/kong.yml:/var/lib/kong/kong.yml:ro
+    ports:
+      - "8000:8000"
 
 volumes:
-  postgres_data:
+  db_data:
+  storage_data:
