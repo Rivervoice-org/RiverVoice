@@ -94,11 +94,25 @@ services:
       - storage
     environment:
       KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
       KONG_DNS_ORDER: LAST,A,CNAME
       KONG_PLUGINS: request-transformer,cors,key-auth,acl
     volumes:
-      - ./supabase/kong.yml:/var/lib/kong/kong.yml:ro
+      - ./supabase/kong.yml:/home/kong/kong.yml.template:ro
+    # kong.yml.template has no real secrets in it — the two literal $ANON_KEY
+    # / $SERVICE_ROLE_KEY tokens get substituted (by docker compose itself,
+    # interpolating from .env) into the file Kong actually reads, since
+    # Kong's declarative config doesn't do variable substitution itself.
+    # Plain sed token replacement, not envsubst (this Alpine image doesn't
+    # have gettext and can't apk add as the non-root kong user) and not the
+    # `eval "echo ..."` trick some Supabase examples use (that shell-executes
+    # the whole file, so a stray backtick or `$(...)` in a comment breaks
+    # it — sed only touches these two exact tokens). Writes to the kong
+    # user's own home dir — /var/lib isn't writable by the non-root user.
+    entrypoint:
+      - sh
+      - -c
+      - "sed -e \"s#\\$$ANON_KEY#${ANON_KEY}#g\" -e \"s#\\$$SERVICE_ROLE_KEY#${SERVICE_ROLE_KEY}#g\" /home/kong/kong.yml.template > /home/kong/kong.yml && /docker-entrypoint.sh kong docker-start"
     ports:
       - "8000:8000"
 
