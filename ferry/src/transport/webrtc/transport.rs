@@ -39,6 +39,19 @@ const OPUS_PAYLOAD_TYPE: u8 = 120;
 const OPUS_SDP_CLOCK_RATE: u32 = 48000;
 const OPUS_SDP_CHANNELS: u16 = 2;
 
+/// How long `run()` will wait without a single inbound audio frame — from
+/// the data channel never opening at all, or from it opening and then
+/// nothing arriving afterward — before giving up on the connection. The
+/// client's mic track keeps sending packets continuously while the peer
+/// connection is alive (no DTX/silence suppression is negotiated), so a
+/// stall this long means the connection is gone, not that the caller is
+/// quiet. Without this, a connection abandoned mid-handshake (offer
+/// accepted, but the client never completes it) leaves this task's `.await`
+/// parked forever, which — because a `SessionGuard` is held for exactly as
+/// long as this task runs — also leaves the caller's `UserSessionRegistry`
+/// entry live forever, 409-locking them out of starting a real session.
+const AUDIO_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// One 20ms frame at 16kHz mono, 16-bit PCM — Opus only accepts fixed frame
 /// durations (2.5/5/10/20/40/60ms); this is the size TTS chunks get grouped
 /// into before encoding, since providers hand back audio in their own
@@ -503,6 +516,17 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
     }
 
     pub async fn run(mut self) {
+        // Reset every time inbound audio actually arrives (both here, before
+        // the data channel opens, and in the main loop below) — fires if
+        // `AUDIO_IDLE_TIMEOUT` passes without a single frame, whether that's
+        // because the data channel never opened or because it opened and
+        // then went silent. `tokio::pin!` rather than a struct field: it only
+        // needs to live for this call, and `select!` requires a pinned,
+        // by-`&mut`-reusable future to poll it repeatedly across iterations
+        // instead of consuming it after one match.
+        let idle_watchdog = tokio::time::sleep(AUDIO_IDLE_TIMEOUT);
+        tokio::pin!(idle_watchdog);
+
         let data_channel = tokio::select! {
             result = &mut self.data_channel_rx => {
                 match result {
@@ -540,7 +564,18 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                 let _ = self.peer_connection.close().await;
                 return;
             }
+            _ = &mut idle_watchdog => {
+                tracing::warn!(
+                    "webrtc: no data channel opened within {AUDIO_IDLE_TIMEOUT:?}, dropping connection"
+                );
+                let _ = self.peer_connection.close().await;
+                return;
+            }
         };
+
+        idle_watchdog
+            .as_mut()
+            .reset(tokio::time::Instant::now() + AUDIO_IDLE_TIMEOUT);
 
         let pacer = spawn_pacer(
             Arc::clone(&self.output_track),
@@ -634,9 +669,18 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                 }
                 frame = self.inbound_audio_rx.recv() => {
                     let Some(frame) = frame else { continue };
+                    idle_watchdog
+                        .as_mut()
+                        .reset(tokio::time::Instant::now() + AUDIO_IDLE_TIMEOUT);
                     if !self.base.push_frame(frame).await {
                         break;
                     }
+                }
+                _ = &mut idle_watchdog => {
+                    tracing::warn!(
+                        "webrtc: no inbound audio for {AUDIO_IDLE_TIMEOUT:?}, ending call"
+                    );
+                    break;
                 }
             }
         }
