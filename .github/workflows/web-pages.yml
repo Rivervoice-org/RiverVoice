@@ -1,0 +1,79 @@
+name: web-pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/web-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deploy in flight at a time.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: web
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      # Everything except the public landing page ("/") needs a real server
+      # (session auth, dynamic data) and can't be statically exported. Drop
+      # those routes for this build only — this checkout is thrown away
+      # after the job, so next.config.ts and the app/ tree stay untouched
+      # for the app's real (server) deployment.
+      - name: Strip non-landing routes
+        run: |
+          rm -rf "src/app/(app)" "src/app/(auth)" src/app/artifacts src/app/build-agent src/app/shelf-preview
+
+      - name: Configure static export
+        run: |
+          cat > next.config.ts <<'EOF'
+          import type { NextConfig } from "next";
+
+          const nextConfig: NextConfig = {
+            output: "export",
+            basePath: "/RiverVoice",
+            images: { unoptimized: true },
+          };
+
+          export default nextConfig;
+          EOF
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
