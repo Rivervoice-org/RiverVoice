@@ -39,7 +39,6 @@ export default function ProtectedLayout() {
       <Stack.Screen name="agent-new" />
       <Stack.Screen name="in-call" />
       <Stack.Screen name="try-agent" />
-      <Stack.Screen name="voice-clone-new" />
     </Stack>
   );
 }

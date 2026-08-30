@@ -41,7 +41,7 @@ const KEYS: { digit: string; letters?: string }[] = [
 
 /**
  * Same card treatment as the app's own option pickers (ChipGroup, in
- * AgentNew/VoiceCloneNew): a rounded-xl border-border bg-card tile, opacity dim
+ * AgentNew): a rounded-xl border-border bg-card tile, opacity dim
  * on press. A dial pad drawn as a table of touching cells read as broken —
  * this is the pattern the app already uses for "pick one of several".
  *
