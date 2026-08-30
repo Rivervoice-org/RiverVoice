@@ -6,4 +6,5 @@ pub mod log_observer;
 pub mod metrics_log_observer;
 pub mod stage_latency_observer;
 pub mod transcript_log_observer;
+pub mod turn_latency_observer;
 pub mod usage_observer;
