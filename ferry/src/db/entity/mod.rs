@@ -4,5 +4,4 @@
 pub mod agents;
 pub mod call_utterances;
 pub mod calls;
-pub mod refresh_tokens;
 pub mod users;

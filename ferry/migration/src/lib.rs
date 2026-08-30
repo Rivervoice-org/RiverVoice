@@ -8,6 +8,7 @@ mod m20260822_120000_add_voice_to_agents;
 mod m20260822_130000_require_agent_fields;
 mod m20260828_000000_google_auth_users;
 mod m20260829_000000_create_calls_tables;
+mod m20260831_000000_supabase_auth;
 
 pub struct Migrator;
 
@@ -23,6 +24,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260822_130000_require_agent_fields::Migration),
             Box::new(m20260828_000000_google_auth_users::Migration),
             Box::new(m20260829_000000_create_calls_tables::Migration),
+            Box::new(m20260831_000000_supabase_auth::Migration),
         ]
     }
 }
