@@ -89,7 +89,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(() => {
     clearAccessToken();
     void (async () => {
-      await supabase.auth.signOut();
+      // Each awaited separately — a Supabase sign-out failure must not skip
+      // clearing the local Google session, and vice versa.
+      await supabase.auth.signOut().catch((err) => {
+        console.error("supabase.auth.signOut failed:", err);
+      });
       await GoogleSignin.signOut().catch((err) => {
         // Best-effort — clearing the local Google session isn't load-bearing
         // for RiverVoice's own sign-out.
