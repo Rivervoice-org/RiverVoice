@@ -190,6 +190,44 @@ impl FrameObserver for TurnLatencyObserver {
     }
 }
 
+fn print_table(call_id: Uuid, mut rows: Vec<Row>) {
+    if rows.is_empty() {
+        println!("turn latency — call {call_id}: no completed turns");
+        return;
+    }
+    rows.sort_by_key(|r| r.seq);
+
+    let cell = |v: Option<u64>| v.map_or_else(|| "-".to_string(), |v| v.to_string());
+
+    println!("\nturn latency — call {call_id} ({} turns)", rows.len());
+    println!(
+        "{:<5}{:<6}{:>8}{:>8}{:>13}{:>10}",
+        "turn", "dir", "stt_ms", "mt_ms", "tts_ttfb_ms", "total_ms"
+    );
+    for row in &rows {
+        println!(
+            "{:<5}{:<6}{:>8}{:>8}{:>13}{:>10}",
+            row.seq + 1,
+            row.direction,
+            cell(row.stt_ms),
+            cell(row.mt_ms),
+            cell(row.tts_ttfb_ms),
+            row.total_ms(),
+        );
+    }
+
+    let mut totals: Vec<u64> = rows.iter().map(Row::total_ms).collect();
+    totals.sort_unstable();
+    let pct = |p: f64| totals[((p / 100.0) * (totals.len() - 1) as f64).round() as usize];
+    println!(
+        "p50={}ms  p95={}ms  max={}ms  n={}\n",
+        pct(50.0),
+        pct(95.0),
+        totals.last().unwrap(),
+        totals.len(),
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,42 +289,4 @@ mod tests {
 
         assert!(rx.try_recv().is_err(), "no extra turns should be emitted");
     }
-}
-
-fn print_table(call_id: Uuid, mut rows: Vec<Row>) {
-    if rows.is_empty() {
-        println!("turn latency — call {call_id}: no completed turns");
-        return;
-    }
-    rows.sort_by_key(|r| r.seq);
-
-    let cell = |v: Option<u64>| v.map_or_else(|| "-".to_string(), |v| v.to_string());
-
-    println!("\nturn latency — call {call_id} ({} turns)", rows.len());
-    println!(
-        "{:<5}{:<6}{:>8}{:>8}{:>13}{:>10}",
-        "turn", "dir", "stt_ms", "mt_ms", "tts_ttfb_ms", "total_ms"
-    );
-    for row in &rows {
-        println!(
-            "{:<5}{:<6}{:>8}{:>8}{:>13}{:>10}",
-            row.seq + 1,
-            row.direction,
-            cell(row.stt_ms),
-            cell(row.mt_ms),
-            cell(row.tts_ttfb_ms),
-            row.total_ms(),
-        );
-    }
-
-    let mut totals: Vec<u64> = rows.iter().map(Row::total_ms).collect();
-    totals.sort_unstable();
-    let pct = |p: f64| totals[((p / 100.0) * (totals.len() - 1) as f64).round() as usize];
-    println!(
-        "p50={}ms  p95={}ms  max={}ms  n={}\n",
-        pct(50.0),
-        pct(95.0),
-        totals.last().unwrap(),
-        totals.len(),
-    );
 }
