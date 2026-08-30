@@ -42,12 +42,25 @@ function fromListRow(row: CallListRow): CallListItem {
   };
 }
 
+/** `created_at` isn't a unique sort key on its own — two calls can share the
+ * same timestamp. Cursor is `created_at|id`; `id` (uuid) breaks ties in the
+ * same descending order so a shared-timestamp boundary can't skip or repeat
+ * a row across pages. */
+function encodeCursor(row: Pick<CallListRow, "created_at" | "id">): string {
+  return `${row.created_at}|${row.id}`;
+}
+
+function decodeCursor(cursor: string): { createdAt: string; id: string } {
+  const sep = cursor.lastIndexOf("|");
+  return { createdAt: cursor.slice(0, sep), id: cursor.slice(sep + 1) };
+}
+
 /**
  * Reads `calls` directly via PostgREST — no ferry handler for this
  * anymore, call history is a plain read scoped to the caller. Newest
  * first.
  *
- * `before` is a cursor, not an offset: it is the `nextBefore` timestamp from
+ * `before` is a cursor, not an offset: it is the `nextBefore` cursor from
  * the previous page. Paging by position would duplicate or skip rows when a
  * call is placed while the user is scrolling, since new calls are inserted at
  * the head of this list. `limit + 1` is the deliberate over-fetch: whether
@@ -63,9 +76,15 @@ export async function getRecentCalls(
     .select(CALL_LIST_COLUMNS)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(RECENT_CALLS_PAGE_SIZE + 1);
   if (before) {
-    query = query.lt("created_at", before);
+    const { createdAt, id } = decodeCursor(before);
+    // (created_at, id) < (createdAt, id) in descending order: strictly
+    // earlier timestamps, or the same timestamp with a strictly smaller id.
+    query = query.or(
+      `created_at.lt.${createdAt},and(created_at.eq.${createdAt},id.lt.${id})`,
+    );
   }
 
   const { data, error } = await query;
@@ -74,10 +93,11 @@ export async function getRecentCalls(
   const rows = data as CallListRow[];
   const hasMore = rows.length > RECENT_CALLS_PAGE_SIZE;
   const page = hasMore ? rows.slice(0, RECENT_CALLS_PAGE_SIZE) : rows;
+  const lastRow = page[page.length - 1];
 
   return {
     calls: page.map(fromListRow),
-    nextBefore: hasMore ? (page[page.length - 1]?.created_at ?? null) : null,
+    nextBefore: hasMore && lastRow ? encodeCursor(lastRow) : null,
   };
 }
 
