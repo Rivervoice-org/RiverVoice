@@ -113,10 +113,12 @@ export async function updateAgent(
   const userId = await currentUserId();
   const patch: AgentUpdateRow = {};
   if (payload.name !== undefined) patch["name"] = payload.name;
-  if (payload.inputLanguage !== undefined)
+  if (payload.inputLanguage !== undefined) {
     patch["input_language"] = payload.inputLanguage;
-  if (payload.outputLanguage !== undefined)
+  }
+  if (payload.outputLanguage !== undefined) {
     patch["output_language"] = payload.outputLanguage;
+  }
   if (payload.mode !== undefined) patch["mode"] = payload.mode;
   if (payload.gender !== undefined) patch["gender"] = payload.gender;
   if (payload.mascot !== undefined) patch["mascot"] = payload.mascot;
