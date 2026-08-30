@@ -14,6 +14,7 @@ use crate::db::entity::agents;
 use crate::http::MAX_REQUEST_BODY_SIZE;
 use crate::http::response::ApiResponse;
 use crate::http::state::AppState;
+use crate::observer::turn_latency_observer::TurnLatencyRecorder;
 use crate::pipeline::build_translation_pipeline;
 use crate::transport::base::BaseTransport;
 use crate::transport::webrtc::transport::WebRtcClient;
@@ -116,10 +117,17 @@ pub async fn try_agent_offer(
 
     let span = call_span(call_id, "solo");
 
-    // No recorder: try-agent is a one-way demo with no registry entry and no
-    // `calls` row to attach a transcript to.
-    let frame_io =
-        build_translation_pipeline(config, Some(&agent), false, span.clone(), Vec::new());
+    // No transcript recorder: try-agent is a one-way demo with no registry
+    // entry and no `calls` row to attach one to.
+    let turn_latency = TurnLatencyRecorder::new();
+    let turn_latency_observer = turn_latency.observer("solo");
+    let frame_io = build_translation_pipeline(
+        config,
+        Some(&agent),
+        false,
+        span.clone(),
+        vec![turn_latency_observer],
+    );
     let serializer = WebRtcSerializer;
     let base = BaseTransport::new(frame_io, serializer);
 
@@ -146,6 +154,7 @@ pub async fn try_agent_offer(
             // what actually clears the user's reservation above.
             let _session_guard = session_guard;
             client.run().await;
+            turn_latency.finish(call_id);
         }
         .instrument(span),
     );

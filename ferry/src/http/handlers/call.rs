@@ -27,6 +27,7 @@ use crate::http::state::AppState;
 use crate::observer::call_record_observer::CallRecorder;
 use crate::observer::frame_observer::FrameObserver;
 use crate::observer::log_observer::LogObserver;
+use crate::observer::turn_latency_observer::TurnLatencyRecorder;
 use crate::pipeline::build_translation_pipeline;
 use crate::processor::FrameIo;
 use crate::stages::stage::Stage;
@@ -313,6 +314,10 @@ pub async fn start_call(
         Some(agent.input_language.clone()),
     );
 
+    let turn_latency = TurnLatencyRecorder::new();
+    let a2b_turn_latency = turn_latency.observer("a2b");
+    let b2a_turn_latency = turn_latency.observer("b2a");
+
     // Two directional pipelines, not one self-looped pipeline: A's mic feeds
     // pipeline_a2b (STT in A's language -> MT -> TTS in B's language), and
     // its output is what B should hear. pipeline_b2a is the mirror, feeding
@@ -325,7 +330,7 @@ pub async fn start_call(
         Some(&agent),
         false,
         call_span(call_id, "a2b"),
-        vec![a2b_recorder],
+        vec![a2b_recorder as Arc<dyn FrameObserver>, a2b_turn_latency],
     )
     .into_parts();
     let (b2a_exit, b2a_entrance) = build_translation_pipeline(
@@ -333,7 +338,7 @@ pub async fn start_call(
         Some(&agent),
         true,
         call_span(call_id, "b2a"),
-        vec![b2a_recorder],
+        vec![b2a_recorder as Arc<dyn FrameObserver>, b2a_turn_latency],
     )
     .into_parts();
 
@@ -352,6 +357,7 @@ pub async fn start_call(
     // subscription is what keeps `ringing`/`connected`/`ended` out of the
     // three separate handlers that trigger those transitions.
     recorder.spawn(call_id.as_uuid(), handle.clone());
+    turn_latency.spawn(call_id.as_uuid(), handle.clone());
 
     let serializer = WebRtcSerializer;
     let base = BaseTransport::new(a_transport_io, serializer);

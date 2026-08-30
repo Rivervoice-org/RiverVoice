@@ -79,9 +79,14 @@ impl FrameProcessor for SttStage {
                     };
 
 
+                    // Reset only — the clock itself starts at
+                    // `UserStoppedSpeaking` below, not here. Starting it at
+                    // speech begin measured "how long did the user talk" (it
+                    // ran until the first final transcript, which usually
+                    // lands mid-sentence), not STT's actual contribution to
+                    // the turn's latency.
                     if let SttEvent::UserStartedSpeaking = &event {
                         io.cancel_ttfb_metrics();
-                        io.start_ttfb_metrics();
                     }
 
                     if let SttEvent::Transcript(t) = &event {
@@ -108,13 +113,22 @@ impl FrameProcessor for SttStage {
                     // entirely when nothing had accumulated yet.
                     match &event {
                         SttEvent::Transcript(t) if t.is_final => {
-                            io.stop_ttfb_metrics().await;
                             buffer.push_str(&t.text);
                         }
                         SttEvent::UserStoppedSpeaking => {
+                            // The provider can send this more than once for
+                            // one turn — an early one with nothing finalized
+                            // yet, then a real one once the trailing text
+                            // catches up. `start_ttfb_metrics` only records
+                            // an instant if none is already pending, so the
+                            // clock always starts at the *first* one, and
+                            // measures the true wait: from "user stopped
+                            // talking" to "turn text handed to MT" below.
+                            io.start_ttfb_metrics();
                             if !buffer.is_empty() {
                                 let text = std::mem::take(&mut buffer);
                                 tracing::info!(target: "ferry::transcript", text = %text);
+                                io.stop_ttfb_metrics().await;
                                 if !io
                                     .push(Frame::new(FrameKind::UserTurnAggregation(
                                         crate::frames::UserTurnAggregationFrame { text },
