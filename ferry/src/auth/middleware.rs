@@ -77,9 +77,18 @@ async fn ensure_user_row(verified: VerifiedUser) -> Result<uuid::Uuid, ApiRespon
         .or_else(|| verified.email.clone())
         .unwrap_or_default();
 
+    // `email` is UNIQUE — falling back to "" for every emailless sign-in
+    // would collide the second such user into the first's row (or, if a
+    // legacy account already holds "", just fail forever). user_id is
+    // already unique per caller, so deriving the placeholder from it keeps
+    // that guarantee instead of manufacturing a fresh collision.
+    let email = verified
+        .email
+        .unwrap_or_else(|| format!("{}@no-email.rivervoice.local", verified.user_id));
+
     let active = users::ActiveModel {
         id: Set(verified.user_id),
-        email: Set(verified.email.unwrap_or_default()),
+        email: Set(email),
         name: Set(name),
         mascot: Set(DEFAULT_MASCOT.to_string()),
         created_at: Set(now),
