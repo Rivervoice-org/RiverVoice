@@ -5,6 +5,7 @@ import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "@/lib/config";
+import type { Database } from "@/lib/bindings/supabase";
 
 /**
  * One shared client for everything Supabase — auth (Google ID-token
@@ -17,7 +18,7 @@ import { config } from "@/lib/config";
  * recommends. `autoRefreshToken` means nothing here has to replicate
  * ferry.ts's old manual 401-retry-refresh dance for auth itself.
  */
-export const supabase = createClient(
+export const supabase = createClient<Database>(
   config.supabaseUrl,
   config.supabaseAnonKey,
   {
