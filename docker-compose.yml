@@ -11,7 +11,10 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXP: 3600
     ports:
-      - "5432:5432"
+      # Loopback only — ferry runs natively on the host (not in this compose
+      # network) and needs localhost:5432, but nothing outside this machine
+      # should be able to reach Postgres directly.
+      - "127.0.0.1:5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
