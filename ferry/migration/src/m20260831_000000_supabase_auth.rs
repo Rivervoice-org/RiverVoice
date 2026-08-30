@@ -50,7 +50,12 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(Users::Table)
-                    .add_column(ColumnDef::new(Users::GoogleId).text().not_null())
+                    // Nullable, not NOT NULL like the original column: the
+                    // google_id data itself is gone once up() drops it —
+                    // there's nothing to backfill existing rows with, and
+                    // ADD COLUMN ... NOT NULL with no default fails outright
+                    // on a non-empty table.
+                    .add_column(ColumnDef::new(Users::GoogleId).text())
                     .add_column(
                         ColumnDef::new(Users::EmailVerified)
                             .boolean()
