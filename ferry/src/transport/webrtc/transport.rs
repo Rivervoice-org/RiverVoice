@@ -39,18 +39,28 @@ const OPUS_PAYLOAD_TYPE: u8 = 120;
 const OPUS_SDP_CLOCK_RATE: u32 = 48000;
 const OPUS_SDP_CHANNELS: u16 = 2;
 
-/// How long `run()` will wait without a single inbound audio frame — from
-/// the data channel never opening at all, or from it opening and then
-/// nothing arriving afterward — before giving up on the connection. The
-/// client's mic track keeps sending packets continuously while the peer
-/// connection is alive (no DTX/silence suppression is negotiated), so a
-/// stall this long means the connection is gone, not that the caller is
-/// quiet. Without this, a connection abandoned mid-handshake (offer
-/// accepted, but the client never completes it) leaves this task's `.await`
-/// parked forever, which — because a `SessionGuard` is held for exactly as
-/// long as this task runs — also leaves the caller's `UserSessionRegistry`
-/// entry live forever, 409-locking them out of starting a real session.
+/// How long `run()` will wait without a single inbound audio frame before
+/// giving up on the connection — checked from the moment `run()` starts,
+/// before the data channel has even opened, straight through the rest of
+/// the call. The client's mic track keeps sending packets continuously
+/// while the peer connection is alive (no DTX/silence suppression is
+/// negotiated), so a stall this long means the connection is gone, not that
+/// the caller is quiet. Without this, a connection abandoned mid-handshake
+/// (offer accepted, but the client never completes it) leaves this task's
+/// `.await` parked forever, which — because a `SessionGuard` is held for
+/// exactly as long as this task runs — also leaves the caller's
+/// `UserSessionRegistry` entry live forever, 409-locking them out of
+/// starting a real session.
 const AUDIO_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Bounds `run()`'s wait for the pacer to notice `stopped` and exit. Normally
+/// at most one frame period (`FRAME_DURATION_MS`) — this is the backstop for
+/// a `write_sample` call that never returns (a stalled/dead transport), since
+/// an un-bounded `pacer.await` here would defeat `AUDIO_IDLE_TIMEOUT` itself:
+/// `run()` wouldn't return, so `SessionGuard` wouldn't drop, so the same
+/// stuck-session symptom `AUDIO_IDLE_TIMEOUT` exists to prevent would still
+/// happen, just moved one step later.
+const PACER_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// One 20ms frame at 16kHz mono, 16-bit PCM — Opus only accepts fixed frame
 /// durations (2.5/5/10/20/40/60ms); this is the size TTS chunks get grouped
@@ -516,60 +526,76 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
     }
 
     pub async fn run(mut self) {
-        // Reset every time inbound audio actually arrives (both here, before
-        // the data channel opens, and in the main loop below) — fires if
-        // `AUDIO_IDLE_TIMEOUT` passes without a single frame, whether that's
-        // because the data channel never opened or because it opened and
-        // then went silent. `tokio::pin!` rather than a struct field: it only
-        // needs to live for this call, and `select!` requires a pinned,
-        // by-`&mut`-reusable future to poll it repeatedly across iterations
-        // instead of consuming it after one match.
+        // Reset every time inbound audio actually arrives, from here through
+        // the main loop below — see `AUDIO_IDLE_TIMEOUT`. `tokio::pin!`
+        // rather than a struct field: it only needs to live for this call,
+        // and `select!` requires a pinned, by-`&mut`-reusable future to poll
+        // it repeatedly across iterations instead of consuming it after one
+        // match.
         let idle_watchdog = tokio::time::sleep(AUDIO_IDLE_TIMEOUT);
         tokio::pin!(idle_watchdog);
 
-        let data_channel = tokio::select! {
-            result = &mut self.data_channel_rx => {
-                match result {
-                    Ok(dc) => dc,
-                    Err(_) => {
-                        tracing::warn!("webrtc: no data channel opened, dropping connection");
-                        let _ = self.peer_connection.close().await;
-                        return;
+        // `on_track` and `on_data_channel` are independent PeerConnection
+        // callbacks with no ordering between them, and SCTP association
+        // setup (the data channel) is a real extra handshake beyond what
+        // SRTP media needs — so audio can and does arrive before the data
+        // channel opens. Buffered rather than dropped, and flushed into the
+        // pipeline once the main loop starts.
+        let mut early_audio: Vec<Frame> = Vec::new();
+
+        let data_channel = loop {
+            tokio::select! {
+                result = &mut self.data_channel_rx => {
+                    match result {
+                        Ok(dc) => break dc,
+                        Err(_) => {
+                            tracing::warn!("webrtc: no data channel opened, dropping connection");
+                            let _ = self.peer_connection.close().await;
+                            return;
+                        }
                     }
                 }
-            }
-            _ = async {
-                let rx = self.status_rx.as_mut().expect("guarded by `if` below");
-                loop {
-                    if rx.changed().await.is_err() {
-                        return;
+                _ = async {
+                    let rx = self.status_rx.as_mut().expect("guarded by `if` below");
+                    loop {
+                        if rx.changed().await.is_err() {
+                            return;
+                        }
+                        if matches!(*rx.borrow(), CallStatus::Ended(_)) {
+                            return;
+                        }
                     }
-                    if matches!(*rx.borrow(), CallStatus::Ended(_)) {
-                        return;
+                }, if self.status_rx.is_some() => {
+                    tracing::info!(
+                        "webrtc: call ended before data channel opened, waiting briefly to deliver hangup signal"
+                    );
+                    if let Ok(Ok(dc)) = tokio::time::timeout(
+                        std::time::Duration::from_secs(3),
+                        &mut self.data_channel_rx,
+                    )
+                    .await
+                    {
+                        let _ = dc.send(BytesMut::from(&[CALL_ENDED_TAG][..])).await;
+                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                    }
+                    let _ = self.peer_connection.close().await;
+                    return;
+                }
+                _ = &mut idle_watchdog => {
+                    tracing::warn!(
+                        "webrtc: no data channel opened within {AUDIO_IDLE_TIMEOUT:?}, dropping connection"
+                    );
+                    let _ = self.peer_connection.close().await;
+                    return;
+                }
+                frame = self.inbound_audio_rx.recv() => {
+                    if let Some(frame) = frame {
+                        idle_watchdog
+                            .as_mut()
+                            .reset(tokio::time::Instant::now() + AUDIO_IDLE_TIMEOUT);
+                        early_audio.push(frame);
                     }
                 }
-            }, if self.status_rx.is_some() => {
-                tracing::info!(
-                    "webrtc: call ended before data channel opened, waiting briefly to deliver hangup signal"
-                );
-                if let Ok(Ok(dc)) = tokio::time::timeout(
-                    std::time::Duration::from_secs(3),
-                    &mut self.data_channel_rx,
-                )
-                .await
-                {
-                    let _ = dc.send(BytesMut::from(&[CALL_ENDED_TAG][..])).await;
-                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                }
-                let _ = self.peer_connection.close().await;
-                return;
-            }
-            _ = &mut idle_watchdog => {
-                tracing::warn!(
-                    "webrtc: no data channel opened within {AUDIO_IDLE_TIMEOUT:?}, dropping connection"
-                );
-                let _ = self.peer_connection.close().await;
-                return;
             }
         };
 
@@ -577,7 +603,17 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
             .as_mut()
             .reset(tokio::time::Instant::now() + AUDIO_IDLE_TIMEOUT);
 
-        let pacer = spawn_pacer(
+        // Deliver whatever arrived while we were still waiting on the data
+        // channel, in the order it arrived, before the main loop starts
+        // taking anything newer.
+        for frame in early_audio {
+            if !self.base.push_frame(frame).await {
+                let _ = self.peer_connection.close().await;
+                return;
+            }
+        }
+
+        let mut pacer = spawn_pacer(
             Arc::clone(&self.output_track),
             self.output_ssrc,
             self.output_payload_type,
@@ -669,11 +705,30 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
                 }
                 frame = self.inbound_audio_rx.recv() => {
                     let Some(frame) = frame else { continue };
+                    // Receiving a frame is itself proof the connection is
+                    // alive, so the watchdog resets here regardless of how
+                    // the handoff below goes.
                     idle_watchdog
                         .as_mut()
                         .reset(tokio::time::Instant::now() + AUDIO_IDLE_TIMEOUT);
-                    if !self.base.push_frame(frame).await {
-                        break;
+                    // push_frame is a bounded channel send — if the stage
+                    // downstream is stuck, that await blocks this whole arm's
+                    // body, which would stop the outer select! from ever
+                    // re-polling idle_watchdog. Racing it here bounds the
+                    // handoff itself the same way AUDIO_IDLE_TIMEOUT bounds
+                    // waiting for the next frame.
+                    tokio::select! {
+                        ok = self.base.push_frame(frame) => {
+                            if !ok {
+                                break;
+                            }
+                        }
+                        _ = &mut idle_watchdog => {
+                            tracing::warn!(
+                                "webrtc: pipeline handoff stalled past {AUDIO_IDLE_TIMEOUT:?}, ending call"
+                            );
+                            break;
+                        }
                     }
                 }
                 _ = &mut idle_watchdog => {
@@ -687,9 +742,20 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
 
         // Let the pacer finish the frame it is mid-way through rather than
         // aborting into a half-written `write_sample`; it checks this flag
-        // once per tick, so this costs at most one frame's wait.
+        // once per tick, so this normally costs at most one frame's wait —
+        // bounded by PACER_SHUTDOWN_TIMEOUT in case `write_sample` itself
+        // never returns, so a stalled pacer can't keep this task (and the
+        // SessionGuard it holds) alive indefinitely.
         self.outbound_audio.lock().unwrap().stopped = true;
-        let _ = pacer.await;
+        if tokio::time::timeout(PACER_SHUTDOWN_TIMEOUT, &mut pacer)
+            .await
+            .is_err()
+        {
+            tracing::warn!(
+                "webrtc: pacer did not stop within {PACER_SHUTDOWN_TIMEOUT:?}, aborting it"
+            );
+            pacer.abort();
+        }
 
         let _ = self.peer_connection.close().await;
     }
