@@ -1,20 +1,30 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
-import { googleSignIn, getMe, signOutRequest } from "@/lib/auth/api";
 import { config } from "@/lib/config";
-import { ferry } from "@/lib/ferry";
-import { clearTokens, getRefreshToken, saveTokens, setAccessToken } from "@/lib/auth/tokens";
+import { clearAccessToken } from "@/lib/auth/tokens";
+import { supabase } from "@/lib/supabase";
 import { SessionContext, type SessionUser } from "@/state/session/context";
+import type { Session } from "@supabase/supabase-js";
 
 /**
  * Owns the session: who is signed in, and the login call behind it.
  * "Continue with Google" is the only sign-in path — continueWithGoogle
- * gets an ID token from the native Google Sign-In SDK and exchanges it at
- * ferry's POST /v1/auth/google (see ferry/src/http/handlers/user.rs),
- * which finds-or-creates the account and issues an access + refresh token
- * pair either way.
+ * gets an ID token from the native Google Sign-In SDK and exchanges it
+ * directly with Supabase Auth (signInWithIdToken), which finds-or-creates
+ * the account and returns a session. Supabase's client persists and
+ * refreshes that session itself (see lib/supabase.ts); this provider just
+ * mirrors it into the SessionContext shape the rest of the app depends on.
  */
+function toSessionUser(session: Session): SessionUser {
+  const metadata = session.user.user_metadata as Record<string, unknown> | null;
+  const name =
+    (metadata?.["full_name"] as string | undefined) ??
+    (metadata?.["name"] as string | undefined) ??
+    session.user.email ??
+    "";
+  return { name, email: session.user.email ?? "" };
+}
+
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -27,45 +37,26 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // Restores the session on app launch from the refresh token in
-  // SecureStore — without this, isAuthenticated starts false on every cold
-  // start and a genuinely still-logged-in user sees Welcome/sign-in again.
-  // The profile itself is always re-fetched from GET /v1/users/me rather
-  // than cached locally, so it can never go stale.
+  // One listener covers both launch-time restore and every later change
+  // (sign-in, sign-out, background token refresh) — Supabase fires this
+  // immediately on subscribe with whatever session it already restored from
+  // AsyncStorage, so there's no separate imperative bootstrap step needed.
   useEffect(() => {
-    let cancelled = false;
+    let bootstrapped = false;
 
-    (async () => {
-      try {
-        const refreshToken = await getRefreshToken();
-
-        if (refreshToken) {
-          const me = await ferry.refreshSession().then(getMe);
-          if (!cancelled) {
-            setUser({ name: me.name, email: me.email });
-            setIsAuthenticated(true);
-          }
-        }
-      } catch (err) {
-        // Refresh token dead, the /me fetch failed, or SecureStore itself
-        // threw (corrupted entry, etc.) — nothing to restore either way.
-        // Falling through to the finally below is what matters: bootstrap
-        // must resolve regardless of what failed, or the app is stuck on
-        // the splash screen forever.
-        console.error("session bootstrap failed:", err);
-      } finally {
-        if (!cancelled) setIsBootstrapping(false);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session ? toSessionUser(session) : null);
+      setIsAuthenticated(session !== null);
+      if (!bootstrapped) {
+        bootstrapped = true;
+        setIsBootstrapping(false);
       }
-    })();
+    });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => subscription.unsubscribe();
   }, []);
-
-  const { mutateAsync: googleSignInMutation } = useMutation({
-    mutationFn: googleSignIn,
-  });
 
   const continueWithGoogle = useCallback(async (): Promise<boolean> => {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -83,45 +74,39 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Google sign-in did not return an ID token");
     }
 
-    const result = await googleSignInMutation({ idToken: idToken });
-    await saveTokens(result);
-    setUser({ name: result.name, email: result.email });
-    setIsAuthenticated(true);
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: "google",
+      token: idToken,
+    });
+    if (error) {
+      throw error;
+    }
+    // isAuthenticated/user update via the onAuthStateChange listener above,
+    // which Supabase fires as soon as the session is set.
     return true;
-  }, [googleSignInMutation]);
+  }, []);
 
   const signOut = useCallback(() => {
-    setUser(null);
-    setIsAuthenticated(false);
-    // Invalidate the in-memory access token synchronously, before any
-    // await — otherwise a request fired in the gap while this function is
-    // still reading SecureStore would go out with the old token and
-    // authenticate as the user that's in the middle of signing out.
-    setAccessToken(null);
+    clearAccessToken();
     void (async () => {
-      const refreshToken = await getRefreshToken();
-      await clearTokens();
+      await supabase.auth.signOut();
       await GoogleSignin.signOut().catch((err) => {
         // Best-effort — clearing the local Google session isn't load-bearing
         // for RiverVoice's own sign-out.
         console.error("GoogleSignin.signOut failed:", err);
       });
-      if (refreshToken) {
-        try {
-          await signOutRequest(refreshToken);
-        } catch (err) {
-          // Best-effort — the local session is already cleared either way,
-          // so a network failure here just leaves the old refresh token
-          // valid server-side until it naturally expires.
-          console.error("signOutRequest failed:", err);
-        }
-      }
     })();
   }, []);
 
   return (
     <SessionContext.Provider
-      value={{ isAuthenticated, isBootstrapping, user, continueWithGoogle, signOut }}
+      value={{
+        isAuthenticated,
+        isBootstrapping,
+        user,
+        continueWithGoogle,
+        signOut,
+      }}
     >
       {children}
     </SessionContext.Provider>

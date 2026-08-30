@@ -1,42 +1,35 @@
-import * as SecureStore from "expo-secure-store";
-
-const REFRESH_TOKEN_KEY = "rv_refresh_token";
+import { supabase } from "@/lib/supabase";
 
 /**
- * The access token only ever lives in memory — it's short-lived (15 min,
- * see ferry's ACCESS_TOKEN_TTL_MINUTES) and re-derived from the refresh
- * token on app launch, so there's no need to persist it. The refresh token
- * goes in SecureStore (iOS Keychain / Android Keystore), never
- * AsyncStorage — that's plaintext on disk.
+ * Mirrors the Supabase client's current access token in memory so
+ * `authHeader()` can stay synchronous — every existing call site
+ * (lib/agents/api.ts, lib/calls/api.ts, lib/webrtc/signaling.ts) calls it
+ * inline while building a request, and `supabase.auth.getSession()` is
+ * async. The Supabase client itself owns persistence and refresh
+ * (AsyncStorage, autoRefreshToken — see lib/supabase.ts); this is just a
+ * read-through cache of whatever it currently holds, kept in sync via
+ * onAuthStateChange rather than tokens.ts managing storage itself.
  */
-let accessToken: string | null = null;
+let currentAccessToken: string | null = null;
 
-export function getAccessToken(): string | null {
-  return accessToken;
-}
-
-export function setAccessToken(token: string | null): void {
-  accessToken = token;
-}
-
-export async function getRefreshToken(): Promise<string | null> {
-  return SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
-}
-
-export async function saveTokens(tokens: {
-  accessToken: string;
-  refreshToken: string;
-}): Promise<void> {
-  accessToken = tokens.accessToken;
-  await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, tokens.refreshToken);
-}
-
-export async function clearTokens(): Promise<void> {
-  accessToken = null;
-  await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
-}
+supabase.auth.onAuthStateChange((_event, session) => {
+  currentAccessToken = session?.access_token ?? null;
+});
 
 /** Headers for a request to a protected ferry route. Empty if signed out. */
 export function authHeader(): Record<string, string> {
-  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+  return currentAccessToken
+    ? { Authorization: `Bearer ${currentAccessToken}` }
+    : {};
+}
+
+/**
+ * Invalidates the mirrored token immediately, synchronously — call this
+ * before `supabase.auth.signOut()`'s awaited work runs, so a request fired
+ * in that gap can't go out authenticated as the user who's in the middle of
+ * signing out. `onAuthStateChange` will reach the same state shortly after,
+ * this just closes the window before then.
+ */
+export function clearAccessToken(): void {
+  currentAccessToken = null;
 }
