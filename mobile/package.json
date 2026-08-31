@@ -51,7 +51,6 @@
     "expo-system-ui": "~6.0.9",
     "lucide-react-native": "^1.31.0",
     "nativewind": "4.1.23",
-    "notifee": "^0.0.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
