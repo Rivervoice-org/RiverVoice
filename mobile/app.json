@@ -10,6 +10,8 @@
     "plugins": [
       "expo-router",
       "expo-dev-client",
+      "@kangfenmao/react-native-minimizer",
+    "@notifee/react-native",
       [
         "@config-plugins/react-native-webrtc",
         {
@@ -27,7 +29,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#E6F4FE"
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "ios": {
       "supportsTablet": true,
@@ -51,7 +54,8 @@
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.WAKE_LOCK",
         "android.permission.BLUETOOTH",
-        "android.permission.BLUETOOTH_CONNECT"
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.FOREGROUND_SERVICE"
       ],
       "package": "com.rivervoice.app"
     },
