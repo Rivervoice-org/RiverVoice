@@ -16,7 +16,10 @@ export type CallUtteranceRow = Tables<"call_utterances">;
 export type CallDirection = CallRow["direction"];
 export type CallLifecycleStatus = CallRow["status"];
 export type CallEndReason = NonNullable<CallRow["end_reason"]>;
-export type Speaker = CallUtteranceRow["speaker"];
+export enum Speaker {
+  Caller = "caller",
+  Callee = "callee",
+}
 
 export interface CallListItem {
   id: CallRow["id"];
@@ -40,8 +43,16 @@ export interface Utterance {
   originalLanguage: CallUtteranceRow["original_language"];
   translatedText: CallUtteranceRow["translated_text"];
   translatedLanguage: CallUtteranceRow["translated_language"];
+  /** This turn's span in the *original* recording (`CallDetail.recordingUrl`) —
+   * each party's own voice. */
   offsetMs: CallUtteranceRow["offset_ms"];
   durationMs: CallUtteranceRow["duration_ms"];
+  /** This turn's span in the *translated* recording
+   * (`CallDetail.translatedRecordingUrl`) instead — only ever set on the
+   * other party's turns, since the call owner's own turns sit in that same
+   * recording at `offsetMs`/`durationMs`, unmodified. */
+  translatedOffsetMs: CallUtteranceRow["translated_offset_ms"];
+  translatedDurationMs: CallUtteranceRow["translated_duration_ms"];
 }
 
 /** Everything the list deliberately leaves out, plus the transcript. */
@@ -63,8 +74,40 @@ export interface CallDetail {
   endedAt: CallRow["ended_at"];
   billableSeconds: CallRow["billable_seconds"];
   costMicros: CallRow["cost_micros"];
+  /** Each party's own voice, unmodified — null until the call has ended
+   * and the recording finished uploading. */
   recordingUrl: CallRow["recording_url"];
+  /** What this call's owner actually heard live: their own voice, plus the
+   * TTS translation of the other party. Same lifecycle as `recordingUrl`. */
+  translatedRecordingUrl: CallRow["translated_recording_url"];
   utterances: Utterance[];
+}
+
+export enum RecordingVariant {
+  Original = "original",
+  Translated = "translated",
+}
+
+/**
+ * Where this turn sits in the given recording, in milliseconds. For
+ * `Translated`, the call owner's own turns (`caller`) keep the same span as
+ * the original recording — their own voice is unmodified there too — only
+ * the other party's turns (`callee`) get the translated-track numbers.
+ */
+export function turnSpan(
+  utterance: Utterance,
+  variant: RecordingVariant,
+): { offsetMs: number | null; durationMs: number | null } {
+  if (
+    variant === RecordingVariant.Translated &&
+    utterance.speaker === Speaker.Callee
+  ) {
+    return {
+      offsetMs: utterance.translatedOffsetMs,
+      durationMs: utterance.translatedDurationMs,
+    };
+  }
+  return { offsetMs: utterance.offsetMs, durationMs: utterance.durationMs };
 }
 
 export interface RecentCallsResponse {

@@ -103,10 +103,21 @@ pub struct TranscriptionFrame {
     pub text: String,
 
     pub is_final: bool,
+
+    /// Sarvam-only (`return_timestamps`), only ever set when `is_final` —
+    /// seconds into the STT session's own audio stream, not wall-clock and
+    /// not relative to `calls.connected_at`. See services::stt::provider::Transcript.
+    pub start_s: Option<f64>,
+    pub end_s: Option<f64>,
 }
 
 pub struct UserTurnAggregationFrame {
     pub text: String,
+
+    /// The turn's span in the *original* recording, in milliseconds —
+    /// derived from the accumulated final chunks' start_s/end_s. `None` when
+    /// the STT provider didn't supply timestamps.
+    pub duration_ms: Option<i32>,
 }
 
 pub struct MtTextFrame {

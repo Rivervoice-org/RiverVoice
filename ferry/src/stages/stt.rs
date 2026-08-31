@@ -43,6 +43,12 @@ impl FrameProcessor for SttStage {
         let mut unreported_audio_seconds: f64 = 0.0;
 
         let mut buffer = String::new();
+        // A turn can be built from several final chunks (each with its own
+        // start_s/end_s) before UserStoppedSpeaking closes it out — same
+        // accumulate-then-flush shape as `buffer`. Only the first chunk's
+        // start and the last chunk's end matter for the turn's overall span.
+        let mut turn_start_s: Option<f64> = None;
+        let mut turn_end_s: Option<f64> = None;
         loop {
             tokio::select! {
                 frame = io.take() => {
@@ -95,6 +101,8 @@ impl FrameProcessor for SttStage {
                                 crate::frames::TranscriptionFrame {
                                     text: t.text.clone(),
                                     is_final: t.is_final,
+                                    start_s: t.start_s,
+                                    end_s: t.end_s,
                                 },
                             )))
                             .await
@@ -114,6 +122,12 @@ impl FrameProcessor for SttStage {
                     match &event {
                         SttEvent::Transcript(t) if t.is_final => {
                             buffer.push_str(&t.text);
+                            if turn_start_s.is_none() {
+                                turn_start_s = t.start_s;
+                            }
+                            if t.end_s.is_some() {
+                                turn_end_s = t.end_s;
+                            }
                         }
                         SttEvent::UserStoppedSpeaking => {
                             // The provider can send this more than once for
@@ -127,11 +141,20 @@ impl FrameProcessor for SttStage {
                             io.start_ttfb_metrics();
                             if !buffer.is_empty() {
                                 let text = std::mem::take(&mut buffer);
+                                let duration_ms = match (turn_start_s.take(), turn_end_s.take()) {
+                                    (Some(start), Some(end)) if end > start => {
+                                        Some(((end - start) * 1000.0).round() as i32)
+                                    }
+                                    _ => None,
+                                };
                                 tracing::info!(target: "ferry::transcript", text = %text);
                                 io.stop_ttfb_metrics().await;
                                 if !io
                                     .push(Frame::new(FrameKind::UserTurnAggregation(
-                                        crate::frames::UserTurnAggregationFrame { text },
+                                        crate::frames::UserTurnAggregationFrame {
+                                            text,
+                                            duration_ms,
+                                        },
                                     )))
                                     .await
                                 {

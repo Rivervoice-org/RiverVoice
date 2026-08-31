@@ -137,9 +137,14 @@ pub struct Model {
     /// INR micros, matching `crate::pricing::dollars_to_micros`.
     pub cost_micros: i64,
 
-    /// Written by the recording webhook, which can land minutes after the
-    /// call is already `Ended`.
+    /// The original recording — each party's own voice, unmodified. Written
+    /// once the call ends and the recorder has uploaded it; can land after
+    /// the row is already `Ended`.
     pub recording_url: Option<String>,
+    /// The translated recording — what this call's owner actually heard
+    /// live: their own voice, plus the TTS translation of the other party.
+    /// Same lifecycle as `recording_url`.
+    pub translated_recording_url: Option<String>,
     pub updated_at: DateTimeWithTimeZone,
 }
 

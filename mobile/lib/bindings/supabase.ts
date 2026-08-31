@@ -64,7 +64,9 @@ export type Database = {
           original_text: string
           seq: number
           speaker: Database["public"]["Enums"]["call_speaker"]
+          translated_duration_ms: number | null
           translated_language: Database["public"]["Enums"]["language"] | null
+          translated_offset_ms: number | null
           translated_text: string | null
         }
         Insert: {
@@ -77,7 +79,9 @@ export type Database = {
           original_text: string
           seq: number
           speaker: Database["public"]["Enums"]["call_speaker"]
+          translated_duration_ms?: number | null
           translated_language?: Database["public"]["Enums"]["language"] | null
+          translated_offset_ms?: number | null
           translated_text?: string | null
         }
         Update: {
@@ -90,7 +94,9 @@ export type Database = {
           original_text?: string
           seq?: number
           speaker?: Database["public"]["Enums"]["call_speaker"]
+          translated_duration_ms?: number | null
           translated_language?: Database["public"]["Enums"]["language"] | null
+          translated_offset_ms?: number | null
           translated_text?: string | null
         }
         Relationships: [
@@ -125,6 +131,7 @@ export type Database = {
           status: Database["public"]["Enums"]["call_status"]
           telephony_provider: string | null
           to_number: string
+          translated_recording_url: string | null
           updated_at: string
           user_id: string
         }
@@ -149,6 +156,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["call_status"]
           telephony_provider?: string | null
           to_number: string
+          translated_recording_url?: string | null
           updated_at?: string
           user_id: string
         }
@@ -173,6 +181,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["call_status"]
           telephony_provider?: string | null
           to_number?: string
+          translated_recording_url?: string | null
           updated_at?: string
           user_id?: string
         }

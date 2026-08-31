@@ -1,6 +1,5 @@
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -17,26 +16,20 @@ pub struct UserSession {
 
 /// What Supabase Auth (GoTrue) actually puts in an access token — `sub` is
 /// the `auth.users.id` UUID, `aud` is always `"authenticated"` for a real
-/// user session (as opposed to e.g. a service-role key), and the profile
-/// fields GoTrue copies in from the Google ID token at sign-in live under
-/// `user_metadata`, not as top-level claims.
+/// user session (as opposed to e.g. a service-role key). Profile fields
+/// (email, name) aren't read here anymore — the `public.users` row is
+/// provisioned straight from `auth.users` by a database trigger (see
+/// migration `m20260831_000002_auth_user_trigger`), not from this token.
 #[derive(Debug, Serialize, Deserialize)]
 struct SupabaseClaims {
     sub: String,
     aud: String,
     exp: usize,
-    email: Option<String>,
-    #[serde(default)]
-    user_metadata: Value,
 }
 
-/// Everything `require_user` needs to know about the caller beyond their
-/// id, to lazily provision a `users` row the first time it sees them —
-/// there is no ferry-side sign-up step anymore, GoTrue owns that entirely.
+/// Everything `require_user` needs to know about the caller.
 pub struct VerifiedUser {
     pub user_id: Uuid,
-    pub email: Option<String>,
-    pub name: Option<String>,
 }
 
 /// Verifies a Supabase-issued access token against the project's shared JWT
@@ -53,17 +46,6 @@ pub fn verify_access_token(token: &str, secret: &[u8]) -> Result<VerifiedUser, A
         .map_err(|_| AuthError::Invalid)?;
 
     let user_id = Uuid::parse_str(&data.claims.sub).map_err(|_| AuthError::Invalid)?;
-    let name = data
-        .claims
-        .user_metadata
-        .get("full_name")
-        .or_else(|| data.claims.user_metadata.get("name"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
 
-    Ok(VerifiedUser {
-        user_id,
-        email: data.claims.email,
-        name,
-    })
+    Ok(VerifiedUser { user_id })
 }

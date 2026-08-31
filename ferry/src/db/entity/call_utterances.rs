@@ -60,14 +60,25 @@ pub struct Model {
     pub translated_text: Option<String>,
     pub translated_language: Option<Language>,
 
-    /// Milliseconds from `calls.connected_at`. Relative, not absolute, because
-    /// it is used to scrub the transcript against the recording.
+    /// Milliseconds from `calls.connected_at`, into the *original* recording
+    /// (`calls.recording_url`) — each party's own voice. Relative, not
+    /// absolute, because it is used to scrub the transcript against the
+    /// recording.
     pub offset_ms: Option<i32>,
-    /// How long this turn runs. Needed to know when to *stop* playback when a
-    /// line is tapped; deriving the end from the next row's `offset_ms` would
-    /// swallow the silence between turns and break on overlapping speech.
-    /// Stays NULL until there is a recording to seek into.
+    /// How long this turn runs in the original recording. Needed to know
+    /// when to *stop* playback when a line is tapped; deriving the end from
+    /// the next row's `offset_ms` would swallow the silence between turns
+    /// and break on overlapping speech. Stays NULL until there is a
+    /// recording to seek into.
     pub duration_ms: Option<i32>,
+    /// Same idea as `offset_ms`, but into the *translated* recording
+    /// (`calls.translated_recording_url`) instead — the call owner's own
+    /// voice plus the TTS translation of the other party. Not the same
+    /// timeline as `offset_ms`: translation lags the original by however
+    /// long MT+TTS took, and rarely runs the same length.
+    pub translated_offset_ms: Option<i32>,
+    /// `duration_ms`'s counterpart for the translated recording.
+    pub translated_duration_ms: Option<i32>,
     pub created_at: DateTimeWithTimeZone,
 }
 

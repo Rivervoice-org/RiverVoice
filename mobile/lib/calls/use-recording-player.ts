@@ -1,0 +1,92 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createAudioPlayer, type AudioPlayer } from "expo-audio";
+import { RecordingVariant, type CallDetail } from "@/lib/calls/types";
+
+export { RecordingVariant };
+
+/**
+ * One shared player per screen that shows a recording — `screens/CallDetail`
+ * and `screens/Transcript` each own their own instance, released when that
+ * screen unmounts, rather than one player surviving navigation.
+ *
+ * Switching variant resets to 0 rather than trying to preserve position:
+ * the two recordings aren't the same length or the same content lined up
+ * sample-for-sample, so "keep the same position" wouldn't mean anything
+ * consistent across the switch anyway.
+ */
+export function useRecordingPlayer(call: CallDetail | undefined) {
+  const hasTranslated = !!call?.translatedRecordingUrl;
+  const [variant, setVariant] = useState<RecordingVariant>(
+    RecordingVariant.Original,
+  );
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [positionMs, setPositionMs] = useState(0);
+  const [durationMs, setDurationMs] = useState(0);
+  const playerRef = useRef<AudioPlayer | null>(null);
+
+  const url =
+    variant === RecordingVariant.Translated && hasTranslated
+      ? call?.translatedRecordingUrl
+      : call?.recordingUrl;
+
+  useEffect(() => {
+    playerRef.current?.release();
+    playerRef.current = null;
+    setIsPlaying(false);
+    setPositionMs(0);
+    setDurationMs(0);
+
+    if (!url) return;
+    const player = createAudioPlayer(url);
+    playerRef.current = player;
+    player.addListener("playbackStatusUpdate", (status) => {
+      setPositionMs(Math.round(status.currentTime * 1000));
+      setDurationMs(Math.round(status.duration * 1000));
+      if (status.didJustFinish) {
+        setIsPlaying(false);
+      }
+    });
+
+    return () => {
+      player.release();
+      if (playerRef.current === player) {
+        playerRef.current = null;
+      }
+    };
+  }, [url]);
+
+  const toggle = useCallback(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    if (player.playing) {
+      player.pause();
+      setIsPlaying(false);
+    } else {
+      player.play();
+      setIsPlaying(true);
+    }
+  }, []);
+
+  const seekToMs = useCallback((ms: number) => {
+    const player = playerRef.current;
+    if (!player) return;
+    void player.seekTo(ms / 1000);
+    setPositionMs(ms);
+    if (!player.playing) {
+      player.play();
+      setIsPlaying(true);
+    }
+  }, []);
+
+  return {
+    variant,
+    setVariant,
+    hasTranslated,
+    hasAudio: !!url,
+    isPlaying,
+    positionMs,
+    durationMs,
+    toggle,
+    seekToMs,
+  };
+}

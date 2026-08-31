@@ -122,6 +122,10 @@ pub fn build_translation_pipeline(
     let mut stt_config = SarvamSttConfig::new(None);
     stt_config.sample_rate = SAMPLE_RATE;
     stt_config.languages = vec![source_lang];
+    // Gives transcript.final its start_s/end_s — the only source for
+    // call_utterances.duration_ms, which the recording toggle needs to know
+    // when to stop playback on a tapped turn.
+    stt_config.return_timestamps = Some(true);
     let stt_provider: SarvamSttProvider =
         SarvamSttProvider::new(config.sarvam_stt_api_key.to_string(), stt_config);
 

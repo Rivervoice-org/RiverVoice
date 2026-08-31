@@ -1,19 +1,31 @@
-import { useState } from "react";
-import { ScrollView, View, Pressable } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  ScrollView,
+  View,
+  Pressable,
+  type LayoutChangeEvent,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { ChevronLeft, Languages } from "lucide-react-native";
+import { RecordingPlayer } from "@/components/RecordingPlayer";
 import { Rise } from "@/components/ui/rise";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
 import { useCallDetail } from "@/lib/calls/hooks";
+import { useRecordingPlayer } from "@/lib/calls/use-recording-player";
 import {
-  CallTranscript,
+  CallTranscriptBubble,
   type CallTranscriptLine,
 } from "@/components/call-transcript";
-import type { Utterance } from "@/lib/calls/types";
+import {
+  Speaker,
+  turnSpan,
+  type RecordingVariant,
+  type Utterance,
+} from "@/lib/calls/types";
 
 /**
  * A persisted utterance as the shared renderer wants it. `caller` is the app
@@ -21,14 +33,25 @@ import type { Utterance } from "@/lib/calls/types";
  * the other side heard; for `callee` those roles swap, which is what keeps
  * the whole thread in one language.
  */
-function toLine(line: Utterance): CallTranscriptLine {
-  const mine = line.speaker === "caller";
+function toLine(
+  line: Utterance,
+  variant: RecordingVariant,
+  activeSeq: number | null,
+  onLinePress: (seq: number, offsetMs: number) => void,
+): CallTranscriptLine {
+  const mine = line.speaker === Speaker.Caller;
+  const span = turnSpan(line, variant);
   return {
     key: String(line.seq),
     mine,
     text: mine ? line.originalText : (line.translatedText ?? line.originalText),
     spoken: mine ? line.translatedText : line.originalText,
     time: line.offsetMs === null ? null : formatOffset(line.offsetMs),
+    active: activeSeq === line.seq,
+    onPress:
+      span.offsetMs === null
+        ? undefined
+        : () => onLinePress(line.seq, span.offsetMs ?? 0),
   };
 }
 
@@ -45,6 +68,55 @@ export default function TranscriptScreen() {
   const params = useLocalSearchParams<{ id: string; name?: string }>();
   const { data: call, isLoading, isError, error } = useCallDetail(params.id);
   const [showOriginal, setShowOriginal] = useState(false);
+  const player = useRecordingPlayer(call);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const linePositions = useRef<Map<string, number>>(new Map());
+
+  // The utterance whose span in the currently-playing recording contains the
+  // current playback position — karaoke-style highlight, and what drives
+  // auto-scroll below.
+  const activeSeq = useMemo(() => {
+    if (!call || !player.isPlaying) return null;
+    for (const utterance of call.utterances) {
+      const span = turnSpan(utterance, player.variant);
+      if (span.offsetMs === null || span.durationMs === null) continue;
+      const start = span.offsetMs;
+      const end = span.offsetMs + span.durationMs;
+      if (player.positionMs >= start && player.positionMs < end) {
+        return utterance.seq;
+      }
+    }
+    return null;
+  }, [call, player.isPlaying, player.positionMs, player.variant]);
+
+  const handleLineLayout = useCallback(
+    (key: string) => (event: LayoutChangeEvent) => {
+      linePositions.current.set(key, event.nativeEvent.layout.y);
+    },
+    [],
+  );
+
+  useMemo(() => {
+    if (activeSeq === null) return;
+    const y = linePositions.current.get(String(activeSeq));
+    if (y === undefined) return;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+    // Runs as a side effect of activeSeq changing, not a value derivation —
+    // useMemo here is just "run this when activeSeq changes", not memoizing
+    // a return value (there isn't one).
+  }, [activeSeq]);
+
+  const handleLinePress = useCallback(
+    (_seq: number, offsetMs: number) => {
+      player.seekToMs(offsetMs);
+    },
+    [player],
+  );
+
+  const lines = call?.utterances.map((u) =>
+    toLine(u, player.variant, activeSeq, handleLinePress),
+  );
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
@@ -91,6 +163,20 @@ export default function TranscriptScreen() {
               {call.agentName ? `Handled by ${call.agentName}` : "Direct call"}
             </Text>
           </View>
+          {player.hasAudio ? (
+            <View className="px-5 pb-3">
+              <RecordingPlayer
+                hasAudio={player.hasAudio}
+                hasTranslated={player.hasTranslated}
+                variant={player.variant}
+                onVariantChange={player.setVariant}
+                isPlaying={player.isPlaying}
+                positionMs={player.positionMs}
+                durationMs={player.durationMs}
+                onToggle={player.toggle}
+              />
+            </View>
+          ) : null}
         </Rise>
       ) : null}
 
@@ -114,6 +200,7 @@ export default function TranscriptScreen() {
         </View>
       ) : (
         <ScrollView
+          ref={scrollRef}
           className="flex-1"
           contentContainerStyle={{
             paddingHorizontal: 16,
@@ -122,10 +209,13 @@ export default function TranscriptScreen() {
           }}
           showsVerticalScrollIndicator={false}
         >
-          <CallTranscript
-            lines={call.utterances.map(toLine)}
-            showSpoken={showOriginal}
-          />
+          <View className="gap-3">
+            {lines?.map((line) => (
+              <View key={line.key} onLayout={handleLineLayout(line.key)}>
+                <CallTranscriptBubble line={line} showSpoken={showOriginal} />
+              </View>
+            ))}
+          </View>
         </ScrollView>
       )}
     </SafeAreaView>
