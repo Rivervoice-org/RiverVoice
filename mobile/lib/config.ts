@@ -31,17 +31,24 @@ const envSchema = z.object({
 // matched and would silently stay undefined in a release build. That's
 // incompatible with this project's noPropertyAccessFromIndexSignature, so
 // each access is suppressed individually rather than disabling the rule
-// project-wide.
+// project-wide. Pulled into their own short consts (rather than inline in
+// the object below) so a `@ts-expect-error` line always stays directly
+// above the expression it's suppressing, even if prettier rewraps the
+// object literal.
+// @ts-expect-error -- dot notation required for Expo's env inlining
+const ferryUrl = process.env.EXPO_PUBLIC_FERRY_URL;
+// @ts-expect-error -- dot notation required for Expo's env inlining
+const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+// @ts-expect-error -- dot notation required for Expo's env inlining
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+// @ts-expect-error -- dot notation required for Expo's env inlining
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
 const parsed = envSchema.safeParse({
-  // @ts-expect-error -- dot notation required for Expo's env inlining
-  EXPO_PUBLIC_FERRY_URL: process.env.EXPO_PUBLIC_FERRY_URL,
-  // @ts-expect-error -- dot notation required for Expo's env inlining
-  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID:
-    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  // @ts-expect-error -- dot notation required for Expo's env inlining
-  EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
-  // @ts-expect-error -- dot notation required for Expo's env inlining
-  EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  EXPO_PUBLIC_FERRY_URL: ferryUrl,
+  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: googleWebClientId,
+  EXPO_PUBLIC_SUPABASE_URL: supabaseUrl,
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: supabaseAnonKey,
 });
 
 if (!parsed.success) {

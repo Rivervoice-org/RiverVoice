@@ -19,7 +19,8 @@ export default function AgentsScreen() {
   const { data: agents, isPending, isError } = useAgents();
 
   const filtered = (agents ?? []).filter(
-    (agent) => !search || agent.name.toLowerCase().includes(search.toLowerCase()),
+    (agent) =>
+      !search || agent.name.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
@@ -44,7 +45,11 @@ export default function AgentsScreen() {
       {/* Search */}
       <Rise index={1}>
         <View className="px-5 pt-2 pb-2">
-          <SearchInput value={search} onChangeText={setSearch} placeholder="Find an agent" />
+          <SearchInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Find an agent"
+          />
         </View>
       </Rise>
 
@@ -72,9 +77,7 @@ export default function AgentsScreen() {
         ) : filtered.length === 0 ? (
           <Rise index={2}>
             <View className="items-center py-16">
-              <View className="h-12 w-12 items-center justify-center rounded-full bg-border">
-                <Bot size={22} strokeWidth={1.75} color={colors.faint} />
-              </View>
+              <Mascot size={48} />
               <Text variant="muted" className="mt-3 text-sm">
                 {search ? "No agent matches your search" : "No agents yet"}
               </Text>
@@ -86,11 +89,21 @@ export default function AgentsScreen() {
               {filtered.map((agent, index) => (
                 <Rise key={agent.id} delay={rowDelay(2, index)}>
                   <CallRow
-                    avatar={<Mascot ref={agent.mascot ?? undefined} seed={agent.name} size={32} />}
+                    avatar={
+                      <Mascot
+                        ref={agent.mascot ?? undefined}
+                        seed={agent.name}
+                        size={32}
+                      />
+                    }
                     title={agent.name}
                     subtitle={`${agent.inputLanguage.toUpperCase()} → ${agent.outputLanguage.toUpperCase()}`}
                     trailing={
-                      <ChevronRight size={16} strokeWidth={1.75} color={colors.muted} />
+                      <ChevronRight
+                        size={16}
+                        strokeWidth={1.75}
+                        color={colors.muted}
+                      />
                     }
                     showDivider={index !== filtered.length - 1}
                     onPress={() =>

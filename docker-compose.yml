@@ -29,6 +29,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # DNS for googleapis.com returns AAAA records, and this container's
+    # network can send IPv6 packets out but never gets a reply (blackholed,
+    # not rejected) — GoTrue's Go HTTP client hangs on that address until
+    # its own ~10s context deadline kills the request (504 request_timeout
+    # on the id_token grant), even though the IPv4 path works instantly.
+    # Disabling IPv6 here means Go only ever sees the working A records.
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
     environment:
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: 9999
