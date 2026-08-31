@@ -1,0 +1,59 @@
+_format_version: "2.1"
+
+# The apikey Kong checks on rest/storage is the ANON_KEY or SERVICE_ROLE_KEY
+# from .env — clients send it as `apikey: <key>`, same as Supabase Cloud.
+# Kong's declarative config does not do variable substitution on its own,
+# so this file is a template: the kong service in docker-compose.yml
+# expands the two $ANON_KEY / $SERVICE_ROLE_KEY placeholders below from its
+# own env (sourced from .env, gitignored) via a bash `eval echo` entrypoint
+# before Kong reads it — nothing real is committed here. That entrypoint
+# shell-expands this whole file, so nothing else in it may contain a
+# literal dollar sign.
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: $ANON_KEY
+  - username: service_role
+    keyauth_credentials:
+      - key: $SERVICE_ROLE_KEY
+
+acls:
+  - consumer: anon
+    group: anon
+  - consumer: service_role
+    group: admin
+
+services:
+  - name: auth-v1
+    url: http://auth:9999/
+    routes:
+      - name: auth-v1-all
+        strip_path: true
+        paths:
+          - /auth/v1/
+
+  - name: rest-v1
+    url: http://rest:3000/
+    routes:
+      - name: rest-v1-all
+        strip_path: true
+        paths:
+          - /rest/v1/
+    plugins:
+      - name: key-auth
+        config:
+          key_names: ["apikey"]
+          hide_credentials: true
+
+  - name: storage-v1
+    url: http://storage:5000/
+    routes:
+      - name: storage-v1-all
+        strip_path: true
+        paths:
+          - /storage/v1/
+    plugins:
+      - name: key-auth
+        config:
+          key_names: ["apikey"]
+          hide_credentials: true

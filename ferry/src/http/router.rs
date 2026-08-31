@@ -54,12 +54,16 @@ fn http_routes() -> Router<AppState> {
     Router::new().route("/health", get(axum::Json("OK")))
 }
 
+// Plain CRUD on `agents`/`users`, and read-only access to `calls`, all went
+// direct client-to-PostgREST (RLS-scoped to the caller) instead of routing
+// through ferry — see docker-compose.yml's `rest`/`kong` services. What's
+// left here is only what PostgREST's row-level API can't express (the
+// join+aggregate in get_recent_agents) or that needs real server-side
+// orchestration (starting a call, the try-agent demo, TTS preview).
 fn protected_call_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/try-agent/offer", post(handlers::try_agent_offer))
         .route("/v1/call/start", post(handlers::start_call))
-        .route("/v1/calls", get(handlers::get_recent_calls))
-        .route("/v1/calls/{id}", get(handlers::get_call_detail))
         .route_layer(middleware::from_fn(require_user))
 }
 
@@ -69,27 +73,9 @@ fn twilio_routes() -> Router<AppState> {
         .route("/v1/twilio/status/{call_id}", post(handlers::twilio_status))
 }
 
-fn protected_user_routes() -> Router<AppState> {
-    Router::new()
-        .route("/v1/users/me", get(handlers::get_me))
-        .route_layer(middleware::from_fn(require_user))
-}
-
 fn agent_routes() -> Router<AppState> {
     Router::new()
-        .route(
-            "/v1/agents",
-            post(handlers::create_agent).get(handlers::get_agents),
-        )
-        // Ahead of `/v1/agents/{id}` so the literal segment wins the match
-        // rather than being read as an agent id.
         .route("/v1/agents/recent", get(handlers::get_recent_agents))
-        .route(
-            "/v1/agents/{id}",
-            get(handlers::get_agent)
-                .patch(handlers::update_agent)
-                .delete(handlers::delete_agent),
-        )
         .route_layer(middleware::from_fn(require_user))
 }
 
@@ -97,13 +83,6 @@ fn voice_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/voices/preview", post(handlers::preview_voice))
         .route_layer(middleware::from_fn(require_user))
-}
-
-fn auth_routes() -> Router<AppState> {
-    Router::new()
-        .route("/v1/auth/google", post(handlers::google_sign_in))
-        .route("/v1/auth/refresh", post(handlers::refresh))
-        .route("/v1/auth/signout", post(handlers::sign_out))
 }
 
 pub async fn start_server() -> anyhow::Result<()> {
@@ -121,8 +100,6 @@ pub async fn start_server() -> anyhow::Result<()> {
     let router = http_routes()
         .merge(protected_call_routes())
         .merge(twilio_routes())
-        .merge(protected_user_routes())
-        .merge(auth_routes())
         .merge(agent_routes())
         .merge(voice_routes())
         .layer(TraceLayer::new_for_http())

@@ -11,6 +11,7 @@
   "dependencies": {
     "@config-plugins/react-native-webrtc": "^13.0.0",
     "@gorhom/bottom-sheet": "^5.2.14",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-google-signin/google-signin": "^13.2.0",
     "@rn-primitives/avatar": "^1.5.2",
     "@rn-primitives/checkbox": "^1.5.2",
@@ -27,6 +28,7 @@
     "@rn-primitives/tabs": "^1.5.2",
     "@rn-primitives/toast": "^1.5.2",
     "@rn-primitives/tooltip": "^1.5.2",
+    "@supabase/supabase-js": "^2.109.0",
     "@tanstack/react-form": "^1.33.3",
     "@tanstack/react-query": "^5.101.4",
     "class-variance-authority": "^0.7.1",
@@ -55,6 +57,7 @@
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "^15.12.1",
+    "react-native-url-polyfill": "^4.0.0",
     "react-native-webrtc": "^124.0.8",
     "react-native-worklets": "^0.5.1",
     "tailwind-merge": "^2.6.0",

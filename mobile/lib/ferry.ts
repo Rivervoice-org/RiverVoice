@@ -6,16 +6,11 @@
  */
 
 import type { ApiResponse } from "@/lib/api-types";
-import { authHeader, clearTokens, getRefreshToken, saveTokens } from "@/lib/auth/tokens";
+import { authHeader } from "@/lib/auth/tokens";
 import { config } from "@/lib/config";
+import { supabase } from "@/lib/supabase";
 
 const REQUEST_TIMEOUT_MS = 15_000;
-const MAX_AUTH_RETRIES = 3;
-const AUTH_RETRY_BASE_DELAY_MS = 300;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export class FerryApiError extends Error {
   /** The response's HTTP status, or undefined for a network/timeout failure. */
@@ -28,10 +23,6 @@ export class FerryApiError extends Error {
 }
 
 class FerryClient {
-  /** Dedupes concurrent refreshes — two 401s at once should trigger one
-   * refresh call, with the second request just waiting on the first. */
-  private refreshPromise: Promise<void> | null = null;
-
   baseUrl(): string {
     return config.ferryUrl;
   }
@@ -74,88 +65,37 @@ class FerryClient {
     return parsed.data;
   }
 
-  /** Exchanges the stored refresh token for a new access + refresh pair. */
-  private async refreshTokens(): Promise<void> {
-    const refreshToken = await getRefreshToken();
-    if (!refreshToken) {
-      await clearTokens();
-      throw new FerryApiError("Not signed in", 401);
-    }
-
-    try {
-      const result = await this.rawRequest<{ accessToken: string; refreshToken: string }>(
-        "/v1/auth/refresh",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken: refreshToken }),
-        },
-      );
-      // Something else (sign-out) may have cleared the session while this
-      // refresh was in flight — if the refresh token on disk no longer
-      // matches the one this call started with, don't resurrect the
-      // session by writing the new pair back over a deliberate clear.
-      if ((await getRefreshToken()) !== refreshToken) {
-        return;
-      }
-      await saveTokens(result);
-    } catch (err) {
-      // Only a definitive 401 from ferry means the refresh token itself is
-      // invalid/expired/revoked — clear it then, since nothing left to try.
-      // A network error, timeout, or 5xx is transient: the token on disk
-      // might still be perfectly valid, so don't wipe it out from under a
-      // user who just has flaky connectivity on a cold start.
-      if (err instanceof FerryApiError && err.status === 401) {
-        await clearTokens();
-      }
-      throw err;
-    }
-  }
-
-  private ensureRefreshed(): Promise<void> {
-    if (!this.refreshPromise) {
-      this.refreshPromise = this.refreshTokens().finally(() => {
-        this.refreshPromise = null;
-      });
-    }
-    return this.refreshPromise;
-  }
-
-  /**
-   * Forces a token refresh — used on app launch to confirm a stored
-   * refresh token is still valid (and get a fresh access token) before
-   * restoring the session, rather than waiting for the first protected
-   * request to 401.
-   */
-  refreshSession(): Promise<void> {
-    return this.ensureRefreshed();
-  }
-
   /**
    * Runs a request; on a 401 from a request that actually carried an
-   * Authorization header (i.e. a protected route, not signup/login
-   * themselves), refreshes the token pair and retries, up to
-   * MAX_AUTH_RETRIES times with exponential backoff between attempts.
-   * Any other failure — a non-401, or the refresh itself failing —
-   * propagates immediately without waiting out the remaining attempts.
+   * Authorization header (i.e. a protected route, not a public one),
+   * forces Supabase to check/refresh the session once and retries with
+   * whatever token comes out of that. Supabase's client already refreshes
+   * proactively before expiry (see lib/supabase.ts's autoRefreshToken), so
+   * a 401 here should only ever be the rare in-flight-at-expiry race — not
+   * something that needs the repeated-backoff retries the old ferry-issued
+   * refresh token required.
    */
   private async request<T>(path: string, init: RequestInit): Promise<T> {
-    const isAuthed = (init.headers as Record<string, string> | undefined)?.["Authorization"] !== undefined;
-    let currentInit = init;
+    const isAuthed =
+      (init.headers as Record<string, string> | undefined)?.[
+        "Authorization"
+      ] !== undefined;
 
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await this.rawRequest<T>(path, currentInit);
-      } catch (err) {
-        const canRetry = isAuthed && attempt < MAX_AUTH_RETRIES && err instanceof FerryApiError && err.status === 401;
-        if (!canRetry) {
-          throw err;
-        }
-
-        await sleep(AUTH_RETRY_BASE_DELAY_MS * 2 ** attempt);
-        await this.ensureRefreshed();
-        currentInit = { ...currentInit, headers: { ...currentInit.headers, ...authHeader() } };
+    try {
+      return await this.rawRequest<T>(path, init);
+    } catch (err) {
+      const canRetry =
+        isAuthed && err instanceof FerryApiError && err.status === 401;
+      if (!canRetry) {
+        throw err;
       }
+
+      await supabase.auth.getSession();
+      const retryInit = {
+        ...init,
+        headers: { ...init.headers, ...authHeader() },
+      };
+      return this.rawRequest<T>(path, retryInit);
     }
   }
 
@@ -164,11 +104,18 @@ class FerryClient {
     // `RequestInit.headers` (a DOM type) rejects an explicit `undefined`
     // under `exactOptionalPropertyTypes` — omit the key entirely rather
     // than set it to a possibly-undefined value.
-    return this.request<T>(path, { method: "GET", ...(headers ? { headers } : {}) });
+    return this.request<T>(path, {
+      method: "GET",
+      ...(headers ? { headers } : {}),
+    });
   }
 
   /** POSTs JSON to a ferry route and unwraps ferry's `{ data, error }` envelope. */
-  post<T>(path: string, body: unknown, headers?: Record<string, string>): Promise<T> {
+  post<T>(
+    path: string,
+    body: unknown,
+    headers?: Record<string, string>,
+  ): Promise<T> {
     return this.request<T>(path, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
@@ -177,7 +124,11 @@ class FerryClient {
   }
 
   /** PATCHes JSON to a ferry route and unwraps ferry's `{ data, error }` envelope. */
-  patch<T>(path: string, body: unknown, headers?: Record<string, string>): Promise<T> {
+  patch<T>(
+    path: string,
+    body: unknown,
+    headers?: Record<string, string>,
+  ): Promise<T> {
     return this.request<T>(path, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...headers },
@@ -187,7 +138,10 @@ class FerryClient {
 
   /** DELETEs a ferry route and unwraps ferry's `{ data, error }` envelope. */
   delete<T>(path: string, headers?: Record<string, string>): Promise<T> {
-    return this.request<T>(path, { method: "DELETE", ...(headers ? { headers } : {}) });
+    return this.request<T>(path, {
+      method: "DELETE",
+      ...(headers ? { headers } : {}),
+    });
   }
 }
 

@@ -13,6 +13,17 @@ const envSchema = z.object({
   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: z
     .string()
     .min(1, "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is not set"),
+  // Kong's gateway address, not any individual Supabase service directly —
+  // same tunnel/LAN-IP pattern as EXPO_PUBLIC_FERRY_URL.
+  EXPO_PUBLIC_SUPABASE_URL: z
+    .string()
+    .url()
+    .min(1, "EXPO_PUBLIC_SUPABASE_URL is not set"),
+  // The anon key, safe to ship in the client — RLS is what actually
+  // restricts what it can do, not secrecy of this value.
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: z
+    .string()
+    .min(1, "EXPO_PUBLIC_SUPABASE_ANON_KEY is not set"),
 });
 
 // Expo's env-var inlining only statically replaces literal dot-notation
@@ -25,7 +36,12 @@ const parsed = envSchema.safeParse({
   // @ts-expect-error -- dot notation required for Expo's env inlining
   EXPO_PUBLIC_FERRY_URL: process.env.EXPO_PUBLIC_FERRY_URL,
   // @ts-expect-error -- dot notation required for Expo's env inlining
-  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID:
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  // @ts-expect-error -- dot notation required for Expo's env inlining
+  EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
+  // @ts-expect-error -- dot notation required for Expo's env inlining
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
 });
 
 if (!parsed.success) {
@@ -35,4 +51,6 @@ if (!parsed.success) {
 export const config = {
   ferryUrl: parsed.data.EXPO_PUBLIC_FERRY_URL,
   googleWebClientId: parsed.data.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  supabaseUrl: parsed.data.EXPO_PUBLIC_SUPABASE_URL,
+  supabaseAnonKey: parsed.data.EXPO_PUBLIC_SUPABASE_ANON_KEY,
 };
