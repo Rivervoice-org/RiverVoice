@@ -10,7 +10,6 @@
     "plugins": [
       "expo-router",
       "expo-dev-client",
-
       [
         "@config-plugins/react-native-webrtc",
         {
@@ -28,8 +27,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#E6F4FE"
         }
-      ],
-      "expo-asset"
+      ]
     ],
     "ios": {
       "supportsTablet": true,
