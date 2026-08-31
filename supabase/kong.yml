@@ -5,10 +5,12 @@ _format_version: "2.1"
 # Kong's declarative config does not do variable substitution on its own,
 # so this file is a template: the kong service in docker-compose.yml
 # expands the two $ANON_KEY / $SERVICE_ROLE_KEY placeholders below from its
-# own env (sourced from .env, gitignored) via a bash `eval echo` entrypoint
-# before Kong reads it — nothing real is committed here. That entrypoint
-# shell-expands this whole file, so nothing else in it may contain a
-# literal dollar sign.
+# own env (sourced from .env, gitignored) via a sed substitution in its
+# entrypoint before Kong reads it — nothing real is committed here. Those
+# env values are self-signed JWTs for this project's own local self-hosted
+# stack (see docker-compose.yml's db/auth/rest services), not Supabase
+# Cloud credentials — there's no external service these could authenticate
+# against even if leaked.
 consumers:
   - username: anon
     keyauth_credentials:
