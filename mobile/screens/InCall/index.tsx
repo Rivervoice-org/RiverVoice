@@ -7,7 +7,7 @@ import {
   useState,
   type ComponentRef,
 } from "react";
-import { View, Pressable } from "react-native";
+import { View, Pressable, BackHandler } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -40,6 +40,9 @@ import { AUDIO_ROUTE_ICONS, AUDIO_ROUTE_LABELS } from "@/lib/audio-route";
 import { LiveSpeaker, useFerryCall } from "@/hooks/use-ferry-call";
 import { recentCallsQueryKey } from "@/lib/calls/hooks";
 import { recentAgentsQueryKey } from "@/lib/agents/hooks";
+import { minimize } from "@kangfenmao/react-native-minimizer";
+import notifee, { AndroidImportance } from "@notifee/react-native";
+// import * as Notifications from "expo-notifications";
 
 const CallStatusLine = memo(function CallStatusLine({
   status,
@@ -309,6 +312,57 @@ export default function InCallScreen() {
     ),
     [],
   );
+
+  useEffect(() => {
+    const handleBack = () => {
+      console.log("Back button clicked");
+      handleNotification().then(()=>minimize()).catch((error) => {
+        console.error("Notification error:", error);
+      });
+
+
+
+      return true;
+    };
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      handleBack,
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  async function handleNotification() {
+    try {
+      await notifee.requestPermission();
+
+      const channelId = await notifee.createChannel({
+        id: "running-state",
+        name: "Call In Progress",
+        importance: AndroidImportance.LOW,
+      });
+
+      console.log("Channel created:", channelId);
+
+      await notifee.displayNotification({
+        id: "call-notification",
+        title: "There is an Ongoing Call",
+        body: "Tap to Return to the App",
+        android: {
+          channelId,
+          ongoing: true,
+          asForegroundService: true,
+        },
+      });
+
+      console.log("Notification displayed");
+    } catch (error) {
+      console.error("Failed to display notification:", error);
+    }
+  }
 
   return (
     <View className="flex-1 bg-canvas">
