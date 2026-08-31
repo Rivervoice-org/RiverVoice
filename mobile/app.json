@@ -10,8 +10,7 @@
     "plugins": [
       "expo-router",
       "expo-dev-client",
-      "@kangfenmao/react-native-minimizer",
-    "@notifee/react-native",
+
       [
         "@config-plugins/react-native-webrtc",
         {
