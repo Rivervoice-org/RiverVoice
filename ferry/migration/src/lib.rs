@@ -14,6 +14,7 @@ mod m20260831_000002_auth_user_trigger;
 mod m20260831_000003_enable_rls;
 mod m20260901_000001_recording_storage_rls;
 mod m20260901_000002_rename_recording_columns;
+mod m20260901_000003_backfill_users;
 
 pub struct Migrator;
 
@@ -35,6 +36,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260831_000003_enable_rls::Migration),
             Box::new(m20260901_000001_recording_storage_rls::Migration),
             Box::new(m20260901_000002_rename_recording_columns::Migration),
+            Box::new(m20260901_000003_backfill_users::Migration),
         ]
     }
 }

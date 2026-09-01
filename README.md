@@ -219,7 +219,7 @@ frame, in real time — for a WebRTC connection, a Twilio phone call, or both at
 once, bridged. Also owns a thin slice of persistence: call records, and the
 `users` row created lazily on a caller's first authenticated request.
 
-```
+```text
 ferry/src/
   main.rs
   config.rs           env vars — DB, JWT secret, API keys, PUBLIC_BASE_URL, WEBRTC_BIND_IP
