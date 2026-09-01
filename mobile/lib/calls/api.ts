@@ -134,8 +134,8 @@ type CallDetailRow = Pick<
   | "ended_at"
   | "billable_seconds"
   | "cost_micros"
-  | "recording_url"
-  | "translated_recording_url"
+  | "recording_path"
+  | "translated_recording_path"
 > & { call_utterances: UtteranceRow[] };
 
 function fromUtteranceRow(row: UtteranceRow): Utterance {
@@ -167,7 +167,7 @@ export async function getCallDetail(id: string): Promise<CallDetail> {
     .select(
       `id, direction, from_number, to_number, agent_id, agent_name, input_language, output_language,
        status, end_reason, error, created_at, ringing_at, connected_at, ended_at, billable_seconds,
-       cost_micros, recording_url, translated_recording_url,
+       cost_micros, recording_path, translated_recording_path,
        call_utterances (seq, speaker, original_text, original_language, translated_text, translated_language, offset_ms, duration_ms, translated_offset_ms, translated_duration_ms)`,
     )
     .eq("id", id)
@@ -194,8 +194,8 @@ export async function getCallDetail(id: string): Promise<CallDetail> {
     endedAt: row.ended_at,
     billableSeconds: row.billable_seconds,
     costMicros: row.cost_micros,
-    recordingUrl: row.recording_url,
-    translatedRecordingUrl: row.translated_recording_url,
+    recordingPath: row.recording_path,
+    translatedRecordingPath: row.translated_recording_path,
     // Sorted here rather than relying on PostgREST's embedded-resource
     // ordering syntax, so correctness doesn't hinge on getting that
     // exactly right — seq is the conversation's real order regardless of

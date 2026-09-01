@@ -21,8 +21,8 @@ pub struct Config {
     pub twilio_from_number: String,
     pub public_base_url: String,
     pub webrtc_bind_ip: String,
-    /// Kong's own address — the same gateway mobile clients reach Supabase
-    /// through, not a direct link to any one service behind it.
+    /// Kong's own address, as ferry itself reaches it — used for every
+    /// request ferry makes to Supabase (Storage uploads, sign requests).
     pub supabase_url: String,
     /// Bypasses RLS entirely, same trust level as ferry's direct Postgres
     /// connection — used only for the server-side recording upload, never

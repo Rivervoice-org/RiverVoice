@@ -1,21 +1,20 @@
 use std::time::Duration;
 
-use serde::Deserialize;
-
 /// A slow upload (a long call's recording, tens of MB) shouldn't hang
 /// forever — same reasoning as `services::twilio::client::TwilioClient`.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// A signed URL this long-lived effectively never expires for a call
-/// recording's practical lifetime, without needing a re-signing flow on the
-/// mobile client. ~10 years.
-const SIGNED_URL_EXPIRY_SECS: u64 = 315_360_000;
 
 /// Talks to Supabase Storage through Kong, the same gateway every other
 /// Supabase service in this stack goes through (see docker-compose.yml) —
 /// not a direct connection to the storage container. Uses the service-role
 /// key, same trust level as ferry's direct Postgres connection: this is
 /// server-side only, never forwarded to a client.
+///
+/// Upload-only: recordings are read back through Storage's `authenticated`
+/// download route, straight from the mobile client with its own session
+/// JWT (checked by the `recordings_owner_select` RLS policy on every
+/// request — see `m20260901_000001_recording_storage_rls`), not through a
+/// signed URL minted here.
 pub struct SupabaseStorageClient {
     http: reqwest::Client,
     base_url: String,
@@ -32,12 +31,6 @@ impl std::fmt::Display for StorageError {
 }
 
 impl std::error::Error for StorageError {}
-
-#[derive(Deserialize)]
-struct SignedUrlResponse {
-    #[serde(rename = "signedURL")]
-    signed_url: String,
-}
 
 impl SupabaseStorageClient {
     pub fn new(base_url: String, service_role_key: String) -> Self {
@@ -82,38 +75,5 @@ impl SupabaseStorageClient {
             return Err(StorageError(format!("upload failed: {status}: {body}")));
         }
         Ok(())
-    }
-
-    /// A signed URL is required rather than a bare object path: the
-    /// `recordings` bucket is private (call audio is not something any
-    /// anon-keyed client should be able to fetch by guessing a path), and
-    /// there is no per-request signing step on the mobile client to lean on
-    /// instead — RLS covers Postgres rows, not Storage objects.
-    pub async fn sign_url(&self, bucket: &str, path: &str) -> Result<String, StorageError> {
-        let url = format!("{}/storage/v1/object/sign/{bucket}/{path}", self.base_url);
-        let response = self
-            .http
-            .post(url)
-            .header("apikey", &self.service_role_key)
-            .header("Authorization", format!("Bearer {}", self.service_role_key))
-            .json(&serde_json::json!({ "expiresIn": SIGNED_URL_EXPIRY_SECS }))
-            .send()
-            .await
-            .map_err(|e| StorageError(format!("sign request failed: {e}")))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(StorageError(format!("sign failed: {status}: {body}")));
-        }
-
-        let parsed: SignedUrlResponse = response
-            .json()
-            .await
-            .map_err(|e| StorageError(format!("sign response parse failed: {e}")))?;
-
-        // signedURL comes back as a path relative to /storage/v1
-        // ("/object/sign/bucket/path?token=..."), not a full URL.
-        Ok(format!("{}/storage/v1{}", self.base_url, parsed.signed_url))
     }
 }

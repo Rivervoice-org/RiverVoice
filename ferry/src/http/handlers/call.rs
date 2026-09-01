@@ -178,7 +178,10 @@ pub async fn start_call(
         Some(&agent),
         false,
         call_span(call_id, "a2b"),
-        vec![a2b_recorder as Arc<dyn FrameObserver>, a2b_turn_latency],
+        vec![
+            a2b_recorder.clone() as Arc<dyn FrameObserver>,
+            a2b_turn_latency,
+        ],
     )
     .into_parts();
     let (b2a_exit, b2a_entrance) = build_translation_pipeline(
@@ -186,7 +189,10 @@ pub async fn start_call(
         Some(&agent),
         true,
         call_span(call_id, "b2a"),
-        vec![b2a_recorder as Arc<dyn FrameObserver>, b2a_turn_latency],
+        vec![
+            b2a_recorder.clone() as Arc<dyn FrameObserver>,
+            b2a_turn_latency,
+        ],
     )
     .into_parts();
 
@@ -194,10 +200,27 @@ pub async fn start_call(
     // (b2a_exit) and pushes A's mic input into A's own pipeline's entrance
     // (a2b_entrance) — the cross-wiring is entirely in which halves get
     // paired up here, nothing "in flight" needs to move between them later.
-    let a_transport_io = FrameIo::new(Stage::CallA, b2a_exit, a2b_entrance, observers().into());
+    //
+    // `a2b_recorder`/`b2a_recorder` are attached here too, not just inside
+    // build_translation_pipeline above: a caller's raw mic audio is pushed
+    // at *this* transport<->pipeline boundary (Stage::CallA/CallB), never
+    // inside the inner STT/MT/TTS chain those pipelines wrap — so this is
+    // the only place `CallRecordObserver::on_push` ever actually sees a
+    // `RawAudio` frame.
+    let a_transport_io = FrameIo::new(
+        Stage::CallA,
+        b2a_exit,
+        a2b_entrance,
+        observers(a2b_recorder.clone()).into(),
+    );
     // B's transport is the mirror: reads pipeline_a2b's output (a2b_exit),
     // pushes B's mic input into pipeline_b2a's entrance (b2a_entrance).
-    let b_transport_io = FrameIo::new(Stage::CallB, a2b_exit, b2a_entrance, observers().into());
+    let b_transport_io = FrameIo::new(
+        Stage::CallB,
+        a2b_exit,
+        b2a_entrance,
+        observers(b2a_recorder.clone()).into(),
+    );
 
     let handle = app.call_registry.register(call_id, b_transport_io);
 
@@ -309,8 +332,8 @@ fn spawn_twilio_dial(
     );
 }
 
-fn observers() -> Vec<Arc<dyn FrameObserver>> {
-    vec![Arc::new(LogObserver)]
+fn observers(recorder: Arc<dyn FrameObserver>) -> Vec<Arc<dyn FrameObserver>> {
+    vec![Arc::new(LogObserver), recorder]
 }
 
 /// The one place a `calls` row is created. Everything after this is an UPDATE

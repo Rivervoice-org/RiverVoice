@@ -12,6 +12,8 @@ mod m20260831_000000_supabase_auth;
 mod m20260831_000001_recording_timing;
 mod m20260831_000002_auth_user_trigger;
 mod m20260831_000003_enable_rls;
+mod m20260901_000001_recording_storage_rls;
+mod m20260901_000002_rename_recording_columns;
 
 pub struct Migrator;
 
@@ -31,6 +33,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20260831_000001_recording_timing::Migration),
             Box::new(m20260831_000002_auth_user_trigger::Migration),
             Box::new(m20260831_000003_enable_rls::Migration),
+            Box::new(m20260901_000001_recording_storage_rls::Migration),
+            Box::new(m20260901_000002_rename_recording_columns::Migration),
         ]
     }
 }

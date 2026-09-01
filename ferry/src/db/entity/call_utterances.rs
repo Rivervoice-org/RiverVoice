@@ -61,7 +61,7 @@ pub struct Model {
     pub translated_language: Option<Language>,
 
     /// Milliseconds from `calls.connected_at`, into the *original* recording
-    /// (`calls.recording_url`) — each party's own voice. Relative, not
+    /// (`calls.recording_path`) — each party's own voice. Relative, not
     /// absolute, because it is used to scrub the transcript against the
     /// recording.
     pub offset_ms: Option<i32>,
@@ -72,7 +72,7 @@ pub struct Model {
     /// recording to seek into.
     pub duration_ms: Option<i32>,
     /// Same idea as `offset_ms`, but into the *translated* recording
-    /// (`calls.translated_recording_url`) instead — the call owner's own
+    /// (`calls.translated_recording_path`) instead — the call owner's own
     /// voice plus the TTS translation of the other party. Not the same
     /// timeline as `offset_ms`: translation lags the original by however
     /// long MT+TTS took, and rarely runs the same length.

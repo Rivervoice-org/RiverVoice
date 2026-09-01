@@ -43,12 +43,12 @@ export interface Utterance {
   originalLanguage: CallUtteranceRow["original_language"];
   translatedText: CallUtteranceRow["translated_text"];
   translatedLanguage: CallUtteranceRow["translated_language"];
-  /** This turn's span in the *original* recording (`CallDetail.recordingUrl`) —
+  /** This turn's span in the *original* recording (`CallDetail.recordingPath`) —
    * each party's own voice. */
   offsetMs: CallUtteranceRow["offset_ms"];
   durationMs: CallUtteranceRow["duration_ms"];
   /** This turn's span in the *translated* recording
-   * (`CallDetail.translatedRecordingUrl`) instead — only ever set on the
+   * (`CallDetail.translatedRecordingPath`) instead — only ever set on the
    * other party's turns, since the call owner's own turns sit in that same
    * recording at `offsetMs`/`durationMs`, unmodified. */
   translatedOffsetMs: CallUtteranceRow["translated_offset_ms"];
@@ -74,12 +74,15 @@ export interface CallDetail {
   endedAt: CallRow["ended_at"];
   billableSeconds: CallRow["billable_seconds"];
   costMicros: CallRow["cost_micros"];
-  /** Each party's own voice, unmodified — null until the call has ended
-   * and the recording finished uploading. */
-  recordingUrl: CallRow["recording_url"];
+  /** Bucket-relative object path (`{call_id}/original.wav`), not a playable
+   * URL — build one with `recordingSource()`, which attaches the caller's
+   * own session JWT so Storage can re-check ownership on every request
+   * instead of trusting a standing signed link. Null until the call has
+   * ended and the recording finished uploading. */
+  recordingPath: CallRow["recording_path"];
   /** What this call's owner actually heard live: their own voice, plus the
-   * TTS translation of the other party. Same lifecycle as `recordingUrl`. */
-  translatedRecordingUrl: CallRow["translated_recording_url"];
+   * TTS translation of the other party. Same lifecycle as `recordingPath`. */
+  translatedRecordingPath: CallRow["translated_recording_path"];
   utterances: Utterance[];
 }
 

@@ -126,12 +126,12 @@ export type Database = {
           input_language: Database["public"]["Enums"]["language"] | null
           output_language: Database["public"]["Enums"]["language"] | null
           provider_call_ref: string | null
-          recording_url: string | null
+          recording_path: string | null
           ringing_at: string | null
           status: Database["public"]["Enums"]["call_status"]
           telephony_provider: string | null
           to_number: string
-          translated_recording_url: string | null
+          translated_recording_path: string | null
           updated_at: string
           user_id: string
         }
@@ -151,12 +151,12 @@ export type Database = {
           input_language?: Database["public"]["Enums"]["language"] | null
           output_language?: Database["public"]["Enums"]["language"] | null
           provider_call_ref?: string | null
-          recording_url?: string | null
+          recording_path?: string | null
           ringing_at?: string | null
           status?: Database["public"]["Enums"]["call_status"]
           telephony_provider?: string | null
           to_number: string
-          translated_recording_url?: string | null
+          translated_recording_path?: string | null
           updated_at?: string
           user_id: string
         }
@@ -176,12 +176,12 @@ export type Database = {
           input_language?: Database["public"]["Enums"]["language"] | null
           output_language?: Database["public"]["Enums"]["language"] | null
           provider_call_ref?: string | null
-          recording_url?: string | null
+          recording_path?: string | null
           ringing_at?: string | null
           status?: Database["public"]["Enums"]["call_status"]
           telephony_provider?: string | null
           to_number?: string
-          translated_recording_url?: string | null
+          translated_recording_path?: string | null
           updated_at?: string
           user_id?: string
         }

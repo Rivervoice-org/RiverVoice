@@ -253,10 +253,14 @@ impl FrameObserver for CallRecordObserver {
                     text: mt.text.clone(),
                 });
             }
-            // This pipeline's own raw mic input — every RawAudio frame
-            // pushed at the top of the pipeline (before STT ever sees it),
-            // so this is unprocessed, undecimated audio.
-            (Stage::Pipeline, FrameKind::RawAudio(audio)) => {
+            // This leg's own raw mic input — pushed at the transport<->
+            // pipeline boundary (see http::handlers::call::start_call,
+            // a_transport_io/b_transport_io), before STT ever sees it, so
+            // this is unprocessed, undecimated audio. Tagged CallA/CallB
+            // (whichever leg this observer is attached to), never Pipeline —
+            // that stage name belongs to the *inner* STT/MT/TTS chain this
+            // same observer also watches for Turn/Translation/Tts* events.
+            (Stage::CallA | Stage::CallB, FrameKind::RawAudio(audio)) => {
                 let _ = self.tx.send(Event::Mic {
                     speaker: self.speaker.clone(),
                     sample_rate: audio.sample_rate,
@@ -560,22 +564,19 @@ async fn upload_and_link(
         tracing::warn!(%call_id, error = %e, "call record: recording upload failed");
         return;
     }
-    let url = match client.sign_url(bucket, &path).await {
-        Ok(url) => url,
-        Err(e) => {
-            tracing::warn!(%call_id, error = %e, "call record: recording sign_url failed");
-            return;
-        }
-    };
 
+    // Stores the bucket-relative object path, not a URL — the mobile client
+    // builds the actual request itself, straight to Storage's `authenticated`
+    // download route with its own session JWT, so this is never rendered
+    // directly as a link (see m20260901_000001_recording_storage_rls).
     let mut model = calls::ActiveModel {
         id: Unchanged(call_id),
         updated_at: Set(Utc::now().fixed_offset()),
         ..Default::default()
     };
     match slot {
-        RecordingSlot::Original => model.recording_url = Set(Some(url)),
-        RecordingSlot::Translated => model.translated_recording_url = Set(Some(url)),
+        RecordingSlot::Original => model.recording_path = Set(Some(path)),
+        RecordingSlot::Translated => model.translated_recording_path = Set(Some(path)),
     }
     if let Err(e) = model.update(db::get()).await {
         tracing::warn!(%call_id, error = %e, "call record: recording url write failed");
