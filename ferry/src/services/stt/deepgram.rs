@@ -84,6 +84,8 @@ impl SttProvider for DeepgramSttProvider {
                     text: t.text,
                     language,
                     is_final: t.is_final,
+                    start_s: None,
+                    end_s: None,
                 })],
                 FrameKind::UserStartedSpeaking => vec![SttEvent::UserStartedSpeaking],
                 FrameKind::UserStoppedSpeaking => vec![SttEvent::UserStoppedSpeaking],

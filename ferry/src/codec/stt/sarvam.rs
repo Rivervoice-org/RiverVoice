@@ -46,14 +46,10 @@ impl FrameSerializer for SarvamSttSerializer {
                     );
                 }
 
-                let samples: Vec<i16> = audio
-                    .audio
-                    .chunks_exact(2)
-                    .map(|b| i16::from_le_bytes([b[0], b[1]]))
-                    .collect();
+                let samples = crate::audio::pcm::decode_pcm_le(&audio.audio);
                 let mut resampled = Vec::new();
                 adapter.push(&samples, &mut resampled);
-                let pcm: Vec<u8> = resampled.iter().flat_map(|s| s.to_le_bytes()).collect();
+                let pcm = crate::audio::pcm::encode_pcm_le(&resampled);
                 let audio_b64 = base64::engine::general_purpose::STANDARD.encode(pcm);
 
                 let msg = ClientMessage::AudioInput { audio: audio_b64 };
@@ -68,9 +64,19 @@ impl FrameSerializer for SarvamSttSerializer {
     fn deserialize(&self, msg: Message) -> anyhow::Result<Option<Frame>> {
         match msg {
             Message::Text(text) => match parse_message(&text)? {
-                Some(SarvamSttEvent::Transcript { text, is_final }) => Ok(Some(Frame::new(
-                    FrameKind::Transcription(TranscriptionFrame { text, is_final }),
-                ))),
+                Some(SarvamSttEvent::Transcript {
+                    text,
+                    is_final,
+                    start_s,
+                    end_s,
+                }) => Ok(Some(Frame::new(FrameKind::Transcription(
+                    TranscriptionFrame {
+                        text,
+                        is_final,
+                        start_s,
+                        end_s,
+                    },
+                )))),
                 Some(SarvamSttEvent::UserStartedSpeaking) => {
                     Ok(Some(Frame::new(FrameKind::UserStartedSpeaking)))
                 }
@@ -92,7 +98,12 @@ enum ClientMessage {
 }
 
 pub enum SarvamSttEvent {
-    Transcript { text: String, is_final: bool },
+    Transcript {
+        text: String,
+        is_final: bool,
+        start_s: Option<f64>,
+        end_s: Option<f64>,
+    },
 
     UserStartedSpeaking,
 
@@ -106,14 +117,20 @@ pub fn parse_message(text: &str) -> anyhow::Result<Option<SarvamSttEvent>> {
             Ok(Some(SarvamSttEvent::Transcript {
                 text,
                 is_final: false,
+                start_s: None,
+                end_s: None,
             }))
         }
-        ServerMessage::TranscriptFinal { text } if !text.is_empty() => {
-            Ok(Some(SarvamSttEvent::Transcript {
-                text,
-                is_final: true,
-            }))
-        }
+        ServerMessage::TranscriptFinal {
+            text,
+            start_s,
+            end_s,
+        } if !text.is_empty() => Ok(Some(SarvamSttEvent::Transcript {
+            text,
+            is_final: true,
+            start_s,
+            end_s,
+        })),
         ServerMessage::TranscriptPartial { .. } | ServerMessage::TranscriptFinal { .. } => Ok(None),
         ServerMessage::VadSpeechStart => Ok(Some(SarvamSttEvent::UserStartedSpeaking)),
         ServerMessage::VadSpeechEnd => Ok(Some(SarvamSttEvent::UserStoppedSpeaking)),
@@ -131,7 +148,14 @@ enum ServerMessage {
     TranscriptPartial { text: String },
 
     #[serde(rename = "transcript.final")]
-    TranscriptFinal { text: String },
+    TranscriptFinal {
+        text: String,
+        // Only present when the session was opened with return_timestamps.
+        #[serde(default)]
+        start_s: Option<f64>,
+        #[serde(default)]
+        end_s: Option<f64>,
+    },
 
     #[serde(rename = "vad.speech_start")]
     VadSpeechStart,

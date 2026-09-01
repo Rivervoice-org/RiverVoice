@@ -45,14 +45,10 @@ impl FrameSerializer for DeepgramSerializer {
                     );
                 }
 
-                let samples: Vec<i16> = audio
-                    .audio
-                    .chunks_exact(2)
-                    .map(|b| i16::from_le_bytes([b[0], b[1]]))
-                    .collect();
+                let samples = crate::audio::pcm::decode_pcm_le(&audio.audio);
                 let mut resampled = Vec::new();
                 adapter.push(&samples, &mut resampled);
-                let pcm: Vec<u8> = resampled.iter().flat_map(|s| s.to_le_bytes()).collect();
+                let pcm = crate::audio::pcm::encode_pcm_le(&resampled);
                 Ok(Message::Binary(pcm))
             }
             _other => {
@@ -68,6 +64,8 @@ impl FrameSerializer for DeepgramSerializer {
                     FrameKind::Transcription(TranscriptionFrame {
                         text: transcript.text,
                         is_final: transcript.is_final,
+                        start_s: None,
+                        end_s: None,
                     }),
                 ))),
                 Some(DeepgramEvent::UserStartedSpeaking) => {

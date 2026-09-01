@@ -90,6 +90,8 @@ impl SttProvider for SarvamSttProvider {
                             text: t.text,
                             language,
                             is_final,
+                            start_s: t.start_s,
+                            end_s: t.end_s,
                         })];
                         if is_final && speech_ended {
                             events.push(SttEvent::UserStoppedSpeaking);

@@ -28,10 +28,6 @@ export enum CallStatus {
   Error = "error",
 }
 
-// Mirrors react-native-incall-manager's native `AudioDevice` enum (Android)
-// — the strings it actually puts in `availableAudioDeviceList`/
-// `selectedAudioDevice` on the `onAudioDeviceChanged` event, and what
-// `chooseAudioRoute()` accepts back.
 export enum AudioDevice {
   SpeakerPhone = "SPEAKER_PHONE",
   WiredHeadset = "WIRED_HEADSET",

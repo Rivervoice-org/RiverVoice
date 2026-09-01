@@ -1,6 +1,6 @@
 [package]
 name = "ferry"
-version = "0.1.0"
+version = "0.1.0-dev.1"
 edition = "2024"
 
 [dependencies]
@@ -11,8 +11,8 @@ async-trait = "0.1"
 axum = { version = "0.8.9", features = ["ws"] }
 dotenvy = "0.15"
 futures-util = "0.3"
+hound = "3.5"
 jsonwebtoken = "9"
-ort = { version = "2.0.0-rc.13", default-features = false, features = ["download-binaries", "tls-rustls"] }
 percent-encoding = "2"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
@@ -37,15 +37,10 @@ webrtc = "0.20.2"
 bytes = "1.12.1"
 validator = { version = "0.19", features = ["derive"] }
 uuid = { version = "1", features = ["serde", "v4"] }
-regex = "1"
-# Console setup on Windows: UTF-8 codepage and an Indic-capable console font.
-windows-sys = { version = "0.59", features = ["Win32_System_Console"] }
 audiopus = { version = "0.2.0", default-features = false, features = ["encoder", "decoder"] }
-audiopus_sys = { version = "0.2.2", default-features = false, features = ["static"] }
 rtc = "0.20.3"
 rand = "0.8"
 sea-orm = { version = "2.0.2", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-uuid", "with-chrono"] }
-sha2 = "0.10"
 # Generates the mobile app's TypeScript types straight from these Rust
 # structs (see `cargo test export_bindings`), so the wire contract has one
 # definition instead of a hand-maintained copy that silently drifts.

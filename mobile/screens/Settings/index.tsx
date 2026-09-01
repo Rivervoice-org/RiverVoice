@@ -3,14 +3,12 @@ import { ScrollView, View, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Constants from "expo-constants";
 import {
-  Bell,
   ChevronRight,
   CircleHelp,
   FileText,
   Headphones,
   LogOut,
   Monitor,
-  MessageSquareText,
   Moon,
   ShieldCheck,
   Sun,
@@ -44,8 +42,6 @@ const noop = () => {};
  */
 function buildIcons(ink: string) {
   return {
-    transcript: <MessageSquareText size={14} strokeWidth={1.75} color={ink} />,
-    bell: <Bell size={14} strokeWidth={1.75} color={ink} />,
     shield: <ShieldCheck size={14} strokeWidth={1.75} color={ink} />,
     help: <CircleHelp size={14} strokeWidth={1.75} color={ink} />,
     headset: <Headphones size={14} strokeWidth={1.75} color={ink} />,
@@ -95,7 +91,7 @@ const Row = memo(function Row({
       disabled={!onPress}
       className={cn(
         "flex-row items-center gap-3 bg-card px-4 py-3 active:bg-secondary",
-        !last && "border-b border-border"
+        !last && "border-b border-border",
       )}
     >
       {icon ? (
@@ -137,7 +133,9 @@ function ProfileSection() {
   return (
     <View className="items-center px-6 pt-6 pb-8">
       <MascotPicker value={mascot} onSelect={setMascot} />
-      <Text className="mt-3 text-[20px] font-semibold">{user?.name || "You"}</Text>
+      <Text className="mt-3 text-[20px] font-semibold">
+        {user?.name || "You"}
+      </Text>
       {user?.email ? (
         <Text variant="muted" className="mt-0.5 text-[13px]">
           {user.email}
@@ -150,7 +148,11 @@ function ProfileSection() {
   );
 }
 
-const APPEARANCE_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
+const APPEARANCE_OPTIONS: {
+  value: ThemePreference;
+  label: string;
+  icon: typeof Sun;
+}[] = [
   { value: "light", label: "Light", icon: Sun },
   { value: "dark", label: "Dark", icon: Moon },
   { value: "system", label: "System", icon: Monitor },
@@ -170,14 +172,20 @@ function AppearancePicker() {
             onPress={() => setPreference(value)}
             className={cn(
               "flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border py-2",
-              active ? "border-foreground bg-foreground" : "border-border bg-transparent"
+              active
+                ? "border-foreground bg-foreground"
+                : "border-border bg-transparent",
             )}
           >
-            <Icon size={14} strokeWidth={1.75} color={active ? colors.onInk : colors.muted} />
+            <Icon
+              size={14}
+              strokeWidth={1.75}
+              color={active ? colors.onInk : colors.muted}
+            />
             <Text
               className={cn(
                 "text-[13px] font-medium",
-                active ? "text-primary-foreground" : "text-muted-foreground"
+                active ? "text-primary-foreground" : "text-muted-foreground",
               )}
             >
               {label}
@@ -193,8 +201,6 @@ export default function SettingsScreen() {
   const { signOut } = useAuth();
   const colors = useThemeColors();
   const ICONS = useMemo(() => buildIcons(colors.ink), [colors.ink]);
-  const [transcribeVoicemails, setTranscribeVoicemails] = useState(true);
-  const [missedCallAlerts, setMissedCallAlerts] = useState(true);
   const [keepRecordings, setKeepRecordings] = useState(true);
   const [shareDiagnostics, setShareDiagnostics] = useState(false);
 
@@ -232,78 +238,71 @@ export default function SettingsScreen() {
           </View>
         </Rise>
 
-        {/* Calls */}
-        <Rise index={3}>
-            <View className="mt-8">
-              <SectionLabel>Calls</SectionLabel>
-              <Card className="mx-5 mt-2.5 overflow-hidden">
-                <Row
-                  icon={ICONS.transcript}
-                  label="Voicemail transcripts"
-                  description="Text you a transcript of every voicemail"
-                  switchChecked={transcribeVoicemails}
-                  onSwitchChange={setTranscribeVoicemails}
-                />
-                <Row
-                  icon={ICONS.bell}
-                  label="Missed call alerts"
-                  description="Notify me when a call goes unanswered"
-                  switchChecked={missedCallAlerts}
-                  onSwitchChange={setMissedCallAlerts}
-                  last
-                />
-              </Card>
-            </View>
-        </Rise>
-
         {/* Privacy */}
-        <Rise index={4}>
-            <View className="mt-8">
-              <SectionLabel>Privacy</SectionLabel>
-              <Card className="mx-5 mt-2.5 overflow-hidden">
-                <Row
-                  icon={ICONS.shield}
-                  label="Keep call recordings"
-                  description="Store audio after the call ends"
-                  switchChecked={keepRecordings}
-                  onSwitchChange={setKeepRecordings}
-                />
-                <Row
-                  icon={ICONS.shield}
-                  label="Share diagnostics"
-                  description="Send crash and usage data to improve the app"
-                  switchChecked={shareDiagnostics}
-                  onSwitchChange={setShareDiagnostics}
-                  last
-                />
-              </Card>
-            </View>
+        <Rise index={3}>
+          <View className="mt-8">
+            <SectionLabel>Privacy</SectionLabel>
+            <Card className="mx-5 mt-2.5 overflow-hidden">
+              <Row
+                icon={ICONS.shield}
+                label="Keep call recordings"
+                description="Store audio after the call ends"
+                switchChecked={keepRecordings}
+                onSwitchChange={setKeepRecordings}
+              />
+              <Row
+                icon={ICONS.shield}
+                label="Share diagnostics"
+                description="Send crash and usage data to improve the app"
+                switchChecked={shareDiagnostics}
+                onSwitchChange={setShareDiagnostics}
+                last
+              />
+            </Card>
+          </View>
         </Rise>
 
         {/* Support */}
-        <Rise index={5}>
+        <Rise index={4}>
           <View className="mt-8">
             <SectionLabel>Support</SectionLabel>
             <Card className="mx-5 mt-2.5 overflow-hidden">
               <Row icon={ICONS.help} label="Help center" onPress={noop} />
-              <Row icon={ICONS.headset} label="Contact support" onPress={noop} />
+              <Row
+                icon={ICONS.headset}
+                label="Contact support"
+                onPress={noop}
+              />
               <Row icon={ICONS.doc} label="Terms of service" onPress={noop} />
-              <Row icon={ICONS.doc} label="Privacy policy" onPress={noop} last />
+              <Row
+                icon={ICONS.doc}
+                label="Privacy policy"
+                onPress={noop}
+                last
+              />
             </Card>
           </View>
         </Rise>
 
         {/* About */}
-        <Rise index={6}>
+        <Rise index={5}>
           <View className="mt-8">
             <SectionLabel>About</SectionLabel>
             <Card className="mx-5 mt-2.5 overflow-hidden">
-              <Row label="Version" value={Constants.expoConfig?.version ?? "1.0.0"} last />
+              <Row
+                label="Version"
+                value={Constants.expoConfig?.version ?? "1.0.0"}
+                last
+              />
             </Card>
 
             <View className="items-center pt-8">
               <Button variant="outline" onPress={signOut} className="px-5">
-                <LogOut size={16} strokeWidth={1.75} color={colors.destructive} />
+                <LogOut
+                  size={16}
+                  strokeWidth={1.75}
+                  color={colors.destructive}
+                />
                 <Text variant="destructive" className="text-sm font-medium">
                   Sign out
                 </Text>

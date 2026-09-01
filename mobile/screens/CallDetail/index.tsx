@@ -18,6 +18,7 @@ import {
 } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
+import { RecordingPlayer } from "@/components/RecordingPlayer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -27,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { useThemeColors, type ThemeColors } from "@/lib/theme";
 import { formatDuration } from "@/lib/call-status";
 import { useCallDetail } from "@/lib/calls/hooks";
+import { useRecordingPlayer } from "@/lib/calls/use-recording-player";
 import { CallDetailSkeleton } from "./skeleton";
 import { languageLabel, outcomeOf, relativeTime } from "@/lib/calls/format";
 
@@ -70,10 +72,18 @@ function StatCard({
       <View className="h-7 w-7 items-center justify-center rounded-lg bg-secondary">
         <Icon size={13} strokeWidth={1.75} color={colors.ink} />
       </View>
-      <Text variant="muted" className="mt-2.5 text-[11px] font-medium uppercase tracking-[0.12em]">
+      <Text
+        variant="muted"
+        className="mt-2.5 text-[11px] font-medium uppercase tracking-[0.12em]"
+      >
         {label}
       </Text>
-      <Text font="mono" className="mt-0.5 text-lg font-semibold" numberOfLines={1} adjustsFontSizeToFit>
+      <Text
+        font="mono"
+        className="mt-0.5 text-lg font-semibold"
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
         {value}
       </Text>
       <Text variant="muted" className="mt-0.5 text-[11px]" numberOfLines={1}>
@@ -88,7 +98,14 @@ export default function CallDetailScreen() {
   // `id` addresses the call; `name` is the address-book match the server has
   // never seen, so it can only come from the screen that had it.
   const params = useLocalSearchParams<{ id: string; name?: string }>();
-  const { data: call, isLoading, isError, error, refetch } = useCallDetail(params.id);
+  const {
+    data: call,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useCallDetail(params.id);
+  const player = useRecordingPlayer(call);
 
   const header = (
     <View className="flex-row items-center px-4 py-3">
@@ -115,7 +132,11 @@ export default function CallDetailScreen() {
         ) : (
           <View className="flex-1 items-center justify-center px-10">
             <View className="h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-              <CloudOff size={22} strokeWidth={1.75} color={colors.destructive} />
+              <CloudOff
+                size={22}
+                strokeWidth={1.75}
+                color={colors.destructive}
+              />
             </View>
             <Text className="mt-3 text-center text-sm font-medium">
               Couldn&apos;t load this call
@@ -142,7 +163,8 @@ export default function CallDetailScreen() {
     );
   }
 
-  const outcome = OUTCOME_CONFIG[outcomeOf(call.endReason)] ?? OUTCOME_CONFIG.resolved;
+  const outcome =
+    OUTCOME_CONFIG[outcomeOf(call.endReason)] ?? OUTCOME_CONFIG.resolved;
   const OutcomeIcon = outcome.icon;
   const outcomeColor = colors[outcome.colorKey];
   const duration = formatDuration(call.billableSeconds);
@@ -195,14 +217,21 @@ export default function CallDetailScreen() {
 
             <Badge className={cn("mt-4 px-3 py-1", outcome.bgClassName)}>
               <OutcomeIcon size={13} strokeWidth={1.75} color={outcomeColor} />
-              <Text style={{ color: outcomeColor }} className="text-xs font-medium">
+              <Text
+                style={{ color: outcomeColor }}
+                className="text-xs font-medium"
+              >
                 {outcome.label}
               </Text>
             </Badge>
 
             <View className="mt-4 flex-row items-center gap-4">
               <View className="flex-row items-center gap-1.5">
-                <CalendarDays size={12} strokeWidth={1.75} color={colors.muted} />
+                <CalendarDays
+                  size={12}
+                  strokeWidth={1.75}
+                  color={colors.muted}
+                />
                 <Text variant="muted" className="text-xs">
                   {relativeTime(call.createdAt)}
                 </Text>
@@ -252,19 +281,23 @@ export default function CallDetailScreen() {
           </View>
         </Rise>
 
-        {/* Recording. Nothing captures audio yet, so this states that plainly
-            rather than showing a player that can't play anything. */}
+        {/* Recording */}
         <Rise index={2}>
           <Card className="mx-5 mt-6 p-4">
             <View className="flex-row items-center gap-2">
               <AudioLines size={15} strokeWidth={1.75} color={colors.ink} />
               <Text className="text-[13px] font-semibold">Recording</Text>
             </View>
-            <Text variant="muted" className="mt-2 text-xs">
-              {call.recordingUrl
-                ? "Recording available"
-                : "No recording for this call"}
-            </Text>
+            <RecordingPlayer
+              hasAudio={player.hasAudio}
+              hasTranslated={player.hasTranslated}
+              variant={player.variant}
+              onVariantChange={player.setVariant}
+              isPlaying={player.isPlaying}
+              positionMs={player.positionMs}
+              durationMs={player.durationMs}
+              onToggle={player.toggle}
+            />
           </Card>
         </Rise>
 
@@ -284,8 +317,14 @@ export default function CallDetailScreen() {
             )}
           >
             <View className="flex-row items-center gap-2">
-              <MessageSquareText size={15} strokeWidth={1.75} color={colors.ink} />
-              <Text className="text-[13px] font-semibold">View transcription</Text>
+              <MessageSquareText
+                size={15}
+                strokeWidth={1.75}
+                color={colors.ink}
+              />
+              <Text className="text-[13px] font-semibold">
+                View transcription
+              </Text>
             </View>
             <View className="flex-row items-center gap-2">
               <Text variant="muted" className="text-[11px] font-medium">
@@ -316,7 +355,9 @@ export default function CallDetailScreen() {
               }
             >
               <Phone size={16} strokeWidth={2} color={colors.onInk} />
-              <Text className="text-sm font-medium text-primary-foreground">Call</Text>
+              <Text className="text-sm font-medium text-primary-foreground">
+                Call
+              </Text>
             </Button>
           </View>
         </Rise>

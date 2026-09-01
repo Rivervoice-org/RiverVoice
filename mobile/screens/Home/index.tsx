@@ -32,11 +32,6 @@ import type { RecentAgent } from "@/lib/agents/types";
 import { useContacts } from "@/state/contacts";
 import { RecentAgentsSkeleton, RecentCallsSkeleton } from "./skeleton";
 
-/**
- * Stand-in for the credit balance until ferry exposes one. Kept as a single
- * object so the shape of what the card needs is obvious, and swapping it for
- * a query is a one-line change here rather than an edit to the markup.
- */
 const CREDITS = {
   remaining: 3580,
   total: 12000,
@@ -50,12 +45,6 @@ function getGreeting(): string {
   return "Good evening";
 }
 
-/**
- * Redial with the agent that handled the original call. `agentId` is the
- * agent's real id, straight from the call row — ferry parses it as a UUID
- * and looks the agent up, so nothing synthesised from the call id can
- * stand in for it.
- */
 function callAgain(call: CallRowItem) {
   if (!call.agentId) return;
   router.push({
@@ -69,10 +58,6 @@ function callAgain(call: CallRowItem) {
   });
 }
 
-/** Only the id travels: the detail screen fetches the call itself, so the
- * route can't carry a stale copy of fields the server owns. `name` rides
- * along purely because it comes from the device address book, which the
- * server has never seen. */
 function openCallDetail(call: CallRowItem) {
   router.push({
     pathname: "/call-detail",
@@ -108,7 +93,6 @@ function getFormattedDate(): string {
   return `${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]}`;
 }
 
-/** One agent, as the section draws it. */
 function RecentAgentRow({
   agent,
   index,
@@ -139,15 +123,6 @@ function RecentAgentRow({
   );
 }
 
-/**
- * The three agents this user has called most recently.
- *
- * Secondary content, so it fails quietly: an error hides the section rather
- * than putting a second red state above the call list, which is already
- * reporting the same outage in its own words. Nothing is drawn either when
- * the user has simply never called an agent — an empty card explaining that
- * would say less than the empty call list directly beneath it.
- */
 function RecentAgentsSection() {
   const { data: agents, isLoading, isError } = useRecentAgents();
 
@@ -184,11 +159,6 @@ function RecentAgentsSection() {
   );
 }
 
-/**
- * Everything above the call list. It rides in `ListHeaderComponent` rather
- * than sitting in a ScrollView above the list, because a FlatList nested in a
- * ScrollView loses virtualization — and this list is now unbounded.
- */
 function HomeHeader({
   name,
   hasCalls,
@@ -265,9 +235,6 @@ function HomeHeader({
         </Rise>
       </View>
 
-      {/* Top cap of the card the rows sit in. Drawn here rather than wrapping
-          the rows in a <Card>, because the rows are FlatList children now and
-          can't share a single parent. */}
       {hasCalls ? (
         <View className="mx-5 mt-3 h-2 rounded-t-xl border-x border-t border-border bg-card" />
       ) : null}
@@ -278,8 +245,6 @@ function HomeHeader({
 export default function HomeScreen() {
   const colors = useThemeColors();
   const { user } = useAuth();
-  // Only the given name — the greeting reads as a greeting, not a record
-  // lookup.
   const firstName = user?.name.trim().split(/\s+/)[0] ?? null;
   const { contacts } = useContacts();
   const {
@@ -294,8 +259,6 @@ export default function HomeScreen() {
     fetchNextPage,
   } = useRecentCalls();
 
-  // Rebuilt only when the address book changes, not per row — otherwise every
-  // call would rescan every contact.
   const contactNames = useMemo(() => buildContactIndex(contacts), [contacts]);
   const rows = useMemo(
     () => calls.map((call) => toCallRowItem(call, contactNames)),
@@ -303,19 +266,13 @@ export default function HomeScreen() {
   );
 
   const loadMore = useCallback(() => {
-    // FlatList fires onEndReached more than once near the bottom; without the
-    // in-flight guard that becomes duplicate pages.
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const renderItem = useCallback(
     ({ item, index }: { item: CallRowItem; index: number }) => (
       <View className="mx-5 border-x border-border bg-card">
-        {/* Capped so page 3's rows don't stagger in over two seconds. */}
         <Rise delay={rowDelay(3, Math.min(index, 5))}>
-          {/* No agent left to dial once it has been deleted, so the row
-              loses its swipe action rather than offering a call that the
-              server would refuse. */}
           {item.agentId ? (
             <SwipeToCallRow onCall={() => callAgain(item)}>
               <CallListItem
@@ -357,9 +314,6 @@ export default function HomeScreen() {
           <HomeHeader name={firstName} hasCalls={rows.length > 0} />
         }
         ListEmptyComponent={
-          // The skeleton brings its own card, drawn at the real list's
-          // paddings — nesting it inside the padded one below would indent
-          // every placeholder row past where the real rows begin.
           isLoading ? (
             <RecentCallsSkeleton />
           ) : (

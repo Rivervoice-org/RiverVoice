@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Languages } from "lucide-react-native";
 import { TypingDots } from "@/components/TypingDots";
 import { Text } from "@/components/ui/text";
@@ -23,6 +23,13 @@ export type CallTranscriptLine = {
   spoken?: string | null;
   /** Offset from the call's start, already formatted. */
   time?: string | null;
+  /** Tapping the bubble seeks a recording to this line — omitted where
+   * there's no recording to seek (a live call, or a line with no timing). */
+  onPress?: (() => void) | undefined;
+  /** Highlighted because a recording is currently playing through this
+   * line's span — karaoke-style. Never set outside a finished transcript
+   * with a recording actually loaded. */
+  active?: boolean;
 };
 
 /**
@@ -40,17 +47,20 @@ export const CallTranscriptBubble = memo(function CallTranscriptBubble({
   showSpoken: boolean;
 }) {
   const colors = useThemeColors();
-  const { mine, text, spoken, time } = line;
+  const { mine, text, spoken, time, onPress, active } = line;
   const reveal = showSpoken && spoken && spoken !== text;
+  const Wrapper = onPress ? Pressable : View;
 
   return (
     <View className={mine ? "items-end" : "items-start"}>
-      <View
+      <Wrapper
+        onPress={onPress}
         className={cn(
           "max-w-[82%] rounded-2xl px-3.5 py-2.5",
           mine
             ? "rounded-br-md bg-foreground"
             : "rounded-bl-md border border-border bg-card",
+          active && "border-2 border-river",
         )}
       >
         <Text
@@ -94,7 +104,7 @@ export const CallTranscriptBubble = memo(function CallTranscriptBubble({
             </Text>
           </View>
         ) : null}
-      </View>
+      </Wrapper>
 
       {time ? (
         <Text font="mono" variant="muted" className="mt-1 px-1 text-[10px]">

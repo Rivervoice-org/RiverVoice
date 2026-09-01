@@ -100,11 +100,7 @@ impl FrameSerializer for TwilioSerializer {
                     .as_deref()
                     .ok_or_else(|| anyhow::anyhow!("twilio: no stream_sid yet"))?;
 
-                let samples: Vec<i16> = audio
-                    .audio
-                    .chunks_exact(2)
-                    .map(|c| i16::from_le_bytes([c[0], c[1]]))
-                    .collect();
+                let samples = crate::audio::pcm::decode_pcm_le(&audio.audio);
                 let mut resampled = Vec::new();
                 self.downsampler
                     .lock()
@@ -158,7 +154,7 @@ impl FrameSerializer for TwilioSerializer {
                     .lock()
                     .map_err(|e| anyhow::anyhow!("twilio: upsampler lock poisoned: {e}"))?
                     .push(&samples, &mut resampled);
-                let up: Vec<u8> = resampled.iter().flat_map(|s| s.to_le_bytes()).collect();
+                let up = crate::audio::pcm::encode_pcm_le(&resampled);
                 let num_frames = up.len() as u32 / 2;
                 tracing::trace!(
                     mulaw_in = mulaw_bytes.len(),

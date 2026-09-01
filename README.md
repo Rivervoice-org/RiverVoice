@@ -4,7 +4,7 @@ Voice agents that answer the phone in Indian languages. You describe an agent in
 a browser, give it a voice, and it takes calls — over WebRTC from the mobile app,
 or as a real phone call bridged through Twilio.
 
-Three services, two languages:
+Three services, two languages, plus a self-hosted Supabase stack for auth and data:
 
 |            | what it does                                              | stack                |
 | ---------- | ---------------------------------------------------------- | --------------------- |
@@ -12,13 +12,11 @@ Three services, two languages:
 | **ferry**  | the live call: WebRTC, Twilio, speech, translation, audio   | Rust, axum, tokio     |
 | **mobile** | the calling client — one of two things that talk to ferry   | Expo, React Native    |
 
-There used to be a fourth service (Go, Postgres) — accounts, agents,
-tools, everything that persisted. It's gone. web now runs on mock data
-(`web/src/lib/mock-data.ts`) standing in for what the backend used to serve, so the
-builder UI works with no backend behind it. There is currently no service that
-persists an agent's settings — ferry's call handlers take the call
-configuration as request input, not a lookup by agent id. Rebuilding that is
-the next real backend work; nothing in this repo does it yet.
+**web still runs on mock data** (`web/src/lib/mock-data.ts`) — there is no live
+API call for agents, auth, or pricing in web today. Real persistence exists, but
+mobile is the client that talks to it, not web: agents/calls/users live in
+Postgres, mobile reads/writes most of that directly via PostgREST, and Supabase
+Auth (GoTrue) handles sign-in. See [The shape of the system](#the-shape-of-the-system).
 
 ---
 
@@ -77,6 +75,9 @@ the next real backend work; nothing in this repo does it yet.
 
    mobile ──WebRTC─▶  ferry     :8085    Rust — STT, MT, TTS, call bridging
    Twilio  ──PSTN───▶
+
+   mobile ──PostgREST/Auth──▶  kong :8000 ─▶ auth (GoTrue), rest (PostgREST), db (Postgres)
+                                             self-hosted Supabase, docker-compose.yml
 ```
 
 web and ferry don't talk to each other in production use — web is a design-time
@@ -84,6 +85,24 @@ tool for building an agent's config; ferry is the run-time engine that answers
 a call. The one place they meet is ferry's `/v1/try-agent/offer` route, a
 one-way WebRTC demo web's builder can open directly in the browser to preview
 an agent without going through mobile or Twilio at all.
+
+**mobile is the real client of the Supabase stack.** It signs in against
+Supabase Auth (Google ID-token flow) and reads/writes `agents` directly via
+PostgREST (`mobile/lib/agents/api.ts`, `mobile/lib/supabase.ts`) — RLS-scoped
+to the caller, no ferry handler involved. ferry only keeps the handlers that
+plain row CRUD can't express or that need real server-side work:
+`GET /v1/agents/recent` (a join+aggregate PostgREST's row-level API can't do
+without a view/RPC), `POST /v1/voices/preview` (calls Sarvam TTS for real),
+and everything about actually running a call. ferry verifies the same
+Supabase-issued access token mobile already holds (`Authorization: Bearer
+<token>`, `auth/middleware.rs`) rather than mediating sign-in itself — the
+first authenticated request from a given Supabase user is what creates their
+row in ferry's own `users` table, lazily, with no dedicated sign-up endpoint.
+
+ferry additionally persists a call's own record (`calls`, `call_utterances`)
+straight to Postgres via `sea-orm` (`ferry/src/db/`), connecting as the
+`postgres` superuser to bypass RLS for its own writes — separate from the
+PostgREST path mobile uses for `agents`.
 
 A real, two-leg call, end to end:
 
@@ -109,31 +128,31 @@ two pipelines get cross-wired.
 
 ## Running it
 
-You need Node 20+ and Rust (only for ferry). No Docker, no database.
+You need Node 20+, Rust, and Docker (for the local Supabase stack: Postgres,
+GoTrue, PostgREST, Storage, Kong — all via `docker-compose.yml`).
 
 ```bash
-cp .env.example .env          # fill in the API keys — see ferry/.env.example
-                               # for the current, accurate list
+cp .env.example .env          # fill in the real secrets — Twilio, Sarvam,
+                               # Deepgram, OpenRouter, Google client ID.
+                               # The Postgres/JWT/anon-key values are
+                               # working local-dev defaults, no need to
+                               # change them unless you know you want to.
+
+docker compose up -d          # db, auth, rest, storage, kong :8000
 
 cd web     && npm install && npm run dev     # :3000
-cd ferry   && cargo run                      # :8085
+cd ferry   && cargo run                      # :8085 — loads the root .env
+                                              # first, then falls back to
+                                              # its own ferry/.env if present
 cd mobile  && npm install && npx expo run:android   # or run:ios — needs a dev client
 ```
 
-> The root `.env.example` still has leftover `POSTGRES_*`/`DATABASE_URL`/
-> `JWT_SECRET`-for-sessions/`WEB_ORIGIN` entries that nothing reads anymore.
-> **[ferry/.env.example](ferry/.env.example)** is the
-> accurate list: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
-> `TWILIO_TWIML_APP_SID`, `TWILIO_FROM_NUMBER`, `TWILIO_TO_NUMBER`,
-> `PUBLIC_BASE_URL` (a public tunnel URL Twilio can reach — e.g. a Cloudflare
-> Tunnel — since Twilio calls back into ferry over the open internet),
-> `DEEPGRAM_STT_API_KEY`, `OPENROUTER_API_KEY`, `SARVAM_TTS_API_KEY`. ferry
-> loads the root `.env` first, then falls back to its own.
-
-mobile needs `EXPO_PUBLIC_FERRY_URL` pointing at ferry — `http://127.0.0.1:8085`
-works from an emulator on the same machine; a physical device needs ferry's LAN
-IP, and `WEBRTC_BIND_IP` set to that same address so the media actually
-connects.
+mobile needs `EXPO_PUBLIC_SUPABASE_URL`/`EXPO_PUBLIC_SUPABASE_ANON_KEY`
+pointing at kong (`http://<lan-ip>:8000` for a physical device,
+`http://127.0.0.1:8000` for an emulator on the same machine), and
+`EXPO_PUBLIC_FERRY_URL` pointing at ferry the same way. A physical device also
+needs ferry's own `WEBRTC_BIND_IP` set to that same LAN address, or the SDP
+negotiates fine and no audio ever arrives. See `mobile/.env.example`.
 
 ---
 
@@ -197,15 +216,23 @@ in a script that uploads an avatar. `mascots/parts.ts` is path data;
 Rust, axum, tokio. Holds a call's sockets open for its whole duration and runs
 the pipeline that turns what someone says into translated speech, frame by
 frame, in real time — for a WebRTC connection, a Twilio phone call, or both at
-once, bridged.
+once, bridged. Also owns a thin slice of persistence: call records, and the
+`users` row created lazily on a caller's first authenticated request.
 
-```
+```text
 ferry/src/
   main.rs
-  config.rs           env vars — API keys, PUBLIC_BASE_URL, WEBRTC_BIND_IP
+  config.rs           env vars — DB, JWT secret, API keys, PUBLIC_BASE_URL, WEBRTC_BIND_IP
   logging.rs           ColorEventFormatter — [call_id=... leg=...] prefixes, per-stage colors
   pricing.rs            per-vendor cost tables, for the billing/usage observers
-  auth/                 session token verification (unused today — see router.rs)
+  auth/
+    token.rs              verifies a Supabase-issued (GoTrue) access token
+    middleware.rs          require_user — Bearer token in, UserSession out;
+                            also lazily provisions the caller's ferry-side users row
+  db/
+    mod.rs                 sea-orm connection, DATABASE_URL
+    entity/                 agents, calls, call_utterances, users — hand-written
+                             or sea-orm-cli-generated entities
   call/
     mod.rs                call_span(call_id, leg) — the tracing correlation helper
     registry.rs           CallRegistry / CallHandle — correlates a WebRTC leg with
@@ -213,9 +240,11 @@ ferry/src/
   http/
     router.rs             axum Router, routes, CORS, request-id middleware
     handlers/
-      webrtc.rs              POST /v1/try-agent/offer — one-way demo, no registry
+      try_agent.rs           POST /v1/try-agent/offer — one-way demo, no registry
       call.rs                POST /v1/call/start — the real two-leg call
       twilio.rs              GET /v1/twilio/ws/{id}, POST /v1/twilio/status/{id}
+      agent.rs                GET /v1/agents/recent — the one agent read PostgREST can't do alone
+      voice.rs                POST /v1/voices/preview — calls Sarvam TTS for real
     state.rs
   frames.rs            Frame / FrameKind — the value every stage passes on
   processor.rs         FrameProcessor / FrameIo — the contract a stage implements
@@ -235,13 +264,16 @@ ferry/src/
     webrtc/                WebRtcClient — SDP offer/answer, real Opus RTP track
     websockets/             WebSocketClient — generic WS loop, used by Twilio
   observer/             read-only taps on the frame stream
-    billing_observer.rs, usage_observer.rs, latency_observer.rs, log_observer.rs
+    billing_observer.rs, usage_observer.rs, latency_observer.rs, log_observer.rs,
+    call_record_observer.rs   writes the call's row/utterances to Postgres
   audio/                 opus, resampling (rubato, sinc — not naive decimation), VAD
 ```
 
-There is no `db/` — ferry doesn't persist anything. `POST /v1/call/start`
-takes the call's configuration in the request; nothing is looked up by agent
-id. See [ferry/AGENTS.md](ferry/AGENTS.md) for the full internals doc this
+Plain CRUD on `agents` (and read-only access to `calls`) goes straight from
+mobile to PostgREST, RLS-scoped to the caller — see `docker-compose.yml`'s
+`rest`/`kong` services. What's left on ferry is only what PostgREST's
+row-level API can't express, or that needs real server-side orchestration.
+See [ferry/AGENTS.md](ferry/AGENTS.md) for the full internals doc this
 section summarizes.
 
 ```
@@ -250,7 +282,12 @@ POST /v1/try-agent/offer          SDP offer in, SDP answer out — one-way demo
 POST /v1/call/start               starts a real two-leg call (WebRTC + Twilio)
 GET  /v1/twilio/ws/{call_id}      Twilio's Media Streams websocket
 POST /v1/twilio/status/{call_id}  Twilio's call-status webhook
+GET  /v1/agents/recent            protected — at most 3, most recently called first
+POST /v1/voices/preview           protected — a base64 WAV clip of a voice, via Sarvam
 ```
+
+All routes except `/health` and the Twilio routes require `Authorization:
+Bearer <supabase-access-token>`.
 
 ### The frame pipeline
 
@@ -320,8 +357,9 @@ client sends a keepalive frame periodically and reconnects with backoff
 
 ## mobile
 
-Expo (React Native), TypeScript, NativeWind. The calling client — one of the
-two things that talk to ferry directly (the other is web's try-agent preview).
+Expo (React Native), TypeScript, NativeWind. The calling client, and the real
+client of the Supabase stack — one of the two things that talk to ferry
+directly (the other is web's try-agent preview).
 
 ```
 mobile/
@@ -333,13 +371,19 @@ mobile/
   components/
     ui/                      rn-primitives wrappers — button, dialog, select, toast
   lib/
+    supabase.ts              the shared Supabase client — auth + direct PostgREST
+    bindings/supabase.ts      generated table types
+    auth/tokens.ts            in-memory mirror of the current access token
+    agents/api.ts             agents CRUD, straight to PostgREST (RLS-scoped);
+                              getRecentAgents/previewVoice still hit ferry
+    calls/api.ts              same pattern for calls
     webrtc/
       signaling.ts            POSTs to ferry (/v1/call/start or /v1/try-agent/offer)
       ferry-call.ts            RTCPeerConnection lifecycle for one call
       wire.ts                  the mobile-side frame wire format
     mascots/                 shared with web's avatar system, kept in sync by hand
     theme.tsx
-  providers/, state/session/  auth session — mirrors web's session handling
+  providers/, state/session/  auth session — Supabase's own, not a custom cookie
 ```
 
 **mobile calls ferry directly** — web only does for its try-agent preview.
@@ -354,7 +398,9 @@ process.env["EXPO_PUBLIC_FERRY_URL"] ?? DEFAULT_FERRY_URL;
 The default only works from an emulator on the same machine as ferry. A
 physical device needs `EXPO_PUBLIC_FERRY_URL` set to ferry's LAN address, and
 ferry's own `WEBRTC_BIND_IP` set to that same address — otherwise the SDP
-negotiates fine and no audio ever arrives.
+negotiates fine and no audio ever arrives. The same applies to
+`EXPO_PUBLIC_SUPABASE_URL`, which points at kong, not any individual Supabase
+service directly.
 
 **`lib/webrtc/wire.ts` mirrors web's `lib/webrtc/wire.ts` by hand**, the same
 way `components/ui/` and `lib/mascots/` mirror web's — there's no shared
