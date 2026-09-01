@@ -8,7 +8,6 @@
   <p>
     <a href="https://github.com/Rivervoice-org/RiverVoice/actions/workflows/ferry.yml"><img src="https://github.com/Rivervoice-org/RiverVoice/actions/workflows/ferry.yml/badge.svg" alt="ferry CI status"></a>
     <a href="https://github.com/Rivervoice-org/RiverVoice/actions/workflows/mobile.yml"><img src="https://github.com/Rivervoice-org/RiverVoice/actions/workflows/mobile.yml/badge.svg" alt="mobile CI status"></a>
-    <a href="https://github.com/Rivervoice-org/RiverVoice/actions/workflows/web.yml"><img src="https://github.com/Rivervoice-org/RiverVoice/actions/workflows/web.yml/badge.svg" alt="web CI status"></a>
   </p>
 </div>
 
@@ -17,23 +16,23 @@ in their own — live, as they talk. Speech in one language goes in, translated
 speech comes out the other end, both directions at once, low enough latency to
 hold a real conversation: `STT → MT → TTS`, per leg, frame by frame.
 
-You configure a translation profile in a browser — input/output language,
-voice, tone — then place a call: over WebRTC from the mobile app, or as a real
-phone call bridged through Twilio.
+You configure a translation profile — input/output language, voice, tone —
+then place a call: over WebRTC from the mobile app, or as a real phone call
+bridged through Twilio.
 
-Three services, two languages, plus a self-hosted Supabase stack for auth and data:
+Two services, two languages, plus a self-hosted Supabase stack for auth and data:
 
-|            | what it does                                              | stack               |
-| ---------- | --------------------------------------------------------- | ------------------- |
-| **web**    | the builder and dashboard                                 | Next.js, TypeScript |
-| **ferry**  | the live call: WebRTC, Twilio, speech, translation, audio | Rust, axum, tokio   |
-| **mobile** | the calling client — one of two things that talk to ferry | Expo, React Native  |
+|            | what it does                                               | stack               |
+| ---------- | ----------------------------------------------------------- | ------------------- |
+| **ferry**  | the live call: WebRTC, Twilio, speech, translation, audio   | Rust, axum, tokio   |
+| **mobile** | the calling client                                          | Expo, React Native  |
 
-**web still runs on mock data** (`web/src/lib/mock-data.ts`) — there is no live
-API call for agents, auth, or pricing in web today. Real persistence exists, but
-mobile is the client that talks to it, not web: agents/calls/users live in
-Postgres, mobile reads/writes most of that directly via PostgREST, and Supabase
-Auth (GoTrue) handles sign-in. See [The shape of the system](#the-shape-of-the-system).
+(There's also a `web/` — the production marketing/dashboard site — not covered
+in this README.)
+
+agents/calls/users live in Postgres; mobile reads/writes most of that directly
+via PostgREST, RLS-scoped to the caller, and Supabase Auth (GoTrue) handles
+sign-in. See [The shape of the system](#the-shape-of-the-system).
 
 ---
 
@@ -77,7 +76,6 @@ Auth (GoTrue) handles sign-in. See [The shape of the system](#the-shape-of-the-s
 - [Screenshots](#screenshots)
 - [The shape of the system](#the-shape-of-the-system)
 - [Running it](#running-it)
-- [web](#web)
 - [ferry](#ferry)
 - [mobile](#mobile)
 - [Conventions](#conventions)
@@ -87,9 +85,6 @@ Auth (GoTrue) handles sign-in. See [The shape of the system](#the-shape-of-the-s
 ## The shape of the system
 
 ```
-   browser ────────▶  web       :3000    Next.js — builder, dashboard
-                                          (mock data, no backend yet)
-
    mobile ──WebRTC─▶  ferry     :8085    Rust — STT, MT, TTS, call bridging
    Twilio  ──PSTN───▶
 
@@ -97,11 +92,8 @@ Auth (GoTrue) handles sign-in. See [The shape of the system](#the-shape-of-the-s
                                              self-hosted Supabase, docker-compose.yml
 ```
 
-web and ferry don't talk to each other in production use — web is a design-time
-tool for building an agent's config; ferry is the run-time engine that answers
-a call. The one place they meet is ferry's `/v1/try-agent/offer` route, a
-one-way WebRTC demo web's builder can open directly in the browser to preview
-an agent without going through mobile or Twilio at all.
+ferry also exposes a one-way WebRTC demo route, `/v1/try-agent/offer`, to
+preview an agent's voice without going through mobile or Twilio at all.
 
 **mobile is the real client of the Supabase stack.** It signs in against
 Supabase Auth (Google ID-token flow) and reads/writes `agents` directly via
@@ -157,7 +149,6 @@ cp .env.example .env          # fill in the real secrets — Twilio, Sarvam,
 
 docker compose up -d          # db, auth, rest, storage, kong :8000
 
-cd web     && npm install && npm run dev     # :3000
 cd ferry   && cargo run                      # :8085 — loads the root .env
                                               # first, then falls back to
                                               # its own ferry/.env if present
@@ -170,61 +161,6 @@ pointing at kong (`http://<lan-ip>:8000` for a physical device,
 `EXPO_PUBLIC_FERRY_URL` pointing at ferry the same way. A physical device also
 needs ferry's own `WEBRTC_BIND_IP` set to that same LAN address, or the SDP
 negotiates fine and no audio ever arrives. See `mobile/.env.example`.
-
----
-
-## web
-
-Next.js App Router, TypeScript, Tailwind v4, Base UI primitives.
-
-```
-src/
-  app/
-    (auth)/          sign-in, sign-up, verify
-    (app)/           home, agents        — the shell with the sidebar
-    (site)/          marketing pages
-    build-agent/     the builder, its own layout
-    artifacts/, shelf-preview/    standalone preview routes
-  components/
-    dashboard/       agent board, composer, templates
-    builder/         settings, tools, variables, assistant
-    ui/              Base UI wrappers — button, dialog, data-table
-  lib/
-    mock-data.ts     stand-ins for persisted data
-    agents/          queries and schemas per resource, reading mock-data
-    auth/, pricing/, tools/    same pattern — mocked, not fetched
-    webrtc/          the try-agent WebRTC demo client, talks to ferry directly
-  mascots/           the agent avatars — art, not components
-  motion/            the hand-drawn walkthrough engine
-```
-
-**There is no live API call for agents, auth, or pricing.** `lib/api.ts` is
-now just an `ApiError` type — the fetch wrapper it used to hold is gone.
-`lib/agents/server.ts` and friends resolve against
-`lib/mock-data.ts` through the same async function shapes a real fetch would
-have, so swapping in a real backend later is a matter of replacing the
-function bodies, not the call sites or the TanStack Query hooks around them:
-
-```ts
-export const agentsQueryKey = ["agents"] as const;
-
-export function useAgents() {
-  return useQuery({
-    queryKey: agentsQueryKey,
-    queryFn: () => getAgents(), // reads lib/mock-data.ts today
-  });
-}
-```
-
-**The one thing web does talk to for real is ferry**, and only for the
-try-agent preview: `lib/webrtc/` opens a WebRTC connection straight to
-`POST /v1/try-agent/offer` so you can hear an agent from the browser while
-building it, without mobile or a phone call involved.
-
-**`mascots/` and `motion/` are libraries, not components.** Nothing in them
-imports from `components/`, which is what lets the art render server-side, or
-in a script that uploads an avatar. `mascots/parts.ts` is path data;
-`mascots/bot.ts` is the seeded assembler that picks from it.
 
 ---
 
@@ -375,8 +311,7 @@ client sends a keepalive frame periodically and reconnects with backoff
 ## mobile
 
 Expo (React Native), TypeScript, NativeWind. The calling client, and the real
-client of the Supabase stack — one of the two things that talk to ferry
-directly (the other is web's try-agent preview).
+client of the Supabase stack — the thing that talks to ferry directly.
 
 ```
 mobile/
@@ -398,12 +333,12 @@ mobile/
       signaling.ts            POSTs to ferry (/v1/call/start or /v1/try-agent/offer)
       ferry-call.ts            RTCPeerConnection lifecycle for one call
       wire.ts                  the mobile-side frame wire format
-    mascots/                 shared with web's avatar system, kept in sync by hand
+    mascots/                 the agent avatars — art, not components
     theme.tsx
   providers/, state/session/  auth session — Supabase's own, not a custom cookie
 ```
 
-**mobile calls ferry directly** — web only does for its try-agent preview.
+**mobile calls ferry directly.**
 `lib/webrtc/signaling.ts` posts to ferry, gets back an SDP answer, and
 `ferry-call.ts` drives the `RTCPeerConnection` from there:
 
@@ -418,14 +353,6 @@ ferry's own `WEBRTC_BIND_IP` set to that same address — otherwise the SDP
 negotiates fine and no audio ever arrives. The same applies to
 `EXPO_PUBLIC_SUPABASE_URL`, which points at kong, not any individual Supabase
 service directly.
-
-**`lib/webrtc/wire.ts` mirrors web's `lib/webrtc/wire.ts` by hand**, the same
-way `components/ui/` and `lib/mascots/` mirror web's — there's no shared
-package between the two clients, so a change to ferry's data-channel tag
-bytes needs the same edit made twice. They are currently out of sync: web's
-copy has two tag kinds (`PeerConnected`, `Ringing`) mobile's doesn't yet have.
-Check both before assuming ferry's wire format is fully documented in either
-one.
 
 ```bash
 cd mobile && npm install
@@ -454,8 +381,8 @@ changed, the body says why it was done that way.
 
 **Pre-commit runs** prettier and rustfmt, plus the usual whitespace and
 merge-conflict checks. CI runs one workflow per service
-(`.github/workflows/ferry.yml`, `web.yml`, `mobile-android-build.yml`),
-path-filtered so a web change does not rebuild ferry.
+(`.github/workflows/ferry.yml`, `mobile-android-build.yml`), path-filtered so
+a mobile-only change does not rebuild ferry, and vice versa.
 
 **PRs get two automated reviewers.** CodeRabbit comments on every PR (config
 in [.coderabbit.yaml](.coderabbit.yaml)); Claude Code reviews are run manually
