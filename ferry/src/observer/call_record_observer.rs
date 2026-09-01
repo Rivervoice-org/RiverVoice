@@ -331,41 +331,55 @@ struct LegBuffers {
 impl LegBuffers {
     /// Pads `buf` with `offset_ms` worth of silence if this is its first
     /// chunk (buffer still empty, rate not yet recorded) — a no-op on every
-    /// later chunk for the same buffer.
+    /// later chunk for the same buffer. Returns whether this chunk should be
+    /// recorded at all: a `None` offset on the first chunk means audio
+    /// arrived before `connected_at` was set (see `CallRecordObserver::
+    /// offset_ms`), so there's no anchor to align it against yet — recording
+    /// it anyway would glue it to position 0 and burn the one first-chunk
+    /// slot the real, properly-offset first chunk needs.
     fn pad_on_first_chunk(
         buf: &mut Vec<i16>,
         recorded_rate: &mut Option<u32>,
         sample_rate: u32,
         offset_ms: Option<i32>,
-    ) {
+    ) -> bool {
         if recorded_rate.is_some() {
-            return;
+            return true;
         }
+        let Some(ms) = offset_ms else {
+            return false;
+        };
         *recorded_rate = Some(sample_rate);
-        let silence_samples = offset_ms
-            .filter(|ms| *ms > 0)
-            .map(|ms| (ms as u64 * sample_rate as u64 / 1000) as usize)
-            .unwrap_or(0);
+        let silence_samples = if ms > 0 {
+            (ms as u64 * sample_rate as u64 / 1000) as usize
+        } else {
+            0
+        };
         buf.resize(silence_samples, 0);
+        true
     }
 
     fn push_mic(&mut self, sample_rate: u32, offset_ms: Option<i32>, samples: Vec<i16>) {
-        Self::pad_on_first_chunk(
+        if !Self::pad_on_first_chunk(
             &mut self.mic,
             &mut self.mic_sample_rate,
             sample_rate,
             offset_ms,
-        );
+        ) {
+            return;
+        }
         self.mic.extend(samples);
     }
 
     fn push_tts(&mut self, sample_rate: u32, offset_ms: Option<i32>, samples: Vec<i16>) {
-        Self::pad_on_first_chunk(
+        if !Self::pad_on_first_chunk(
             &mut self.tts_output,
             &mut self.tts_sample_rate,
             sample_rate,
             offset_ms,
-        );
+        ) {
+            return;
+        }
         self.tts_output.extend(samples);
     }
 }

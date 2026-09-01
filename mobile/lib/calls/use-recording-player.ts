@@ -23,6 +23,7 @@ export function useRecordingPlayer(call: CallDetail | undefined) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [positionMs, setPositionMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
   const playerRef = useRef<AudioPlayer | null>(null);
 
   const path =
@@ -36,22 +37,29 @@ export function useRecordingPlayer(call: CallDetail | undefined) {
     setIsPlaying(false);
     setPositionMs(0);
     setDurationMs(0);
+    setLoadFailed(false);
 
     if (!path) return;
     let cancelled = false;
 
-    void recordingSource(path).then((source) => {
-      if (cancelled) return;
-      const player = createAudioPlayer(source);
-      playerRef.current = player;
-      player.addListener("playbackStatusUpdate", (status) => {
-        setPositionMs(Math.round(status.currentTime * 1000));
-        setDurationMs(Math.round(status.duration * 1000));
-        if (status.didJustFinish) {
-          setIsPlaying(false);
-        }
+    recordingSource(path)
+      .then((source) => {
+        if (cancelled) return;
+        const player = createAudioPlayer(source);
+        playerRef.current = player;
+        player.addListener("playbackStatusUpdate", (status) => {
+          setPositionMs(Math.round(status.currentTime * 1000));
+          setDurationMs(Math.round(status.duration * 1000));
+          if (status.didJustFinish) {
+            setIsPlaying(false);
+          }
+        });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        console.warn("useRecordingPlayer: failed to load recording", error);
+        setLoadFailed(true);
       });
-    });
 
     return () => {
       cancelled = true;
@@ -87,7 +95,7 @@ export function useRecordingPlayer(call: CallDetail | undefined) {
     variant,
     setVariant,
     hasTranslated,
-    hasAudio: !!path,
+    hasAudio: !!path && !loadFailed,
     isPlaying,
     positionMs,
     durationMs,

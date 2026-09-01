@@ -1,8 +1,13 @@
 use std::time::Duration;
 
-/// A slow upload (a long call's recording, tens of MB) shouldn't hang
-/// forever — same reasoning as `services::twilio::client::TwilioClient`.
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// A stalled upload shouldn't hang forever — same reasoning as
+/// `services::twilio::client::TwilioClient`. An idle-read timeout rather
+/// than a whole-request one: a long call's recording (tens of MB) can
+/// legitimately take longer than this to finish on a slow-but-still-
+/// transferring connection, and a flat total-duration timeout would abort
+/// it mid-upload even though bytes are still flowing. This only fires when
+/// no progress happens for this long.
+const IDLE_READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Talks to Supabase Storage through Kong, the same gateway every other
 /// Supabase service in this stack goes through (see docker-compose.yml) —
@@ -35,7 +40,8 @@ impl std::error::Error for StorageError {}
 impl SupabaseStorageClient {
     pub fn new(base_url: String, service_role_key: String) -> Self {
         let http = reqwest::Client::builder()
-            .timeout(REQUEST_TIMEOUT)
+            .connect_timeout(Duration::from_secs(10))
+            .read_timeout(IDLE_READ_TIMEOUT)
             .build()
             .expect("failed to build supabase storage http client");
 

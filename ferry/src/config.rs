@@ -116,7 +116,9 @@ impl Config {
             supabase_url: std::env::var("API_EXTERNAL_URL").unwrap_or_default(),
             supabase_service_role_key: std::env::var("SERVICE_ROLE_KEY").unwrap_or_default(),
             supabase_recordings_bucket: std::env::var("SUPABASE_RECORDINGS_BUCKET")
-                .unwrap_or_else(|_| "recordings".to_string()),
+                .ok()
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "recordings".to_string()),
         };
 
         raw.validate().map_err(ConfigError)?;

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ScrollView,
   View,
@@ -46,7 +46,7 @@ function toLine(
     mine,
     text: mine ? line.originalText : (line.translatedText ?? line.originalText),
     spoken: mine ? line.translatedText : line.originalText,
-    time: line.offsetMs === null ? null : formatOffset(line.offsetMs),
+    time: span.offsetMs === null ? null : formatOffset(span.offsetMs),
     active: activeSeq === line.seq,
     onPress:
       span.offsetMs === null
@@ -97,14 +97,11 @@ export default function TranscriptScreen() {
     [],
   );
 
-  useMemo(() => {
+  useEffect(() => {
     if (activeSeq === null) return;
     const y = linePositions.current.get(String(activeSeq));
     if (y === undefined) return;
     scrollRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
-    // Runs as a side effect of activeSeq changing, not a value derivation —
-    // useMemo here is just "run this when activeSeq changes", not memoizing
-    // a return value (there isn't one).
   }, [activeSeq]);
 
   const handleLinePress = useCallback(
