@@ -1,16 +1,33 @@
-# RiverVoice
+<div align="center">
+  <img src="mobile/assets/icon.png" width="88" alt="RiverVoice logo">
 
-Voice agents that answer the phone in Indian languages. You describe an agent in
-a browser, give it a voice, and it takes calls — over WebRTC from the mobile app,
-or as a real phone call bridged through Twilio.
+  <h1>RiverVoice</h1>
+
+  <p><strong>Real-time voice Ai translation on live phone calls, in Indian languages.</strong></p>
+
+  <p>
+    <a href="https://github.com/Rivervoice-org/RiverVoice/actions/workflows/ferry.yml"><img src="https://github.com/Rivervoice-org/RiverVoice/actions/workflows/ferry.yml/badge.svg" alt="ferry CI status"></a>
+    <a href="https://github.com/Rivervoice-org/RiverVoice/actions/workflows/mobile.yml"><img src="https://github.com/Rivervoice-org/RiverVoice/actions/workflows/mobile.yml/badge.svg" alt="mobile CI status"></a>
+    <a href="https://github.com/Rivervoice-org/RiverVoice/actions/workflows/web.yml"><img src="https://github.com/Rivervoice-org/RiverVoice/actions/workflows/web.yml/badge.svg" alt="web CI status"></a>
+  </p>
+</div>
+
+Two people on a call who don't speak the same language, each hearing the other
+in their own — live, as they talk. Speech in one language goes in, translated
+speech comes out the other end, both directions at once, low enough latency to
+hold a real conversation: `STT → MT → TTS`, per leg, frame by frame.
+
+You configure a translation profile in a browser — input/output language,
+voice, tone — then place a call: over WebRTC from the mobile app, or as a real
+phone call bridged through Twilio.
 
 Three services, two languages, plus a self-hosted Supabase stack for auth and data:
 
-|            | what it does                                              | stack                |
-| ---------- | ---------------------------------------------------------- | --------------------- |
-| **web**    | the builder and dashboard                                   | Next.js, TypeScript   |
-| **ferry**  | the live call: WebRTC, Twilio, speech, translation, audio   | Rust, axum, tokio     |
-| **mobile** | the calling client — one of two things that talk to ferry   | Expo, React Native    |
+|            | what it does                                              | stack               |
+| ---------- | --------------------------------------------------------- | ------------------- |
+| **web**    | the builder and dashboard                                 | Next.js, TypeScript |
+| **ferry**  | the live call: WebRTC, Twilio, speech, translation, audio | Rust, axum, tokio   |
+| **mobile** | the calling client — one of two things that talk to ferry | Expo, React Native  |
 
 **web still runs on mock data** (`web/src/lib/mock-data.ts`) — there is no live
 API call for agents, auth, or pricing in web today. Real persistence exists, but
@@ -316,7 +333,7 @@ pipeline_b2a: STT(B's lang) → MT → TTS(A's lang)   // what A hears
 ```
 
 `FrameIo::into_parts()` splits each pipeline into raw `(Receiver, Sender)`
-halves, and those halves are paired into the *other* leg's transport at
+halves, and those halves are paired into the _other_ leg's transport at
 construction time — A's WebRTC transport reads `b2a`'s output and feeds
 `a2b`'s input; Twilio's transport is the mirror. Nothing is moved "in flight"
 later; the wiring at construction is the whole mechanism.
