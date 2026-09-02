@@ -56,11 +56,9 @@ const supabaseUrlDev = process.env.EXPO_PUBLIC_SUPABASE_URL_DEV;
 // @ts-expect-error -- dot notation required for Expo's env inlining
 const supabaseUrlProd = process.env.EXPO_PUBLIC_SUPABASE_URL_PROD;
 // @ts-expect-error -- dot notation required for Expo's env inlining
-const supabasePublishableKeyDev =
-  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY_DEV;
+const pubKeyDev = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY_DEV;
 // @ts-expect-error -- dot notation required for Expo's env inlining
-const supabasePublishableKeyProd =
-  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY_PROD;
+const pubKeyProd = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY_PROD;
 
 const isProd = environment() === Environment.Prod;
 
@@ -68,9 +66,7 @@ const parsed = envSchema.safeParse({
   GOOGLE_WEB_CLIENT_ID: googleWebClientId,
   FERRY_URL: isProd ? ferryUrlProd : ferryUrlDev,
   SUPABASE_URL: isProd ? supabaseUrlProd : supabaseUrlDev,
-  SUPABASE_PUBLISHABLE_KEY: isProd
-    ? supabasePublishableKeyProd
-    : supabasePublishableKeyDev,
+  SUPABASE_PUBLISHABLE_KEY: isProd ? pubKeyProd : pubKeyDev,
 });
 
 if (!parsed.success) {
