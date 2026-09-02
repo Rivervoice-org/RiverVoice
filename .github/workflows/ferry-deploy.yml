@@ -45,6 +45,10 @@ concurrency:
 
 jobs:
   build:
+    # workflow_dispatch lets you pick any branch to run against in the
+    # Actions UI — this refuses to build/deploy anything but main, on top
+    # of (not instead of) the ferry-deploy-approval gate on the job below.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     defaults:
       run:
