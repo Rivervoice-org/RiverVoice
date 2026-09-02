@@ -54,6 +54,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # .env is gitignored and never reaches the runner otherwise — without
+      # this, EXPO_PUBLIC_ENVIRONMENT and every EXPO_PUBLIC_*_PROD var are
+      # unset when Expo inlines them into the JS bundle below, and the app
+      # throws immediately on launch (config.ts's environment() rejects an
+      # unset/invalid value).
+      - name: Write production .env
+        run: |
+          cat > .env <<'MOBILE_ENV_EOF'
+          ${{ secrets.MOBILE_ENV_PRODUCTION }}
+          MOBILE_ENV_EOF
+
       - name: Prebuild native Android project
         run: npx expo prebuild --platform android --non-interactive
 
