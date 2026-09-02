@@ -11,9 +11,9 @@ const IDLE_READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Talks to Supabase Storage through Kong, the same gateway every other
 /// Supabase service in this stack goes through (see docker-compose.yml) —
-/// not a direct connection to the storage container. Uses the service-role
-/// key, same trust level as ferry's direct Postgres connection: this is
-/// server-side only, never forwarded to a client.
+/// not a direct connection to the storage container. Uses the secret key
+/// (SUPABASE_SECRET_KEY), same trust level as ferry's direct Postgres
+/// connection: this is server-side only, never forwarded to a client.
 ///
 /// Upload-only: recordings are read back through Storage's `authenticated`
 /// download route, straight from the mobile client with its own session
@@ -23,7 +23,7 @@ const IDLE_READ_TIMEOUT: Duration = Duration::from_secs(30);
 pub struct SupabaseStorageClient {
     http: reqwest::Client,
     base_url: String,
-    service_role_key: String,
+    secret_key: String,
 }
 
 #[derive(Debug)]
@@ -38,7 +38,7 @@ impl std::fmt::Display for StorageError {
 impl std::error::Error for StorageError {}
 
 impl SupabaseStorageClient {
-    pub fn new(base_url: String, service_role_key: String) -> Self {
+    pub fn new(base_url: String, secret_key: String) -> Self {
         let http = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(10))
             .read_timeout(IDLE_READ_TIMEOUT)
@@ -48,7 +48,7 @@ impl SupabaseStorageClient {
         Self {
             http,
             base_url,
-            service_role_key,
+            secret_key,
         }
     }
 
@@ -66,8 +66,8 @@ impl SupabaseStorageClient {
         let response = self
             .http
             .put(url)
-            .header("apikey", &self.service_role_key)
-            .header("Authorization", format!("Bearer {}", self.service_role_key))
+            .header("apikey", &self.secret_key)
+            .header("Authorization", format!("Bearer {}", self.secret_key))
             .header("Content-Type", content_type)
             .header("x-upsert", "true")
             .body(bytes)

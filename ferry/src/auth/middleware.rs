@@ -39,6 +39,7 @@ pub async fn require_user(mut req: Request, next: Next) -> Result<Response, ApiR
         .ok_or_else(|| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
 
     let verified = token::verify_access_token(token, secret)
+        .await
         .map_err(|_| ApiResponse::fail(StatusCode::UNAUTHORIZED, "Sign in to continue"))?;
 
     let exists = users::Entity::find_by_id(verified.user_id)

@@ -608,10 +608,8 @@ async fn finalize_recording(call_id: Uuid, audio: AudioState) {
         return;
     };
 
-    let client = SupabaseStorageClient::new(
-        cfg.supabase_url.clone(),
-        cfg.supabase_service_role_key.clone(),
-    );
+    let client =
+        SupabaseStorageClient::new(cfg.supabase_url.clone(), cfg.supabase_secret_key.clone());
     let bucket = cfg.supabase_recordings_bucket.clone();
 
     // Original: each party's own voice, untouched.

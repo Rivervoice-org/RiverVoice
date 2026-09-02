@@ -155,7 +155,7 @@ cd ferry   && cargo run                      # :8085 — loads the root .env
 cd mobile  && npm install && npx expo run:android   # or run:ios — needs a dev client
 ```
 
-mobile needs `EXPO_PUBLIC_SUPABASE_URL`/`EXPO_PUBLIC_SUPABASE_ANON_KEY`
+mobile needs `EXPO_PUBLIC_SUPABASE_URL`/`EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 pointing at kong (`http://<lan-ip>:8000` for a physical device,
 `http://127.0.0.1:8000` for an emulator on the same machine), and
 `EXPO_PUBLIC_FERRY_URL` pointing at ferry the same way. A physical device also
