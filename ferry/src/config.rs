@@ -54,6 +54,13 @@ pub struct Config {
     pub twilio_from_number: String,
     pub public_base_url: String,
     pub webrtc_bind_ip: String,
+    /// The address callers can actually reach, when it differs from
+    /// `webrtc_bind_ip` — e.g. behind AWS/Lightsail-style 1:1 NAT, where the
+    /// instance's network interface only ever sees its private address, but
+    /// the public one (this) is what has to end up in the SDP answer. Empty
+    /// means "no override": `webrtc_bind_ip` is already what's reachable
+    /// (same-LAN dev), so nothing gets rewritten.
+    pub webrtc_public_ip: String,
     /// Kong's own address, as ferry itself reaches it — used for every
     /// request ferry makes to Supabase (Storage uploads, sign requests).
     pub supabase_url: String,
@@ -96,6 +103,9 @@ struct RawConfig {
     // but must be a real, routable interface address (e.g. the LAN IP
     // mobile clients reach ferry on) for WebRTC audio to actually work.
     webrtc_bind_ip: String,
+    // No #[validate]: empty is a valid, common case (dev) — see the field
+    // doc on Config.
+    webrtc_public_ip: String,
     #[validate(length(min = 1, message = "SUPABASE_URL is not set"))]
     supabase_url: String,
     #[validate(length(min = 1, message = "SUPABASE_JWKS_URL is not set"))]
@@ -140,6 +150,7 @@ impl Config {
             public_base_url: std::env::var("PUBLIC_BASE_URL").unwrap_or_default(),
             webrtc_bind_ip: std::env::var("WEBRTC_BIND_IP")
                 .unwrap_or_else(|_| "0.0.0.0".to_string()),
+            webrtc_public_ip: std::env::var("WEBRTC_PUBLIC_IP").unwrap_or_default(),
             supabase_url: std::env::var("SUPABASE_URL").unwrap_or_default(),
             supabase_jwks_url: std::env::var("SUPABASE_JWKS_URL").unwrap_or_default(),
             supabase_secret_key: std::env::var("SUPABASE_SECRET_KEY").unwrap_or_default(),
@@ -164,6 +175,7 @@ impl Config {
             twilio_from_number: raw.twilio_from_number,
             public_base_url: raw.public_base_url,
             webrtc_bind_ip: raw.webrtc_bind_ip,
+            webrtc_public_ip: raw.webrtc_public_ip,
             supabase_url: raw.supabase_url,
             supabase_jwks_url: raw.supabase_jwks_url,
             supabase_secret_key: raw.supabase_secret_key,

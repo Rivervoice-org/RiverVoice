@@ -1,0 +1,32 @@
+# One-time setup on the Lightsail instance:
+#   sudo cp deploy/ferry.service /etc/systemd/system/ferry.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ferry
+#
+# After that, .github/workflows/ferry-deploy.yml only ever scp's a freshly
+# built binary into place and runs `systemctl restart ferry` — this file
+# itself doesn't change per deploy, so it isn't touched by the workflow.
+[Unit]
+Description=ferry
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Must be the same account the deploy workflow SSHes in as (LIGHTSAIL_USER)
+# — that's whose home directory the binary gets scp'd into. Replace
+# <deploy-user> below with that actual username; %h only resolves with User=
+# set, so it's spelled out here rather than left implicit.
+#
+# WorkingDirectory matters beyond convention: config.rs::load_dotenv() reads
+# "../.env.production" relative to CWD, so .env/.env.production must sit one
+# level above this directory (i.e. directly in ~/RiverVoice) — placed there
+# once, manually; nothing in CI ever touches them.
+User=<deploy-user>
+WorkingDirectory=/home/<deploy-user>/RiverVoice/ferry
+ExecStart=/home/<deploy-user>/RiverVoice/ferry/target/release/ferry
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

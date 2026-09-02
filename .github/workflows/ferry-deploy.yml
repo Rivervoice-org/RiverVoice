@@ -1,0 +1,161 @@
+name: ferry-deploy
+
+# One-time instance setup (not done by this workflow):
+#   1. deploy/ferry.service copied to /etc/systemd/system/ferry.service (with
+#      <deploy-user> filled in), then `sudo systemctl enable ferry`.
+#   2. Directory the binary lands in: ~/RiverVoice/ferry/target/release/
+#      (this workflow scp's it there). ~/RiverVoice/.env and
+#      ~/RiverVoice/ferry/.env.production are written by this workflow
+#      itself now (see the "Write env files" step) — not a manual step.
+#   3. Passwordless sudo for exactly this command, since the SSH session
+#      below is non-interactive and can't answer a password prompt:
+#        echo "<deploy-user> ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart ferry" \
+#          | sudo tee /etc/sudoers.d/ferry-deploy
+#   4. nginx in front for TLS termination — see deploy/nginx/ferry.conf.
+#      Separate one-time setup, not touched by this workflow either; once
+#      it's live, PUBLIC_BASE_URL (in the FERRY_ENV_PRODUCTION secret below)
+#      and mobile's EXPO_PUBLIC_FERRY_URL_PROD should both point at
+#      https://api.rivervoice.in instead of the bare instance IP.
+#   5. Secrets on this repo:
+#        LIGHTSAIL_HOST, LIGHTSAIL_USER, LIGHTSAIL_SSH_KEY — SSH access.
+#        FERRY_ENV_PRODUCTION — the ENTIRE contents of ferry/.env.production
+#          (see .env.example), pasted as one multi-line secret. Overwritten
+#          onto the instance fresh on every deploy, so the instance is never
+#          the source of truth for config — this repo's secret is.
+#   6. Settings → Environments → New environment named "ferry-deploy-approval"
+#      → add required reviewers — every run (including your own) waits for
+#      manual approval before touching the server, same pattern as
+#      mobile-android-build.yml uses for releases.
+#
+# Cross-compilation risk: this builds on ubuntu-latest's glibc, which must be
+# the same version as (or older than) the instance's — a newer build glibc
+# than the instance has will fail to run with a GLIBC_x.xx not found error.
+# If the instance is on an older Ubuntu than the runner, either pin
+# ubuntu-latest to a matching older version below, or build inside a
+# container image matching the instance's OS.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ferry-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ferry
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ferry
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ferry-binary
+          path: ferry/target/release/ferry
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ferry-deploy-approval
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ferry-binary
+          path: .
+
+      - run: chmod +x ferry
+
+      # Without this, a failed health check below is too late — the scp step
+      # already overwrote the binary that was working, so the server would
+      # be left crash-looping the broken one with nothing to fall back to.
+      - name: Back up the currently-running binary
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ~/RiverVoice/ferry/target/release
+            if [ -f ferry ]; then cp ferry ferry.bak; fi
+
+      # Overwrites both dotenv files fresh from the FERRY_ENV_PRODUCTION
+      # secret every deploy — the instance's own copy is never hand-edited
+      # or treated as authoritative, this repo's secret is. ~/RiverVoice/.env
+      # only ever needs the one ENVIRONMENT line (see config.rs:load_dotenv),
+      # which isn't secret, so it's written literally rather than from a
+      # second secret.
+      - name: Write env files
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            echo "ENVIRONMENT=production" > ~/RiverVoice/.env
+            cat > ~/RiverVoice/ferry/.env.production <<'FERRY_ENV_EOF'
+            ${{ secrets.FERRY_ENV_PRODUCTION }}
+            FERRY_ENV_EOF
+
+      - name: Copy binary to the instance
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          source: ferry
+          target: ~/RiverVoice/ferry/target/release
+          overwrite: true
+
+      # On a failed health check, restores ferry.bak and restarts before
+      # failing the job — the workflow run still shows red (a real deploy
+      # problem happened, don't hide that), but the server itself ends up
+      # back on the last-known-good binary instead of crash-looping the new
+      # one indefinitely.
+      - name: Restart ferry, verify it came up, roll back on failure
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ~/RiverVoice/ferry/target/release
+            chmod +x ferry
+            sudo systemctl restart ferry
+            # Give it a moment to bind before checking it actually came up.
+            sleep 3
+            if curl -sf http://localhost:8085/health; then
+              echo "Deploy succeeded"
+              exit 0
+            fi
+
+            echo "Health check failed — rolling back to previous binary"
+            if [ -f ferry.bak ]; then
+              mv ferry.bak ferry
+              sudo systemctl restart ferry
+              sleep 3
+              if curl -sf http://localhost:8085/health; then
+                echo "Rolled back successfully"
+              else
+                echo "Rollback health check also failed — ferry may be down"
+              fi
+            else
+              echo "No backup binary found, cannot roll back"
+            fi
+            exit 1
