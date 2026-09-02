@@ -26,9 +26,9 @@ export async function recordingSource(
       Authorization: `Bearer ${session.access_token}`,
       // Kong's key-auth on storage-v1 checks this — separate from the
       // Authorization header above, which is what Storage itself uses to
-      // resolve auth.uid() for the RLS check. Same anon key the app already
-      // ships with (EXPO_PUBLIC_SUPABASE_ANON_KEY), not a secret on its own.
-      apikey: config.supabaseAnonKey,
+      // resolve auth.uid() for the RLS check. Same publishable key the app
+      // already ships with (EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY), not a secret.
+      apikey: config.supabasePublishableKey,
     },
   };
 }
