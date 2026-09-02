@@ -52,8 +52,12 @@ export default function WelcomeScreen() {
         <Text className="mt-8 text-center text-[26px] font-semibold leading-tight tracking-[-0.02em]">
           AI translation,{"\n"}on every call
         </Text>
-        <Text variant="muted" className="mt-4 max-w-xs text-center text-sm leading-6">
-          An AI agent answers in real time, translating any language into yours as the call happens.
+        <Text
+          variant="muted"
+          className="mt-4 max-w-xs text-center text-sm leading-6"
+        >
+          An AI agent answers in real time, translating any language into yours
+          as the call happens.
         </Text>
       </View>
 

@@ -22,14 +22,24 @@ function initialsOf(name: string) {
 /** Deterministic tint per name, so the same person always gets the same color. */
 function hashTint(name: string) {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
   // Always in bounds (modulo the tuple's own length) — the fallback is unreachable.
-  return INITIALS_TINTS[Math.abs(hash) % INITIALS_TINTS.length] ?? INITIALS_TINTS[0];
+  return (
+    INITIALS_TINTS[Math.abs(hash) % INITIALS_TINTS.length] ?? INITIALS_TINTS[0]
+  );
 }
 
 /** A person's avatar when there's no picture to show — initials on a tinted
  * circle, the same idea as Google/Slack contact avatars. */
-export function InitialsAvatar({ name, size = 32 }: { name: string; size?: number }) {
+export function InitialsAvatar({
+  name,
+  size = 32,
+}: {
+  name: string;
+  size?: number;
+}) {
   const initials = initialsOf(name);
   const tint = hashTint(name);
   return (
@@ -37,7 +47,10 @@ export function InitialsAvatar({ name, size = 32 }: { name: string; size?: numbe
       className={cn("items-center justify-center rounded-full", tint.bg)}
       style={{ width: size, height: size }}
     >
-      <Text className={cn("font-semibold", tint.text)} style={{ fontSize: size * 0.38 }}>
+      <Text
+        className={cn("font-semibold", tint.text)}
+        style={{ fontSize: size * 0.38 }}
+      >
         {initials}
       </Text>
     </View>

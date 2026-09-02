@@ -7,7 +7,13 @@ import { Animated, Easing } from "react-native";
  * the moment `active` goes false rather than finishing its current cycle, so
  * it never keeps pulsing after the call ends.
  */
-export function PulsingRing({ active, children }: { active: boolean; children: React.ReactNode }) {
+export function PulsingRing({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: React.ReactNode;
+}) {
   const scale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -29,11 +35,13 @@ export function PulsingRing({ active, children }: { active: boolean; children: R
           easing: Easing.in(Easing.ease),
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
     loop.start();
     return () => loop.stop();
   }, [active, scale]);
 
-  return <Animated.View style={{ transform: [{ scale }] }}>{children}</Animated.View>;
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>{children}</Animated.View>
+  );
 }

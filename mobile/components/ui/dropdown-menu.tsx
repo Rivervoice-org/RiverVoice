@@ -18,7 +18,10 @@ function DropdownMenuSubTrigger({
   children,
   ref,
   ...props
-}: Omit<React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger>, "children"> & {
+}: Omit<
+  React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger>,
+  "children"
+> & {
   inset?: boolean;
   children?: React.ReactNode;
   ref?: React.Ref<React.ElementRef<typeof DropdownMenuPrimitive.SubTrigger>>;
@@ -31,7 +34,7 @@ function DropdownMenuSubTrigger({
       className={cn(
         "flex-row items-center gap-2 rounded-md px-2 py-1.5",
         inset && "pl-8",
-        className
+        className,
       )}
       {...props}
     >
@@ -44,7 +47,10 @@ function DropdownMenuSubTrigger({
         size={16}
         strokeWidth={1.75}
         color={colors.muted}
-        style={{ transform: [{ rotate: open ? "90deg" : "0deg" }], marginLeft: "auto" }}
+        style={{
+          transform: [{ rotate: open ? "90deg" : "0deg" }],
+          marginLeft: "auto",
+        }}
       />
     </DropdownMenuPrimitive.SubTrigger>
   );
@@ -62,7 +68,7 @@ function DropdownMenuSubContent({
       ref={ref}
       className={cn(
         "min-w-40 rounded-lg border border-border bg-popover p-1 shadow-lift",
-        className
+        className,
       )}
       {...props}
     />
@@ -85,7 +91,7 @@ function DropdownMenuContent({
         sideOffset={sideOffset}
         className={cn(
           "min-w-40 rounded-lg border border-border bg-popover p-1 shadow-lift",
-          className
+          className,
         )}
         {...props}
       />
@@ -108,7 +114,7 @@ function DropdownMenuLabel({
       className={cn(
         "px-2 py-1.5 text-xs font-medium text-muted-foreground",
         inset && "pl-8",
-        className
+        className,
       )}
       {...props}
     />
@@ -132,7 +138,7 @@ function DropdownMenuItem({
       className={cn(
         "flex-row items-center gap-2 rounded-md px-2 py-1.5 active:bg-secondary",
         inset && "pl-8",
-        className
+        className,
       )}
       {...props}
     >
@@ -151,7 +157,10 @@ function DropdownMenuCheckboxItem({
   checked,
   ref,
   ...props
-}: Omit<React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>, "children"> & {
+}: Omit<
+  React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>,
+  "children"
+> & {
   children?: React.ReactNode;
   ref?: React.Ref<React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>>;
 }) {
@@ -162,7 +171,7 @@ function DropdownMenuCheckboxItem({
       checked={checked}
       className={cn(
         "flex-row items-center gap-2 rounded-md px-2 py-1.5 active:bg-secondary",
-        className
+        className,
       )}
       {...props}
     >
@@ -184,7 +193,10 @@ function DropdownMenuRadioItem({
   value,
   ref,
   ...props
-}: Omit<React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>, "children"> & {
+}: Omit<
+  React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>,
+  "children"
+> & {
   children?: React.ReactNode;
   ref?: React.Ref<React.ElementRef<typeof DropdownMenuPrimitive.RadioItem>>;
 }) {
@@ -195,12 +207,17 @@ function DropdownMenuRadioItem({
       value={value}
       className={cn(
         "flex-row items-center gap-2 rounded-md px-2 py-1.5 active:bg-secondary",
-        className
+        className,
       )}
       {...props}
     >
       <DropdownMenuPrimitive.ItemIndicator>
-        <Circle size={10} strokeWidth={2} color={colors.ink} fill={colors.ink} />
+        <Circle
+          size={10}
+          strokeWidth={2}
+          color={colors.ink}
+          fill={colors.ink}
+        />
       </DropdownMenuPrimitive.ItemIndicator>
       {typeof children === "string" ? (
         <RNText className="text-sm text-foreground">{children}</RNText>

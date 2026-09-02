@@ -87,7 +87,10 @@ function Skeleton({ className }: { className?: string }) {
   }
 
   return (
-    <View className={cn("overflow-hidden bg-border", className)} onLayout={onLayout}>
+    <View
+      className={cn("overflow-hidden bg-border", className)}
+      onLayout={onLayout}
+    >
       {width > 0 && !reducedMotion ? (
         <Animated.View
           pointerEvents="none"

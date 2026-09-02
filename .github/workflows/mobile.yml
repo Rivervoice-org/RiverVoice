@@ -2,7 +2,6 @@ name: mobile
 
 on:
   push:
-    branches: [main]
     paths:
       - "mobile/**"
       - ".github/workflows/mobile.yml"
@@ -38,6 +37,9 @@ jobs:
           cache-dependency-path: mobile/package-lock.json
 
       - run: npm ci
+
+      - name: Prettier
+        run: npx prettier --check .
 
       - name: ESLint
         run: npm run lint

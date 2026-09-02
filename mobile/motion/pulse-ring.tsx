@@ -29,8 +29,8 @@ export function PulseRing({
       withRepeat(
         withTiming(1, { duration, easing: Easing.out(Easing.cubic) }),
         -1,
-        false
-      )
+        false,
+      ),
     );
   }, [delay, duration, progress]);
 

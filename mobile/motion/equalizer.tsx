@@ -8,7 +8,9 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 
-const DEFAULT_HEIGHTS = [0.45, 1, 0.65, 0.8, 0.5, 0.9, 0.55, 1, 0.7, 0.4] as const;
+const DEFAULT_HEIGHTS = [
+  0.45, 1, 0.65, 0.8, 0.5, 0.9, 0.55, 1, 0.7, 0.4,
+] as const;
 
 function Bar({
   progress,
@@ -51,17 +53,17 @@ export function Equalizer({
   }, [progress]);
 
   return (
-    <View
-      className="flex-1 flex-row items-end gap-[3px]"
-      style={{ height }}
-    >
+    <View className="flex-1 flex-row items-end gap-[3px]" style={{ height }}>
       {Array.from({ length: bars }).map((_, index) => (
         <Bar
           key={index}
           progress={progress}
           phase={(index / bars) * Math.PI * 2}
           // Always in bounds (modulo the array's own length) — the fallback is unreachable.
-          base={DEFAULT_HEIGHTS[index % DEFAULT_HEIGHTS.length] ?? DEFAULT_HEIGHTS[0]}
+          base={
+            DEFAULT_HEIGHTS[index % DEFAULT_HEIGHTS.length] ??
+            DEFAULT_HEIGHTS[0]
+          }
           height={height}
           color={color}
         />

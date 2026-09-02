@@ -10,7 +10,14 @@ function withOpacity(name) {
 }
 
 module.exports = {
-  content: ["./App.tsx", "./app/**/*.{js,jsx,ts,tsx}", "./components/**/*.{js,jsx,ts,tsx}", "./lib/**/*.{js,jsx,ts,tsx}", "./screens/**/*.{js,jsx,ts,tsx}", "./state/**/*.{js,jsx,ts,tsx}"],
+  content: [
+    "./App.tsx",
+    "./app/**/*.{js,jsx,ts,tsx}",
+    "./components/**/*.{js,jsx,ts,tsx}",
+    "./lib/**/*.{js,jsx,ts,tsx}",
+    "./screens/**/*.{js,jsx,ts,tsx}",
+    "./state/**/*.{js,jsx,ts,tsx}",
+  ],
   presets: [require("nativewind/preset")],
   darkMode: "class",
   theme: {
@@ -70,12 +77,24 @@ module.exports = {
         mono: ["Geist Mono", "ui-monospace", "monospace"],
       },
       fontSize: {
-        "display-lg": ["40px", { lineHeight: "1.04", letterSpacing: "-0.04em", fontWeight: "600" }],
-        "display": ["32px", { lineHeight: "1.1", letterSpacing: "-0.03em", fontWeight: "600" }],
-        "display-sm": ["24px", { lineHeight: "1.15", letterSpacing: "-0.03em", fontWeight: "600" }],
-        "eyebrow": ["11px", { lineHeight: "1.4", letterSpacing: "0.14em", fontWeight: "500" }],
+        "display-lg": [
+          "40px",
+          { lineHeight: "1.04", letterSpacing: "-0.04em", fontWeight: "600" },
+        ],
+        display: [
+          "32px",
+          { lineHeight: "1.1", letterSpacing: "-0.03em", fontWeight: "600" },
+        ],
+        "display-sm": [
+          "24px",
+          { lineHeight: "1.15", letterSpacing: "-0.03em", fontWeight: "600" },
+        ],
+        eyebrow: [
+          "11px",
+          { lineHeight: "1.4", letterSpacing: "0.14em", fontWeight: "500" },
+        ],
         "body-lg": ["17px", { lineHeight: "1.75" }],
-        "body": ["15px", { lineHeight: "1.7" }],
+        body: ["15px", { lineHeight: "1.7" }],
       },
       boxShadow: {
         float: "0 1px 3px 0 rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.06)",
@@ -85,4 +104,4 @@ module.exports = {
     },
   },
   plugins: [],
-}
+};

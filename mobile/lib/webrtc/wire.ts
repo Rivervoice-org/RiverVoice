@@ -60,7 +60,10 @@ export function decodeWireMessage(data: ArrayBuffer): WireMessage {
   if (tag === TRANSLATION_TAG) {
     const json = new TextDecoder().decode(rest);
     const parsed = JSON.parse(json) as { text: string };
-    return { kind: WireMessageKind.Translation, translation: { text: parsed.text } };
+    return {
+      kind: WireMessageKind.Translation,
+      translation: { text: parsed.text },
+    };
   }
 
   if (tag === PEER_CONNECTED_TAG) {

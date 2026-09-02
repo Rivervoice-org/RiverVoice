@@ -22,7 +22,7 @@ function TooltipContent({
         sideOffset={sideOffset}
         className={cn(
           "max-w-xs rounded-lg border border-border bg-popover px-3 py-1.5 shadow-lift",
-          className
+          className,
         )}
         {...props}
       />

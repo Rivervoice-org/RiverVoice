@@ -16,7 +16,7 @@ function Toast({
       ref={ref}
       className={cn(
         "flex-row items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-lift",
-        className
+        className,
       )}
       {...props}
     />
@@ -36,7 +36,7 @@ function ToastClose({
       ref={ref}
       className={cn(
         "h-6 w-6 items-center justify-center rounded-md active:bg-secondary",
-        className
+        className,
       )}
       hitSlop={8}
       {...props}

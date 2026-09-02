@@ -16,7 +16,7 @@ function Switch({
       className={cn(
         "h-6 w-10 flex-row items-center rounded-full px-0.5",
         checked ? "bg-foreground" : "bg-border",
-        className
+        className,
       )}
       ref={ref}
       {...props}

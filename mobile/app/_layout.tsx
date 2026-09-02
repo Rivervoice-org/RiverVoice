@@ -25,7 +25,13 @@ import { ThemeProvider, useTheme } from "@/lib/theme";
 // revisit when bumping @gorhom/bottom-sheet past 5.2.14.
 LogBox.ignoreLogs(["is deprecated in StrictMode"]);
 
-function AppShell({ booted, onBooted }: { booted: boolean; onBooted: () => void }) {
+function AppShell({
+  booted,
+  onBooted,
+}: {
+  booted: boolean;
+  onBooted: () => void;
+}) {
   const { scheme, colors } = useTheme();
 
   useEffect(() => {
@@ -34,23 +40,26 @@ function AppShell({ booted, onBooted }: { booted: boolean; onBooted: () => void 
 
   return (
     <SessionProvider>
-        <AgentPickerProvider>
-          <ContactsProvider>
-            {/* Two halves, and the only two: `(auth)` is what a signed-out
+      <AgentPickerProvider>
+        <ContactsProvider>
+          {/* Two halves, and the only two: `(auth)` is what a signed-out
                 user can reach, `(protected)` is everything else. The split
                 is the app's whole authorization story — no screen below
                 repeats it. */}
-            <Stack
-              screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}
-            >
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(protected)" />
-            </Stack>
-            <PortalHost />
-            <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-            {!booted && <Splash onDone={onBooted} />}
-          </ContactsProvider>
-        </AgentPickerProvider>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: colors.canvas },
+            }}
+          >
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(protected)" />
+          </Stack>
+          <PortalHost />
+          <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+          {!booted && <Splash onDone={onBooted} />}
+        </ContactsProvider>
+      </AgentPickerProvider>
     </SessionProvider>
   );
 }

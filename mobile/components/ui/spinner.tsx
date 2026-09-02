@@ -29,7 +29,7 @@ function Spinner({
         duration: 750,
         easing: Easing.linear,
         useNativeDriver: true,
-      })
+      }),
     );
     loop.start();
     return () => loop.stop();
