@@ -3,7 +3,7 @@
     "name": "Rivervoice",
     "slug": "rivervoice-mobile",
     "scheme": "rivervoice",
-    "version": "0.1.0-dev.1",
+    "version": "0.2.0-dev.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
