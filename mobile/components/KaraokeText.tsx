@@ -21,7 +21,9 @@ export const KaraokeText = memo(function KaraokeText({
   activeIndex: number;
 }) {
   if (activeIndex < 0) {
-    return <Text className="mt-1 text-sm leading-snug text-foreground">{text}</Text>;
+    return (
+      <Text className="mt-1 text-sm leading-snug text-foreground">{text}</Text>
+    );
   }
 
   const words = text.split(/(\s+)/); // keep whitespace as its own tokens

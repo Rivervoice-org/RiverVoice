@@ -1,5 +1,11 @@
 import { memo, useEffect, useState } from "react";
-import { Animated, Image, PixelRatio, type StyleProp, type ViewStyle } from "react-native";
+import {
+  Animated,
+  Image,
+  PixelRatio,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { avatarUrl, mascotRef, parseMascot } from "@/lib/mascots";
 import { useThemeColors } from "@/lib/theme";
 

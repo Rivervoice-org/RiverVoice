@@ -39,7 +39,7 @@ function TabsTrigger({
       className={cn(
         "flex-1 rounded-md px-3 py-1.5",
         isActive ? "bg-card shadow-float" : "bg-transparent",
-        className
+        className,
       )}
       {...props}
     >
@@ -47,7 +47,7 @@ function TabsTrigger({
         <Text
           className={cn(
             "text-sm font-medium",
-            isActive ? "text-foreground" : "text-muted-foreground"
+            isActive ? "text-foreground" : "text-muted-foreground",
           )}
         >
           {children}

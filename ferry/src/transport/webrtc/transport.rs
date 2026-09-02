@@ -500,11 +500,25 @@ impl<S: FrameSerializer<Message = bytes::Bytes> + 'static> WebRtcClient<S> {
 
         let _ = gather_complete_rx.await;
 
-        let answer_sdp = peer_connection
+        let mut answer_sdp = peer_connection
             .local_description()
             .await
             .ok_or_else(|| anyhow::anyhow!("webrtc: no local description after ICE gathering"))?
             .sdp;
+
+        // Behind 1:1 NAT (e.g. AWS/Lightsail), `bind_ip` is only ever this
+        // machine's private address — real, bindable, but not what a caller
+        // outside the NAT can reach. `webrtc_public_ip` is the known-static
+        // address that actually routes back here, so it's swapped in
+        // wherever the private one was written into the SDP's host
+        // candidates. Left alone (empty) for same-LAN dev, where `bind_ip`
+        // is already what's reachable.
+        let public_ip = &crate::config::get()
+            .map_err(|e| anyhow::anyhow!("webrtc: {e}"))?
+            .webrtc_public_ip;
+        if !public_ip.is_empty() {
+            answer_sdp = answer_sdp.replace(&bind_ip, public_ip);
+        }
 
         let output_payload_type =
             parse_negotiated_opus_payload_type(&answer_sdp).unwrap_or(OPUS_PAYLOAD_TYPE);

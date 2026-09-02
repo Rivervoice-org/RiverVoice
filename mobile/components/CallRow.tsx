@@ -61,7 +61,11 @@ export function CallOutcomeAvatar({ outcome }: { outcome: CallOutcome }) {
     case CallOutcome.Missed:
       return (
         <View className="h-8 w-8 items-center justify-center rounded-lg bg-secondary">
-          <PhoneMissed size={14} strokeWidth={1.75} color={colors.destructive} />
+          <PhoneMissed
+            size={14}
+            strokeWidth={1.75}
+            color={colors.destructive}
+          />
         </View>
       );
     default:
@@ -150,7 +154,7 @@ export function CallRow({
       onPress={onPress}
       className={cn(
         "flex-row items-center gap-3 px-4 py-3",
-        showDivider && "border-b border-border"
+        showDivider && "border-b border-border",
       )}
     >
       {avatar}
@@ -159,7 +163,10 @@ export function CallRow({
           {typeof title === "string" ? (
             <Text
               numberOfLines={1}
-              className={cn("min-w-0 flex-1 text-sm font-medium", mono && "font-mono")}
+              className={cn(
+                "min-w-0 flex-1 text-sm font-medium",
+                mono && "font-mono",
+              )}
             >
               {title}
             </Text>

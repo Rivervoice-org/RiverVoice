@@ -104,7 +104,10 @@ export default function AgentDetailScreen() {
       >
         <Mascot seed={id ?? "unknown"} size={64} />
         <Text className="mt-4 text-lg font-semibold">Agent not found</Text>
-        <Text variant="muted" className="mt-1.5 text-center text-sm leading-relaxed">
+        <Text
+          variant="muted"
+          className="mt-1.5 text-center text-sm leading-relaxed"
+        >
           This agent may have been deleted or the link is incorrect.
         </Text>
         <Button

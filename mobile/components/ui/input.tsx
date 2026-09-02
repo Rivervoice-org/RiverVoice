@@ -11,13 +11,14 @@ type InputProps = TextInputProps & {
 
 function Input({ className, placeholderTextColor, ref, ...props }: InputProps) {
   const themeColors = useThemeColors();
-  const resolvedPlaceholderTextColor = placeholderTextColor ?? themeColors.muted;
+  const resolvedPlaceholderTextColor =
+    placeholderTextColor ?? themeColors.muted;
   return (
     <TextInput
       ref={ref}
       className={cn(
         "h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground",
-        className
+        className,
       )}
       placeholderTextColor={resolvedPlaceholderTextColor}
       textAlignVertical="center"

@@ -37,13 +37,16 @@ function DialogContent({
   const colors = useThemeColors();
   return (
     <DialogPortal>
-      <View className="absolute inset-0 justify-center px-6" pointerEvents="box-none">
+      <View
+        className="absolute inset-0 justify-center px-6"
+        pointerEvents="box-none"
+      >
         <DialogOverlay />
         <DialogPrimitive.Content
           ref={ref}
           className={cn(
             "w-full rounded-xl border border-border bg-card p-5 shadow-lift",
-            className
+            className,
           )}
           {...props}
         >

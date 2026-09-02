@@ -41,7 +41,8 @@ export function useRecentCalls() {
   return { ...query, calls };
 }
 
-export const callDetailQueryKey = (id: string) => ["calls", "detail", id] as const;
+export const callDetailQueryKey = (id: string) =>
+  ["calls", "detail", id] as const;
 
 /**
  * One call in full, transcript included.

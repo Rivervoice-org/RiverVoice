@@ -62,7 +62,9 @@ function MascotStyleGrid({
   // paint of the sheet is never held up by a burst of network calls.
   useEffect(() => {
     if (!open) return;
-    const handle = InteractionManager.runAfterInteractions(() => warmFaces(style));
+    const handle = InteractionManager.runAfterInteractions(() =>
+      warmFaces(style),
+    );
     const timer = setTimeout(() => warmFaces(style), 300);
     return () => {
       handle.cancel();
@@ -72,7 +74,9 @@ function MascotStyleGrid({
 
   // Pre-warm the visible style once on mount, so the very first open is fast.
   useEffect(() => {
-    const handle = InteractionManager.runAfterInteractions(() => warmFaces(style));
+    const handle = InteractionManager.runAfterInteractions(() =>
+      warmFaces(style),
+    );
     return () => handle.cancel();
   }, [style]);
 
@@ -89,13 +93,15 @@ function MascotStyleGrid({
               onPress={() => setStyle(id)}
               className={cn(
                 "rounded-full border px-3.5 py-1.5 active:opacity-80",
-                selected ? "border-foreground bg-foreground" : "border-border bg-card"
+                selected
+                  ? "border-foreground bg-foreground"
+                  : "border-border bg-card",
               )}
             >
               <Text
                 className={cn(
                   "text-[13px] font-medium",
-                  selected ? "text-primary-foreground" : "text-foreground"
+                  selected ? "text-primary-foreground" : "text-foreground",
                 )}
               >
                 {mascotStyle(id).label}
@@ -119,7 +125,7 @@ function MascotStyleGrid({
               accessibilityLabel={seed}
               className={cn(
                 "rounded-full p-0.5",
-                selected && "border border-foreground"
+                selected && "border border-foreground",
               )}
             >
               <Mascot ref={ref} size={FACE_SIZE} />
@@ -154,7 +160,11 @@ function MascotStyleGrid({
  * A dialog-based picker for touch. Faces are prefetched in the background so
  * subsequent opens are instant.
  */
-export function MascotPicker({ value, onSelect, size = 96 }: MascotPickerProps) {
+export function MascotPicker({
+  value,
+  onSelect,
+  size = 96,
+}: MascotPickerProps) {
   const colors = useThemeColors();
   const [open, setOpen] = useState(false);
 
@@ -178,9 +188,7 @@ export function MascotPicker({ value, onSelect, size = 96 }: MascotPickerProps) 
         <View className="gap-4 pt-1">
           <View>
             <DialogTitle>Mascot</DialogTitle>
-            <DialogDescription className="mt-1">
-              Pick a face.
-            </DialogDescription>
+            <DialogDescription className="mt-1">Pick a face.</DialogDescription>
           </View>
 
           <MascotStyleGrid

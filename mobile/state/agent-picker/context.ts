@@ -6,4 +6,6 @@ export interface AgentPickerContextValue {
   pickAgentForCall: (target: CallTarget) => void;
 }
 
-export const AgentPickerContext = createContext<AgentPickerContextValue | null>(null);
+export const AgentPickerContext = createContext<AgentPickerContextValue | null>(
+  null,
+);

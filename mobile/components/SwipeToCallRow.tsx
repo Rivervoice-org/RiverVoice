@@ -35,7 +35,14 @@ const SwipeCallIcon = memo(function SwipeCallIcon({
   const iconStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0, 1], [0, 1], Extrapolation.CLAMP),
     transform: [
-      { scale: interpolate(progress.value, [0, 1], [0.5, 1], Extrapolation.CLAMP) },
+      {
+        scale: interpolate(
+          progress.value,
+          [0, 1],
+          [0.5, 1],
+          Extrapolation.CLAMP,
+        ),
+      },
     ],
   }));
   return (
