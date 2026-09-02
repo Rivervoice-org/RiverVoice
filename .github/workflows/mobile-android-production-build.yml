@@ -20,6 +20,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     environment: mobile-production-build-approval
+    # Only this job needs to create the release — everything else in the
+    # workflow only reads repo contents.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -77,3 +81,19 @@ jobs:
           name: rivervoice-mobile-production-apk
           path: mobile/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
+
+      # Creates the release if it doesn't exist yet, or just re-uploads the
+      # APK if re-running the same tag.
+      - name: Attach APK to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            android/app/build/outputs/apk/release/app-release.apk \
+          || gh release upload "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            android/app/build/outputs/apk/release/app-release.apk
