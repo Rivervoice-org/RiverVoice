@@ -10,7 +10,12 @@ enum Environment {
 function environment(): Environment {
   // @ts-expect-error -- dot notation required for Expo's env inlining
   const raw = process.env.EXPO_PUBLIC_ENVIRONMENT;
-  return raw === Environment.Prod ? Environment.Prod : Environment.Dev;
+  if (raw === Environment.Dev || raw === Environment.Prod) {
+    return raw;
+  }
+  throw new Error(
+    `EXPO_PUBLIC_ENVIRONMENT must be "development" or "production", got: ${JSON.stringify(raw)}`,
+  );
 }
 
 /**

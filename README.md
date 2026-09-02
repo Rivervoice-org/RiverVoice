@@ -155,12 +155,15 @@ cd ferry   && cargo run                      # :8085 — loads the root .env
 cd mobile  && npm install && npx expo run:android   # or run:ios — needs a dev client
 ```
 
-mobile needs `EXPO_PUBLIC_SUPABASE_URL`/`EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-pointing at kong (`http://<lan-ip>:8000` for a physical device,
-`http://127.0.0.1:8000` for an emulator on the same machine), and
-`EXPO_PUBLIC_FERRY_URL` pointing at ferry the same way. A physical device also
-needs ferry's own `WEBRTC_BIND_IP` set to that same LAN address, or the SDP
-negotiates fine and no audio ever arrives. See `mobile/.env.example`.
+mobile needs `EXPO_PUBLIC_ENVIRONMENT` set to `development` or `production`,
+plus the matching `_DEV`/`_PROD` suffixed pair —
+`EXPO_PUBLIC_SUPABASE_URL_DEV`/`EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY_DEV`/`EXPO_PUBLIC_FERRY_URL_DEV`
+for dev, `_PROD` for prod — pointing at kong (`http://<lan-ip>:8000` for a
+physical device, `http://127.0.0.1:8000` for an emulator on the same machine)
+and ferry the same way. A physical device also needs ferry's own
+`WEBRTC_BIND_IP` set to that same LAN address, or the SDP negotiates fine and
+no audio ever arrives. Copy `mobile/.env.example` to `mobile/.env` and fill
+it in.
 
 ---
 
@@ -344,15 +347,15 @@ mobile/
 
 ```ts
 const DEFAULT_FERRY_URL = "http://127.0.0.1:8085";
-process.env["EXPO_PUBLIC_FERRY_URL"] ?? DEFAULT_FERRY_URL;
+process.env["EXPO_PUBLIC_FERRY_URL_DEV"] ?? DEFAULT_FERRY_URL; // or _PROD, picked by EXPO_PUBLIC_ENVIRONMENT
 ```
 
 The default only works from an emulator on the same machine as ferry. A
-physical device needs `EXPO_PUBLIC_FERRY_URL` set to ferry's LAN address, and
-ferry's own `WEBRTC_BIND_IP` set to that same address — otherwise the SDP
-negotiates fine and no audio ever arrives. The same applies to
-`EXPO_PUBLIC_SUPABASE_URL`, which points at kong, not any individual Supabase
-service directly.
+physical device needs `EXPO_PUBLIC_FERRY_URL_DEV`/`_PROD` set to ferry's LAN
+address, and ferry's own `WEBRTC_BIND_IP` set to that same address —
+otherwise the SDP negotiates fine and no audio ever arrives. The same applies
+to `EXPO_PUBLIC_SUPABASE_URL_DEV`/`_PROD`, which points at kong, not any
+individual Supabase service directly.
 
 ```bash
 cd mobile && npm install

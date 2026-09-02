@@ -11,6 +11,12 @@ use crate::config;
 /// ferry restart.
 const CACHE_TTL: Duration = Duration::from_secs(600);
 
+/// Floor between refetch attempts, independent of `CACHE_TTL` — `kid` comes
+/// from the token header, which isn't verified until *after* this lookup, so
+/// it's attacker-controlled. Without this, a stream of tokens carrying
+/// unknown `kid`s would force a fresh HTTP call to Supabase per request.
+const MIN_REFETCH_INTERVAL: Duration = Duration::from_secs(30);
+
 struct CachedSet {
     set: JwkSet,
     fetched_at: Instant,
@@ -38,6 +44,13 @@ impl JwksCache {
     /// Looks up the key for `kid`, refetching when the cache is stale or
     /// doesn't (yet) contain it — the latter is what makes a rotated
     /// signing key work without waiting out the TTL.
+    ///
+    /// The refetch path holds the write lock across the fetch itself (rather
+    /// than just the final assignment) and re-checks freshness immediately
+    /// after acquiring it: concurrent lookups that all miss at the same time
+    /// coalesce into one fetch instead of one each, and `kid`s that keep
+    /// missing (unknown or outright bogus — see `MIN_REFETCH_INTERVAL`)
+    /// can't force more than one fetch per interval.
     pub async fn key_for(&self, kid: &str) -> Option<Jwk> {
         {
             let cached = self.cache.read().await;
@@ -50,9 +63,16 @@ impl JwksCache {
             }
         }
 
+        let mut guard = self.cache.write().await;
+        if let Some(cached) = guard.as_ref() {
+            if cached.fetched_at.elapsed() < MIN_REFETCH_INTERVAL {
+                return cached.set.find(kid).cloned();
+            }
+        }
+
         let set = self.fetch().await.ok()?;
         let found = set.find(kid).cloned();
-        *self.cache.write().await = Some(CachedSet {
+        *guard = Some(CachedSet {
             set,
             fetched_at: Instant::now(),
         });
