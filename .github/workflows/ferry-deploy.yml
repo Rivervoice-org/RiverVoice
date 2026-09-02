@@ -1,38 +1,5 @@
 name: ferry-deploy
 
-# One-time instance setup (not done by this workflow):
-#   1. deploy/ferry.service copied to /etc/systemd/system/ferry.service (with
-#      <deploy-user> filled in), then `sudo systemctl enable ferry`.
-#   2. Directory the binary lands in: ~/RiverVoice/ferry/target/release/
-#      (this workflow scp's it there). ~/RiverVoice/.env and
-#      ~/RiverVoice/ferry/.env.production are written by this workflow
-#      itself now (see the "Write env files" step) — not a manual step.
-#   3. Passwordless sudo for exactly this command, since the SSH session
-#      below is non-interactive and can't answer a password prompt:
-#        echo "<deploy-user> ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart ferry" \
-#          | sudo tee /etc/sudoers.d/ferry-deploy
-#   4. nginx in front for TLS termination — see deploy/nginx/ferry.conf.
-#      Separate one-time setup, not touched by this workflow either; once
-#      it's live, PUBLIC_BASE_URL (in the FERRY_ENV_PRODUCTION secret below)
-#      and mobile's EXPO_PUBLIC_FERRY_URL_PROD should both point at
-#      https://api.rivervoice.in instead of the bare instance IP.
-#   5. Secrets on this repo:
-#        LIGHTSAIL_HOST, LIGHTSAIL_USER, LIGHTSAIL_SSH_KEY — SSH access.
-#        FERRY_ENV_PRODUCTION — the ENTIRE contents of ferry/.env.production
-#          (see .env.example), pasted as one multi-line secret. Overwritten
-#          onto the instance fresh on every deploy, so the instance is never
-#          the source of truth for config — this repo's secret is.
-#   6. Settings → Environments → New environment named "ferry-deploy-approval"
-#      → add required reviewers — every run (including your own) waits for
-#      manual approval before touching the server, same pattern as
-#      mobile-android-build.yml uses for releases.
-#
-# Cross-compilation risk: this builds on ubuntu-latest's glibc, which must be
-# the same version as (or older than) the instance's — a newer build glibc
-# than the instance has will fail to run with a GLIBC_x.xx not found error.
-# If the instance is on an older Ubuntu than the runner, either pin
-# ubuntu-latest to a matching older version below, or build inside a
-# container image matching the instance's OS.
 on:
   workflow_dispatch: {}
 
