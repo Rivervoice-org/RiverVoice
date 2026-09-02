@@ -38,6 +38,7 @@ bytes = "1.12.1"
 validator = { version = "0.19", features = ["derive"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 audiopus = { version = "0.2.0", default-features = false, features = ["encoder", "decoder"] }
+audiopus_sys = { version = "0.1", features = ["static"] }
 rtc = "0.20.3"
 rand = "0.8"
 sea-orm = { version = "2.0.2", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-uuid", "with-chrono"] }
