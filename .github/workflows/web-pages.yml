@@ -52,7 +52,6 @@ jobs:
 
           const nextConfig: NextConfig = {
             output: "export",
-            basePath: "/RiverVoice",
             images: { unoptimized: true },
           };
 
