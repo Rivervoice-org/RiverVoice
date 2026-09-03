@@ -38,12 +38,7 @@ sign-in. See [The shape of the system](#the-shape-of-the-system).
 
 ## Demo
 
-GitHub only plays video uploaded through its own web editor, not a video
-file committed to the repo — so here it's a linked thumbnail instead of an
-inline player. Click through to `docs/video/demo.mp4` and GitHub's file
-viewer plays it inline.
-
-[<img src="docs/video/thumbnail.png" width="480" alt="RiverVoice demo video — click to play">](docs/video/demo.mp4)
+[<img src="https://img.youtube.com/vi/Ce0ZnaL_vvU/maxresdefault.jpg" width="480" alt="RiverVoice demo video — click to play on YouTube">](https://youtu.be/Ce0ZnaL_vvU)
 
 ---
 
