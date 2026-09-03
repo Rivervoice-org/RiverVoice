@@ -7,6 +7,7 @@ import { Mascot } from "@/components/Mascot";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { useActiveCall } from "@/hooks/use-active-call";
+import { inCallRouteParams } from "@/state/active-call/context";
 import { callStatusLabel, useElapsedSeconds } from "@/lib/call-status";
 
 /**
@@ -38,13 +39,7 @@ export const CallMinimizedPill = memo(function CallMinimizedPill() {
         onPress={() =>
           router.push({
             pathname: "/in-call",
-            params: {
-              name: meta.contactName ?? "",
-              phone: meta.phone,
-              agentId: meta.agentId ?? "",
-              agentName: meta.agentName,
-              agentMascot: meta.agentMascot ?? "",
-            },
+            params: inCallRouteParams(meta),
           })
         }
         className="flex-row items-center gap-2 rounded-full bg-foreground py-2 pl-2 pr-4 shadow-float active:opacity-90"

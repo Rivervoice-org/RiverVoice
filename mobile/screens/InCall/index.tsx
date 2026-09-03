@@ -45,14 +45,9 @@ import { AudioDevice, CallStatus } from "@/lib/webrtc/ferry-call";
 import { callStatusLabel, useElapsedSeconds } from "@/lib/call-status";
 import { AUDIO_ROUTE_ICONS, AUDIO_ROUTE_LABELS } from "@/lib/audio-route";
 import { LiveSpeaker } from "@/hooks/use-ferry-call";
-import { useMockFerryCall } from "@/hooks/use-mock-ferry-call";
 import { useActiveCall } from "@/hooks/use-active-call";
 import { recentCallsQueryKey } from "@/lib/calls/hooks";
 import { recentAgentsQueryKey } from "@/lib/agents/hooks";
-
-// Flip to iterate on this screen's UI without placing a real call (no ferry,
-// no WebRTC, no mic permission) — flip back before shipping.
-const USE_MOCK_CALL = true;
 
 // Shared by both ways off this screen that leave the call running or ending
 // underneath — the hangup button (via `leaveScreen`) and the minimize
@@ -230,7 +225,6 @@ export default function InCallScreen() {
   // this screen in `ActiveCallProvider` — navigating away from `/in-call`
   // (back button, tapping the minimized pill's target elsewhere) no longer
   // ends the call the way unmounting a locally-owned hook would have.
-  const mockCall = useMockFerryCall();
   const activeCall = useActiveCall();
   const {
     status,
@@ -244,7 +238,7 @@ export default function InCallScreen() {
     end,
     toggleMute,
     chooseAudioRoute,
-  } = USE_MOCK_CALL ? mockCall : activeCall;
+  } = activeCall;
   const callInProgress =
     status === CallStatus.Connecting ||
     status === CallStatus.Ringing ||
@@ -275,28 +269,21 @@ export default function InCallScreen() {
   );
 
   useEffect(() => {
-    // Both branches are no-ops if a call/mock-call is already in progress
-    // (re-entering `/in-call` from the minimized pill re-runs this effect
-    // with the same params, and shouldn't restart anything) — see
-    // `createCall` in use-ferry-call.ts and `startMockCall`'s own state.
+    // No-op if a call's already in progress (re-entering `/in-call` from the
+    // minimized pill re-runs this effect with the same params, and
+    // shouldn't restart anything) — see `createCall` in use-ferry-call.ts.
     if (!params.agentId) {
       return;
     }
-    const meta = {
+    activeCall.startCall({
       agentId: params.agentId,
       phone: params.phone,
       agentName,
       agentMascot: params.agentMascot,
       contactName,
-    };
-    if (USE_MOCK_CALL) {
-      activeCall.startMockCall(meta);
-    } else {
-      activeCall.startCall(meta);
-    }
+    });
   }, [
     activeCall.startCall,
-    activeCall.startMockCall,
     params.agentId,
     params.phone,
     agentName,

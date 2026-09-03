@@ -22,21 +22,15 @@ export interface ActiveCallContextValue {
   isMuted: boolean;
   audioDevices: AudioDevice[];
   activeAudioDevice: AudioDevice;
-  /** Set for the lifetime of one call — from `startCall` until it ends,
-   * regardless of which screen (if any) is currently mounted. Whether a
-   * call is "active" for pill/minimize purposes is `meta !== null`, not
-   * `status`, since `status` briefly outlives `end()` clearing `meta`. */
+  /** Set for the lifetime of one call, regardless of which screen (if any)
+   * is mounted. Whether a call is "active" is `meta !== null`, not
+   * `status` — `status` briefly outlives `end()` clearing `meta`. */
   meta: ActiveCallMeta | null;
-  /** `Date.now()` from when `status` first reached `Connected`, or null
-   * before/after that — the shared source of truth `useElapsedSeconds`
-   * (lib/call-status.ts) reads from, so elapsed time survives whichever
-   * component (the screen or the pill) happens to mount/unmount. */
+  /** `Date.now()` from when `status` first reached `Connected`, else null —
+   * `useElapsedSeconds` (lib/call-status.ts) reads from this so duration
+   * survives whichever component (screen or pill) mounts/unmounts. */
   connectedAt: number | null;
   startCall: (meta: ActiveCallMeta) => void;
-  /** Dev-only: seeds `meta`/`connectedAt`/`status` as if a call were live,
-   * without touching the real `FerryCall` — no ferry/WebRTC/network call.
-   * What InCall's `USE_MOCK_CALL` flag uses to exercise the minimized pill. */
-  startMockCall: (meta: ActiveCallMeta) => void;
   end: () => void;
   toggleMute: () => void;
   chooseAudioRoute: (route: AudioDevice) => void;
@@ -45,3 +39,23 @@ export interface ActiveCallContextValue {
 export const ActiveCallContext = createContext<ActiveCallContextValue | null>(
   null,
 );
+
+/** `/in-call`'s route params, rebuilt from `meta` — the one place this
+ * mapping lives, since both `CallMinimizedPill` (tap to return) and the
+ * ongoing-call OS notification (tap to return) need to reconstruct the
+ * exact same params the screen was originally launched with. */
+export function inCallRouteParams(meta: ActiveCallMeta): {
+  name: string;
+  phone: string;
+  agentId: string;
+  agentName: string;
+  agentMascot: string;
+} {
+  return {
+    name: meta.contactName ?? "",
+    phone: meta.phone,
+    agentId: meta.agentId ?? "",
+    agentName: meta.agentName,
+    agentMascot: meta.agentMascot ?? "",
+  };
+}
