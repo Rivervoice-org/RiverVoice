@@ -26,6 +26,7 @@ import {
  */
 export function ActiveCallProvider({ children }: { children: ReactNode }) {
   const call = useFerryCall();
+  const { startCall: ferryStartCall, end: ferryEnd } = call;
   const [meta, setMeta] = useState<ActiveCallMeta | null>(null);
   // Timestamp rather than a locally-incremented counter: CallStatusLine and
   // CallMinimizedPill mount/unmount independently as the user minimizes/
@@ -36,16 +37,16 @@ export function ActiveCallProvider({ children }: { children: ReactNode }) {
   const startCall = useCallback(
     (nextMeta: ActiveCallMeta) => {
       setMeta(nextMeta);
-      call.startCall(nextMeta.agentId ?? "", nextMeta.phone);
+      ferryStartCall(nextMeta.agentId ?? "", nextMeta.phone);
     },
-    [call.startCall],
+    [ferryStartCall],
   );
 
   const end = useCallback(() => {
-    call.end();
+    ferryEnd();
     setMeta(null);
     setConnectedAt(null);
-  }, [call.end]);
+  }, [ferryEnd]);
 
   // A call can end (or connect) without anyone calling `end()`/`startCall`
   // from here — ferry hanging up, the other leg failing, WebRTC's transport

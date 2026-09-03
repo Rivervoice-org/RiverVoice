@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import { AudioDevice, CallStatus } from "@/lib/webrtc/ferry-call";
+import type { AudioDevice, CallStatus } from "@/lib/webrtc/ferry-call";
 import type { ConversationLine } from "@/hooks/use-ferry-call";
 
 /** Everything InCall needs to redraw itself when re-entered from the

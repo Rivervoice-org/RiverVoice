@@ -225,7 +225,6 @@ export default function InCallScreen() {
   // this screen in `ActiveCallProvider` — navigating away from `/in-call`
   // (back button, tapping the minimized pill's target elsewhere) no longer
   // ends the call the way unmounting a locally-owned hook would have.
-  const activeCall = useActiveCall();
   const {
     status,
     conversation,
@@ -235,10 +234,11 @@ export default function InCallScreen() {
     audioDevices,
     activeAudioDevice,
     connectedAt,
+    startCall,
     end,
     toggleMute,
     chooseAudioRoute,
-  } = activeCall;
+  } = useActiveCall();
   const callInProgress =
     status === CallStatus.Connecting ||
     status === CallStatus.Ringing ||
@@ -275,7 +275,7 @@ export default function InCallScreen() {
     if (!params.agentId) {
       return;
     }
-    activeCall.startCall({
+    startCall({
       agentId: params.agentId,
       phone: params.phone,
       agentName,
@@ -283,7 +283,7 @@ export default function InCallScreen() {
       contactName,
     });
   }, [
-    activeCall.startCall,
+    startCall,
     params.agentId,
     params.phone,
     agentName,
@@ -308,17 +308,8 @@ export default function InCallScreen() {
 
   const endCall = useCallback(() => {
     end();
-    // Under `USE_MOCK_CALL`, `end` above is `mockCall.end` — it only flips
-    // this screen's own local status, never the provider's `meta`/
-    // `mockStatus` that `startMockCall` seeded (`activeCall` and `mockCall`
-    // are two separate hook instances). Without also clearing the provider
-    // here, the pill would keep showing a call that, as far as this screen
-    // is concerned, just ended. Harmless to call unconditionally: for a real
-    // call `end` already is `activeCall.end`, so this is just a second,
-    // idempotent clear.
-    activeCall.end();
     leaveScreen();
-  }, [end, activeCall.end, leaveScreen]);
+  }, [end, leaveScreen]);
 
   // Leaves the screen without touching the call — it (and, once connected,
   // its duration) keeps running in `ActiveCallProvider`, and
