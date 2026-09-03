@@ -3,10 +3,7 @@ import { Separator } from "@/components/ui/separator";
 import { Wordmark } from "@/components/wordmark";
 
 /** In-page anchors only — this page has no wiring into the app behind sign-in. */
-const LINKS = [
-  { label: "Three steps", href: "#how" },
-  { label: "Languages", href: "#languages" },
-];
+const LINKS = [{ label: "Get the app", href: "#app" }];
 
 export function SiteFooter() {
   return (
