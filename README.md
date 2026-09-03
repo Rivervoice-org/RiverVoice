@@ -36,6 +36,14 @@ sign-in. See [The shape of the system](#the-shape-of-the-system).
 
 ---
 
+## Demo
+
+<video src="docs/video/demo.mp4" controls muted playsinline width="720">
+  Your browser can't play this video — download it directly: docs/video/demo.mp4
+</video>
+
+---
+
 ## Screenshots
 
 <table>
@@ -73,6 +81,7 @@ sign-in. See [The shape of the system](#the-shape-of-the-system).
 
 ## Contents
 
+- [Demo](#demo)
 - [Screenshots](#screenshots)
 - [The shape of the system](#the-shape-of-the-system)
 - [Running it](#running-it)
