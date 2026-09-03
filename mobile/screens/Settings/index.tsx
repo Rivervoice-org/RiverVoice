@@ -197,12 +197,40 @@ function AppearancePicker() {
   );
 }
 
+/**
+ * Owns the toggle state itself, same reasoning as ProfileSection above —
+ * flipping a switch here only needs to re-render this section, not the
+ * rest of Settings (profile, appearance, support, about).
+ */
+function PrivacySection({ icon }: { icon: React.ReactNode }) {
+  const [keepRecordings, setKeepRecordings] = useState(true);
+  const [shareDiagnostics, setShareDiagnostics] = useState(false);
+
+  return (
+    <Card className="mx-5 mt-2.5 overflow-hidden">
+      <Row
+        icon={icon}
+        label="Keep call recordings"
+        description="Store audio after the call ends"
+        switchChecked={keepRecordings}
+        onSwitchChange={setKeepRecordings}
+      />
+      <Row
+        icon={icon}
+        label="Share diagnostics"
+        description="Send crash and usage data to improve the app"
+        switchChecked={shareDiagnostics}
+        onSwitchChange={setShareDiagnostics}
+        last
+      />
+    </Card>
+  );
+}
+
 export default function SettingsScreen() {
   const { signOut } = useAuth();
   const colors = useThemeColors();
   const ICONS = useMemo(() => buildIcons(colors.ink), [colors.ink]);
-  const [keepRecordings, setKeepRecordings] = useState(true);
-  const [shareDiagnostics, setShareDiagnostics] = useState(false);
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
@@ -242,23 +270,7 @@ export default function SettingsScreen() {
         <Rise index={3}>
           <View className="mt-8">
             <SectionLabel>Privacy</SectionLabel>
-            <Card className="mx-5 mt-2.5 overflow-hidden">
-              <Row
-                icon={ICONS.shield}
-                label="Keep call recordings"
-                description="Store audio after the call ends"
-                switchChecked={keepRecordings}
-                onSwitchChange={setKeepRecordings}
-              />
-              <Row
-                icon={ICONS.shield}
-                label="Share diagnostics"
-                description="Send crash and usage data to improve the app"
-                switchChecked={shareDiagnostics}
-                onSwitchChange={setShareDiagnostics}
-                last
-              />
-            </Card>
+            <PrivacySection icon={ICONS.shield} />
           </View>
         </Rise>
 
