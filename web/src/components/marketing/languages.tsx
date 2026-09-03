@@ -95,8 +95,8 @@ export function Languages() {
       <Reveal>
         <SectionHeading
           eyebrow="5 languages"
-          title="Your caller should not have to switch for you."
-          blurb="Most lines make the caller meet the software halfway. This one starts in whichever language the call opens in, and follows if it changes halfway through a sentence."
+          title="Say it in yours. It lands in theirs."
+          blurb="Rivervoice translates ordinary phone calls in real time, mid-conversation, without either side changing how they talk."
           className="mx-auto px-4 text-center"
         />
       </Reveal>
