@@ -6,7 +6,10 @@ module.exports = {
   expo: {
     name: "Rivervoice",
     slug: "rivervoice-mobile",
-    scheme: "rivervoice",
+    // Separate from prod's so expo-dev-client resolves to the right
+    // installed app when dev and prod are on the device side by side —
+    // two apps registering the same scheme makes that ambiguous.
+    scheme: IS_DEV ? "rivervoice-dev" : "rivervoice",
     version: "0.2.1-dev.1",
     orientation: "portrait",
     icon: "./assets/icon.png",
