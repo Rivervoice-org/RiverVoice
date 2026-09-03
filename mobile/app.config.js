@@ -28,6 +28,21 @@ module.exports = {
       "expo-audio",
       "@react-native-google-signin/google-signin",
       [
+        "react-native-notify-kit",
+        {
+          android: {
+            // "microphone" over "phoneCall": phoneCall requires the app to
+            // register as a Telecom/ConnectionService calling app, which
+            // this app doesn't do — microphone matches what the foreground
+            // service is actually doing (ongoing call audio) without that
+            // extra native integration.
+            foregroundService: {
+              types: ["microphone"],
+            },
+          },
+        },
+      ],
+      [
         "expo-splash-screen",
         {
           image: "./assets/splash-icon.png",
@@ -60,6 +75,11 @@ module.exports = {
         "android.permission.WAKE_LOCK",
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_CONNECT",
+        // Android 13+ requires this at runtime for any notification,
+        // including the ongoing-call foreground-service one below —
+        // react-native-notify-kit's plugin adds FOREGROUND_SERVICE and
+        // FOREGROUND_SERVICE_MICROPHONE itself, but not this one.
+        "android.permission.POST_NOTIFICATIONS",
       ],
       package: APP_ID,
     },

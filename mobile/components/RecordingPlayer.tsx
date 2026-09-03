@@ -52,7 +52,7 @@ export function RecordingPlayer({
   return (
     <View className="mt-2">
       {hasTranslated ? (
-        <View className="mb-3 flex-row gap-1.5">
+        <View className="mb-3.5 flex-row rounded-lg bg-secondary p-1">
           {[RecordingVariant.Original, RecordingVariant.Translated].map((v) => {
             const active = variant === v;
             return (
@@ -60,18 +60,23 @@ export function RecordingPlayer({
                 key={v}
                 onPress={() => onVariantChange(v)}
                 className={cn(
-                  "flex-1 items-center rounded-lg border py-1.5",
-                  active
-                    ? "border-foreground bg-foreground"
-                    : "border-border bg-transparent",
+                  "flex-1 items-center rounded-md py-1.5",
+                  // Not `shadow-float` here even though it's static elsewhere
+                  // in this file — toggling a shadow-* class on/off via a
+                  // conditional expression is a known NativeWind bug
+                  // (nativewind/nativewind#1536, #1557, #1711, #1712):
+                  // it races NativeWind's runtime CSS interop against React
+                  // Navigation's context init and can throw "Couldn't find
+                  // a navigation context" on unrelated screens. The
+                  // background-color contrast against the track is enough
+                  // to show which one's selected without it.
+                  active && "bg-card",
                 )}
               >
                 <Text
                   className={cn(
                     "text-[12px] font-medium",
-                    active
-                      ? "text-primary-foreground"
-                      : "text-muted-foreground",
+                    active ? "text-foreground" : "text-muted-foreground",
                   )}
                 >
                   {v === RecordingVariant.Original ? "Original" : "Translated"}
@@ -85,30 +90,36 @@ export function RecordingPlayer({
       <View className="flex-row items-center gap-3">
         <Pressable
           onPress={onToggle}
-          className="h-9 w-9 items-center justify-center rounded-full bg-foreground active:opacity-80"
+          className="h-10 w-10 items-center justify-center rounded-full bg-foreground active:opacity-80"
         >
           {isPlaying ? (
             <Pause
-              size={15}
+              size={16}
               strokeWidth={2}
               color={colors.onInk}
               fill={colors.onInk}
             />
           ) : (
             <Play
-              size={15}
+              size={16}
               strokeWidth={2}
               color={colors.onInk}
               fill={colors.onInk}
+              style={{ marginLeft: 1.5 }}
             />
           )}
         </Pressable>
-        <View className="flex-1">
-          <Progress value={progress} />
+        <View className="flex-1 gap-1.5">
+          <Progress value={progress} className="h-2" />
+          <View className="flex-row justify-between">
+            <Text font="mono" variant="muted" className="text-[11px]">
+              {formatTime(positionMs)}
+            </Text>
+            <Text font="mono" variant="muted" className="text-[11px]">
+              {formatTime(durationMs)}
+            </Text>
+          </View>
         </View>
-        <Text font="mono" variant="muted" className="text-[11px]">
-          {formatTime(positionMs)} / {formatTime(durationMs)}
-        </Text>
       </View>
     </View>
   );

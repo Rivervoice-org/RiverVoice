@@ -3,9 +3,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import {
   ChevronLeft,
-  PhoneIncoming,
-  PhoneOutgoing,
-  PhoneMissed,
+  PhoneCall,
+  PhoneForwarded,
+  PhoneOff,
   Phone,
   Clock,
   Globe,
@@ -32,22 +32,26 @@ import { useRecordingPlayer } from "@/lib/calls/use-recording-player";
 import { CallDetailSkeleton } from "./skeleton";
 import { languageLabel, outcomeOf, relativeTime } from "@/lib/calls/format";
 
+// Every call here is outbound — no inbound flow — so `PhoneIncoming`/
+// `PhoneOutgoing` (call *direction*) were the wrong axis for what this
+// actually varies on: call *outcome*. See the matching fix in CallRow.tsx's
+// `CallOutcomeAvatar`.
 const OUTCOME_CONFIG = {
   resolved: {
     label: "Resolved",
-    icon: PhoneIncoming,
+    icon: PhoneCall,
     colorKey: "green" as keyof ThemeColors,
     bgClassName: "bg-green-tint",
   },
   transferred: {
     label: "Transferred",
-    icon: PhoneOutgoing,
+    icon: PhoneForwarded,
     colorKey: "river" as keyof ThemeColors,
     bgClassName: "bg-river-tint",
   },
   missed: {
     label: "Missed",
-    icon: PhoneMissed,
+    icon: PhoneOff,
     colorKey: "destructive" as keyof ThemeColors,
     bgClassName: "bg-destructive/10",
   },
@@ -195,9 +199,11 @@ export default function CallDetailScreen() {
             <Text className="mt-3 text-[20px] font-semibold">
               {params.name || call.toNumber}
             </Text>
-            <Text font="mono" variant="muted" className="mt-1 text-sm">
-              {call.toNumber}
-            </Text>
+            {params.name ? (
+              <Text font="mono" variant="muted" className="mt-1 text-sm">
+                {call.toNumber}
+              </Text>
+            ) : null}
 
             {call.agentName ? (
               <View className="mt-2.5 flex-row items-center gap-1.5">
@@ -215,7 +221,9 @@ export default function CallDetailScreen() {
               </Text>
             )}
 
-            <Badge className={cn("mt-4 px-3 py-1", outcome.bgClassName)}>
+            <Badge
+              className={cn("mt-4 gap-1.5 px-3 py-1", outcome.bgClassName)}
+            >
               <OutcomeIcon size={13} strokeWidth={1.75} color={outcomeColor} />
               <Text
                 style={{ color: outcomeColor }}
@@ -339,9 +347,8 @@ export default function CallDetailScreen() {
 
         {/* Actions */}
         <Rise index={4}>
-          <View className="mx-5 mt-8">
-            <Button
-              size="lg"
+          <View className="mt-8 items-center">
+            <Pressable
               onPress={() =>
                 router.push({
                   pathname: "/in-call",
@@ -353,12 +360,11 @@ export default function CallDetailScreen() {
                   },
                 })
               }
+              className="h-16 w-16 items-center justify-center rounded-full bg-foreground shadow-float active:opacity-80"
+              hitSlop={8}
             >
-              <Phone size={16} strokeWidth={2} color={colors.onInk} />
-              <Text className="text-sm font-medium text-primary-foreground">
-                Call
-              </Text>
-            </Button>
+              <Phone size={24} strokeWidth={2} color={colors.onInk} />
+            </Pressable>
           </View>
         </Rise>
       </ScrollView>

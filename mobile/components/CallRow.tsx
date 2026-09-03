@@ -2,9 +2,9 @@ import * as React from "react";
 import { View, Pressable } from "react-native";
 import {
   Phone,
-  PhoneOutgoing,
-  PhoneIncoming,
-  PhoneMissed,
+  PhoneCall,
+  PhoneForwarded,
+  PhoneOff,
   ChevronRight,
 } from "lucide-react-native";
 import { InitialsAvatar } from "./InitialsAvatar";
@@ -43,29 +43,30 @@ type CallRowProps = {
   onPress?: () => void;
 };
 
+// Every call here is outbound — the user dials out through an agent, there's
+// no inbound flow — so `PhoneIncoming`/`PhoneOutgoing` (which mean call
+// *direction*) are the wrong axis entirely for what these actually vary on:
+// call *outcome*. Icons below match outcome instead: a normal completed
+// call, one handed off, one that never connected.
 export function CallOutcomeAvatar({ outcome }: { outcome: CallOutcome }) {
   const colors = useThemeColors();
   switch (outcome) {
     case CallOutcome.Resolved:
       return (
         <View className="h-8 w-8 items-center justify-center rounded-lg bg-secondary">
-          <PhoneIncoming size={14} strokeWidth={1.75} color={colors.green} />
+          <PhoneCall size={14} strokeWidth={1.75} color={colors.green} />
         </View>
       );
     case CallOutcome.Transferred:
       return (
         <View className="h-8 w-8 items-center justify-center rounded-lg bg-secondary">
-          <PhoneOutgoing size={14} strokeWidth={1.75} color={colors.river} />
+          <PhoneForwarded size={14} strokeWidth={1.75} color={colors.river} />
         </View>
       );
     case CallOutcome.Missed:
       return (
         <View className="h-8 w-8 items-center justify-center rounded-lg bg-secondary">
-          <PhoneMissed
-            size={14}
-            strokeWidth={1.75}
-            color={colors.destructive}
-          />
+          <PhoneOff size={14} strokeWidth={1.75} color={colors.destructive} />
         </View>
       );
     default:
