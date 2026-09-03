@@ -45,10 +45,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Generates the android/ project from app.json (expo-router,
+      # Generates the android/ project from app.config.js (expo-router,
       # expo-dev-client, @config-plugins/react-native-webrtc) — this repo
       # is a managed Expo project, so android/ doesn't exist until this runs.
+      # APP_VARIANT=development gives this debug build its own applicationId
+      # (com.rivervoice.app.dev) so it can install side-by-side with a
+      # production build on the same device.
       - name: Prebuild native Android project
+        env:
+          APP_VARIANT: development
         run: npx expo prebuild --platform android --non-interactive
 
       # expo prebuild regenerates gradle.properties from Expo's template

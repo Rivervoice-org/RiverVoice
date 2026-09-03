@@ -65,7 +65,11 @@ jobs:
           ${{ secrets.MOBILE_ENV_PRODUCTION }}
           MOBILE_ENV_EOF
 
+      # APP_VARIANT=production is the config default already, but explicit
+      # here since this is the one workflow that ships to the store.
       - name: Prebuild native Android project
+        env:
+          APP_VARIANT: production
         run: npx expo prebuild --platform android --non-interactive
 
       # expo prebuild regenerates gradle.properties from Expo's template
