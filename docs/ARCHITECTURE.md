@@ -108,37 +108,17 @@ That's the entire contract every stage — STT, MT, TTS — satisfies.
 of stages and wires them into one chain, by giving each stage a channel to
 the *next* stage and spawning each one as its own async task:
 
-<figure>
-<svg viewBox="0 0 720 170" role="img" aria-label="Pipeline::spawn chains three stages — STT, MT, TTS — by creating one mpsc channel between each pair, then hands back a FrameIo whose upstream is the last stage's output channel and whose downstream is the first stage's input channel.">
-  <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
-    </marker>
-  </defs>
-  <g font-family="ui-monospace, monospace" font-size="12" fill="currentColor">
-    <rect x="140" y="60" width="90" height="50" rx="6" fill="none" stroke="currentColor"/>
-    <text x="185" y="90" text-anchor="middle">STT</text>
-    <rect x="315" y="60" width="90" height="50" rx="6" fill="none" stroke="currentColor"/>
-    <text x="360" y="90" text-anchor="middle">MT</text>
-    <rect x="490" y="60" width="90" height="50" rx="6" fill="none" stroke="currentColor"/>
-    <text x="535" y="90" text-anchor="middle">TTS</text>
+```mermaid
+flowchart LR
+    In(["into_first — RawAudio in"]) --> STT["STT stage"]
+    STT -->|Transcription| MT["MT stage"]
+    MT -->|MtText| TTS["TTS stage"]
+    TTS -->|TtsAudio| Out(["prev_exit — TtsAudio out"])
+```
 
-    <line x1="20" y1="85" x2="135" y2="85" stroke="currentColor" marker-end="url(#arrow)"/>
-    <text x="20" y="72" font-size="11">into_first</text>
-
-    <line x1="230" y1="85" x2="310" y2="85" stroke="currentColor" marker-end="url(#arrow)"/>
-    <line x1="405" y1="85" x2="485" y2="85" stroke="currentColor" marker-end="url(#arrow)"/>
-
-    <line x1="580" y1="85" x2="700" y2="85" stroke="currentColor" marker-end="url(#arrow)"/>
-    <text x="595" y="72" font-size="11">prev_exit</text>
-
-    <text x="185" y="140" text-anchor="middle" font-size="11">tokio::spawn</text>
-    <text x="360" y="140" text-anchor="middle" font-size="11">tokio::spawn</text>
-    <text x="535" y="140" text-anchor="middle" font-size="11">tokio::spawn</text>
-  </g>
-</svg>
-<figcaption>Each arrow is its own <code>mpsc::channel</code>. The chain's own two loose ends — <code>into_first</code> and the last stage's <code>prev_exit</code> — become the <em>outer</em> <code>FrameIo</code> that <code>spawn</code> hands back.</figcaption>
-</figure>
+Each arrow is its own `mpsc::channel`, each stage its own `tokio::spawn`ed
+task. The chain's own two loose ends — `into_first` and the last stage's
+`prev_exit` — become the *outer* `FrameIo` that `spawn` hands back.
 
 The subtle part is what the returned `FrameIo` means: its `downstream` is
 `into_first` (push a frame in, it enters STT), and its `upstream` is the
@@ -173,45 +153,17 @@ pipeline_a2b:  STT(A's lang) → MT → TTS(B's lang)     — what B hears
 pipeline_b2a:  STT(B's lang) → MT → TTS(A's lang)     — what A hears
 ```
 
-<figure>
-<svg viewBox="0 0 760 300" role="img" aria-label="A's transport reads pipeline_b2a's exit and writes into pipeline_a2b's entrance. B's transport is the mirror: reads pipeline_a2b's exit, writes into pipeline_b2a's entrance. The two pipelines never talk to each other directly — only through this cross-wiring at each transport's FrameIo.">
-  <defs>
-    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
-    </marker>
-  </defs>
-  <g font-family="ui-monospace, monospace" font-size="12" fill="currentColor">
-    <rect x="20" y="20" width="130" height="50" rx="6" fill="none" stroke="currentColor"/>
-    <text x="85" y="50" text-anchor="middle">A · WebRTC</text>
+```mermaid
+flowchart LR
+    Amic(["A's mic — WebRTC"]) -->|a2b_entrance| pab["pipeline_a2b<br/>STT(A) → MT → TTS(B)"]
+    pab -->|a2b_exit| Bhears(["B hears — WebRTC"])
+    Bmic(["B's mic — Twilio"]) -->|b2a_entrance| pba["pipeline_b2a<br/>STT(B) → MT → TTS(A)"]
+    pba -->|b2a_exit| Ahears(["A hears — Twilio"])
+```
 
-    <rect x="20" y="230" width="130" height="50" rx="6" fill="none" stroke="currentColor"/>
-    <text x="85" y="260" text-anchor="middle">B · Twilio</text>
-
-    <rect x="280" y="20" width="200" height="50" rx="6" fill="none" stroke="currentColor" class="accent-tts"/>
-    <text x="380" y="50" text-anchor="middle">pipeline_a2b</text>
-
-    <rect x="280" y="230" width="200" height="50" rx="6" fill="none" stroke="currentColor" class="accent-mt"/>
-    <text x="380" y="260" text-anchor="middle">pipeline_b2a</text>
-
-    <!-- A mic -> a2b entrance -->
-    <path d="M150,45 C220,45 220,45 280,45" fill="none" stroke="currentColor" marker-end="url(#arrow2)"/>
-    <text x="160" y="35" font-size="10">a2b_entrance (A's mic)</text>
-
-    <!-- a2b exit -> B hears -->
-    <path d="M480,45 C620,45 620,255 150,255" fill="none" stroke="currentColor" marker-end="url(#arrow2)"/>
-    <text x="500" y="150" font-size="10">a2b_exit → B hears</text>
-
-    <!-- B mic -> b2a entrance -->
-    <path d="M150,255 C220,255 220,255 280,255" fill="none" stroke="currentColor" marker-end="url(#arrow2)"/>
-    <text x="160" y="245" font-size="10">b2a_entrance (B's mic)</text>
-
-    <!-- b2a exit -> A hears -->
-    <path d="M480,255 C620,255 620,45 150,45" fill="none" stroke="currentColor" marker-end="url(#arrow2)" transform="translate(0,-4)"/>
-    <text x="560" y="150" font-size="10">b2a_exit → A hears</text>
-  </g>
-</svg>
-<figcaption><code>FrameIo::into_parts()</code> splits each pipeline into a raw <code>(Receiver, Sender)</code> pair. The cross-wiring is entirely which halves get paired into which transport's <code>FrameIo</code> at construction — nothing is moved "in flight" later.</figcaption>
-</figure>
+`FrameIo::into_parts()` splits each pipeline into a raw `(Receiver, Sender)`
+pair. The cross-wiring is entirely which halves get paired into which
+transport's `FrameIo` at construction — nothing is moved "in flight" later.
 
 Concretely (`http/handlers/call.rs`):
 
@@ -262,7 +214,7 @@ sequenceDiagram
     F-->>M: SDP answer — A's leg is live
     T->>F: GET /v1/twilio/ws/{call_id}
     F->>F: take_b_io(call_id) — claims the parked FrameIo
-    Note over F,T: both legs wired; the call is live end to end
+    Note over F,T: both legs wired — call is live end to end
 ```
 
 `pending_b_io` is a `Mutex<Option<FrameIo>>` specifically because it's
