@@ -65,7 +65,11 @@ jobs:
           ${{ secrets.MOBILE_ENV_PRODUCTION }}
           MOBILE_ENV_EOF
 
+      # APP_VARIANT=production is the config default already, but explicit
+      # here since this is the one workflow that ships to the store.
       - name: Prebuild native Android project
+        env:
+          APP_VARIANT: production
         run: npx expo prebuild --platform android --non-interactive
 
       # expo prebuild regenerates gradle.properties from Expo's template
@@ -93,6 +97,15 @@ jobs:
           path: mobile/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
+      # gradle always names it app-release.apk — rename it to something
+      # that actually identifies the app and version before it's attached
+      # to the release. Safe to rename in place: the upload-artifact step
+      # above already ran and captured its own copy under app-release.apk.
+      - name: Rename APK for release
+        run: |
+          mv android/app/build/outputs/apk/release/app-release.apk \
+            "android/app/build/outputs/apk/release/rivervoice-$GITHUB_REF_NAME.apk"
+
       # Creates the release if it doesn't exist yet, or just re-uploads the
       # APK if re-running the same tag.
       - name: Attach APK to release
@@ -103,8 +116,8 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
-            android/app/build/outputs/apk/release/app-release.apk \
+            "android/app/build/outputs/apk/release/rivervoice-$GITHUB_REF_NAME.apk" \
           || gh release upload "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber \
-            android/app/build/outputs/apk/release/app-release.apk
+            "android/app/build/outputs/apk/release/rivervoice-$GITHUB_REF_NAME.apk"
