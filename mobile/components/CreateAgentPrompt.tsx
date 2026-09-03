@@ -75,8 +75,7 @@ export function CreateAgentPrompt() {
   const [dismissed, setDismissed] = useState(false);
   const { data: agents, isPending } = useAgents();
 
-  const open =
-    justSignedIn && !dismissed && !isPending && (agents?.length ?? 0) === 0;
+  const open = justSignedIn && !dismissed && !isPending && agents?.length === 0;
 
   function close() {
     setDismissed(true);

@@ -72,6 +72,9 @@ const TabButton = memo(function TabButton({
       onLayout={onLayout}
       className="flex-1 items-center justify-center py-2"
       hitSlop={8}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: focused }}
+      accessibilityLabel={label}
     >
       <View className="items-center gap-1">
         <TabIcon name={name} focused={focused} />
