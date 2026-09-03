@@ -40,13 +40,24 @@ export function CallDetailSkeleton() {
         ))}
       </View>
 
-      {/* Recording card: icon, heading, one line of body. */}
+      {/* Recording card: icon, heading, segmented toggle, play button, and
+          progress bar with a start/end time either side. */}
       <Card className="mx-5 mt-6 p-4">
         <View className="flex-row items-center gap-2">
           <Skeleton className="h-4 w-4 rounded" />
           <Skeleton className="h-3 w-24 rounded-full" />
         </View>
-        <Skeleton className="mt-3 h-2.5 w-2/5 rounded-full" />
+        <Skeleton className="mt-3.5 h-8 rounded-lg" />
+        <View className="mt-3 flex-row items-center gap-3">
+          <Skeleton className="h-10 w-10 rounded-full" />
+          <View className="flex-1 gap-1.5">
+            <Skeleton className="h-2 rounded-full" />
+            <View className="flex-row justify-between">
+              <Skeleton className="h-2.5 w-8 rounded-full" />
+              <Skeleton className="h-2.5 w-8 rounded-full" />
+            </View>
+          </View>
+        </View>
       </Card>
 
       {/* Transcription row, which is a bordered row rather than a card. */}
@@ -61,8 +72,10 @@ export function CallDetailSkeleton() {
         </View>
       </View>
 
-      {/* Call button. Solid by nature, so it stays a solid block. */}
-      <Skeleton className="mx-5 mt-8 h-12 rounded-lg" />
+      {/* Call button — centered circle, matching the real one. */}
+      <View className="mt-8 items-center">
+        <Skeleton className="h-16 w-16 rounded-full" />
+      </View>
     </ScrollView>
   );
 }

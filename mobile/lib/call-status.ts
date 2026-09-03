@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { CallStatus } from "@/lib/webrtc/ferry-call";
 
 /**
@@ -26,6 +27,27 @@ export function callStatusToPhase(status: CallStatus): TranscriptPhase {
     default:
       return TranscriptPhase.Connecting;
   }
+}
+
+/**
+ * Seconds since `connectedAt`, re-derived from that timestamp on a 1s tick
+ * rather than counted locally — so it reads correctly on first render
+ * whenever this mounts, not just for a component that was there for the
+ * whole call. `connectedAt` null (not connected, or connected before this
+ * mounted and already ended) reads as 0.
+ */
+export function useElapsedSeconds(connectedAt: number | null): number {
+  const [, tick] = useState(0);
+
+  useEffect(() => {
+    if (connectedAt === null) return;
+    const interval = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(interval);
+  }, [connectedAt]);
+
+  return connectedAt === null
+    ? 0
+    : Math.max(0, Math.floor((Date.now() - connectedAt) / 1000));
 }
 
 export function callStatusLabel(status: CallStatus, duration: number): string {

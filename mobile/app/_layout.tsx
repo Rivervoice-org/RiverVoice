@@ -12,6 +12,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/query-client";
 import { SessionProvider } from "@/state/session";
 import { AgentPickerProvider } from "@/providers/agent-picker-provider";
+import { ActiveCallProvider } from "@/providers/active-call-provider";
 import { ContactsProvider } from "@/state/contacts";
 import { Splash } from "@/components/Splash";
 import { ThemeProvider, useTheme } from "@/lib/theme";
@@ -42,22 +43,24 @@ function AppShell({
     <SessionProvider>
       <AgentPickerProvider>
         <ContactsProvider>
-          {/* Two halves, and the only two: `(auth)` is what a signed-out
-                user can reach, `(protected)` is everything else. The split
-                is the app's whole authorization story — no screen below
-                repeats it. */}
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: colors.canvas },
-            }}
-          >
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(protected)" />
-          </Stack>
-          <PortalHost />
-          <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-          {!booted && <Splash onDone={onBooted} />}
+          <ActiveCallProvider>
+            {/* Two halves, and the only two: `(auth)` is what a signed-out
+                  user can reach, `(protected)` is everything else. The split
+                  is the app's whole authorization story — no screen below
+                  repeats it. */}
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: colors.canvas },
+              }}
+            >
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(protected)" />
+            </Stack>
+            <PortalHost />
+            <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+            {!booted && <Splash onDone={onBooted} />}
+          </ActiveCallProvider>
         </ContactsProvider>
       </AgentPickerProvider>
     </SessionProvider>
