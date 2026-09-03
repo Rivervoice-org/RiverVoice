@@ -38,9 +38,12 @@ sign-in. See [The shape of the system](#the-shape-of-the-system).
 
 ## Demo
 
-<video src="docs/video/demo.mp4" controls muted playsinline width="720">
-  Your browser can't play this video — download it directly: docs/video/demo.mp4
-</video>
+GitHub only plays video uploaded through its own web editor, not a video
+file committed to the repo — so here it's a linked thumbnail instead of an
+inline player. Click through to `docs/video/demo.mp4` and GitHub's file
+viewer plays it inline.
+
+[<img src="docs/video/thumbnail.png" width="480" alt="RiverVoice demo video — click to play">](docs/video/demo.mp4)
 
 ---
 
@@ -86,6 +89,7 @@ sign-in. See [The shape of the system](#the-shape-of-the-system).
 - [The shape of the system](#the-shape-of-the-system)
 - [Running it](#running-it)
 - [ferry](#ferry)
+  - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the frame/pipeline design, in depth
 - [mobile](#mobile)
 - [Conventions](#conventions)
 
@@ -239,7 +243,10 @@ mobile to PostgREST, RLS-scoped to the caller — see `docker-compose.yml`'s
 `rest`/`kong` services. What's left on ferry is only what PostgREST's
 row-level API can't express, or that needs real server-side orchestration.
 See [ferry/AGENTS.md](ferry/AGENTS.md) for the full internals doc this
-section summarizes.
+section summarizes, or [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a
+from-scratch walkthrough of the frame/pipeline design specifically — what a
+`Frame` is, how `Pipeline::spawn` chains stages, and why a real call is two
+pipelines cross-wired rather than one.
 
 ```
 GET  /health
