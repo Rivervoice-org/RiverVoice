@@ -1,6 +1,6 @@
 {
   "name": "mobile",
-  "version": "0.2.1-dev.1",
+  "version": "0.2.2-dev.1",
   "main": "expo-router/entry",
   "overrides": {
     "nativewind": {

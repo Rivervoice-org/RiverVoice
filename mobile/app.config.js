@@ -10,7 +10,7 @@ module.exports = {
     // installed app when dev and prod are on the device side by side —
     // two apps registering the same scheme makes that ambiguous.
     scheme: IS_DEV ? "rivervoice-dev" : "rivervoice",
-    version: "0.2.1-dev.1",
+    version: "0.2.2-dev.1",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "automatic",
