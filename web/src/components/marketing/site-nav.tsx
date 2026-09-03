@@ -1,9 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Smartphone } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { cn } from "@/lib/utils";
 
@@ -39,13 +37,6 @@ export function SiteNav() {
       <nav className="mx-auto flex h-16 w-full max-w-6xl items-center px-4 sm:h-20 sm:px-6">
         <div className="animate-rise" style={{ animationDelay: "0.05s" }}>
           <Wordmark />
-        </div>
-
-        <div className="animate-rise ml-auto" style={{ animationDelay: "0.13s" }}>
-          <Button variant="outline" size="sm" className="h-9 px-3.5" render={<a href="#app" />}>
-            <Smartphone className="h-4 w-4" aria-hidden />
-            Get the app
-          </Button>
         </div>
       </nav>
     </header>
