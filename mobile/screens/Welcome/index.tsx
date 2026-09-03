@@ -5,6 +5,7 @@ import { Mascot } from "@/components/Mascot";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useAuth } from "@/hooks/use-auth";
+import { markJustSignedIn } from "@/lib/create-agent-prompt";
 import { useThemeColors } from "@/lib/theme";
 
 export default function WelcomeScreen() {
@@ -17,7 +18,8 @@ export default function WelcomeScreen() {
     setError("");
     setLoading(true);
     try {
-      await continueWithGoogle();
+      const signedIn = await continueWithGoogle();
+      if (signedIn) markJustSignedIn();
     } catch (err) {
       console.error("continueWithGoogle failed:", err);
       setError("Something went wrong. Please try again.");

@@ -11,6 +11,7 @@ import {
   RotateCw,
 } from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
+import { CreateAgentPrompt } from "@/components/CreateAgentPrompt";
 import { CallListItem, CallRow, type CallRowItem } from "@/components/CallRow";
 import { SwipeToCallRow } from "@/components/SwipeToCallRow";
 import { Button } from "@/components/ui/button";
@@ -390,6 +391,7 @@ export default function HomeScreen() {
           </>
         }
       />
+      <CreateAgentPrompt />
     </SafeAreaView>
   );
 }
