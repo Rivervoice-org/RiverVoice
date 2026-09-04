@@ -37,7 +37,6 @@ export function Demo() {
             muted
             loop
             playsInline
-
           >
             <source src="/assets/demoVideo.mp4" type="video/mp4" />
           </video>
