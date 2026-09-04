@@ -32,8 +32,11 @@ export default function WelcomeScreen() {
     <View className="flex-1 bg-canvas px-6 pt-16 pb-10">
       {/* Top section - Logo and branding */}
       <View className="items-center">
-        <View className="h-12 w-12 items-center justify-center rounded-2xl border border-border bg-card shadow-float">
-          <Waves size={24} strokeWidth={2} color={colors.ink} />
+        <View
+          className="h-12 w-12 items-center justify-center rounded-2xl shadow-float"
+          style={{ backgroundColor: colors.ink }}
+        >
+          <Waves size={24} strokeWidth={2} color={colors.onInk} />
         </View>
         <Text className="mt-4 text-[17px] font-semibold tracking-[-0.02em]">
           Rivervoice
