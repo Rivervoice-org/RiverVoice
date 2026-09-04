@@ -142,6 +142,13 @@ pub async fn try_agent_offer(
 
     // No transcript recorder: try-agent is a one-way demo with no registry
     // entry and no `calls` row to attach one to.
+    //
+    // We don't need to store the transcriptions and recordings and all that
+    // stuff for try-agent, since this is a very short period of a user
+    // testing the agent — no need. The whole point of try-agent having any
+    // db footprint at all is for tracking how many credits got debited
+    // during a session, so Credits History can show it: just call_id and
+    // agent_id, nothing more.
     let turn_latency = TurnLatencyRecorder::new();
     let turn_latency_observer = turn_latency.observer("solo");
     // CallType::TryAgent, not PhoneCall: this call_id is never written to

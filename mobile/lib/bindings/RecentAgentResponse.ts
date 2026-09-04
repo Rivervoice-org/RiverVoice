@@ -3,9 +3,9 @@
 /**
  * Just enough to draw one row: the avatar, the title, and the line of
  * history under it. The agent's configuration — languages, mode, gender,
- * voice — is deliberately absent; `GET /v1/agents/{id}` is what the row
- * taps through to, and sending it here would mean sending three agents'
- * full configuration to render nine words.
+ * voice — is deliberately absent; this endpoint is only for the "recently
+ * used" row, not agent detail (that's a plain PostgREST read against
+ * `agents` directly now — see the client's lib/agents/api.ts).
  */
 export type RecentAgentResponse = { id: string, name: string, mascot: string,
 /**

@@ -1,11 +1,10 @@
-import { languageLabel } from "@/lib/calls/format";
-import type { CallRow } from "@/lib/calls/types";
+import { authHeader } from "@/lib/auth/tokens";
+import { ferry } from "@/lib/ferry";
 import { currentUserId, supabase } from "@/lib/supabase";
 import type {
   CreditBalance,
   CreditBalanceRow,
-  CreditHistoryEntry,
-  CreditLedgerRow,
+  CreditHistoryResponse,
 } from "@/lib/credits/types";
 
 type BalanceRow = Pick<CreditBalanceRow, "balance_credits" | "updated_at">;
@@ -36,109 +35,20 @@ export async function getCreditBalance(): Promise<CreditBalance> {
   };
 }
 
-export const CREDIT_HISTORY_PAGE_SIZE = 50;
-
-type LedgerCallEmbed = Pick<
-  CallRow,
-  "agent_name" | "input_language" | "output_language"
->;
-
-type LedgerRow = Pick<
-  CreditLedgerRow,
-  | "id"
-  | "call_id"
-  | "call_type"
-  | "entry_type"
-  | "amount_credits"
-  | "note"
-  | "created_at"
-> & {
-  // PostgREST embeds a forward many-to-one relationship (this table holds
-  // the FK) as a single object — but the generated type marks
-  // credit_ledger_call_id_fkey non-one-to-one (many ledger rows can share a
-  // call_id) and infers an array either way, so both shapes are handled by
-  // `oneCall` below rather than trusted blindly.
-  calls: LedgerCallEmbed | LedgerCallEmbed[] | null;
-};
-
-function oneCall(
-  embed: LedgerCallEmbed | LedgerCallEmbed[] | null,
-): LedgerCallEmbed | null {
-  if (!embed) return null;
-  return Array.isArray(embed) ? (embed[0] ?? null) : embed;
-}
-
 /**
- * Reads `credit_ledger` via PostgREST, joined forward to `calls` for a
- * phone-call charge's agent/language — same embedding technique
- * `getCallDetail` uses for `call_utterances`, just the other direction
- * (many ledger rows can point at one call, not one call embedding many).
- *
- * Every charge row sharing a `call_id` is summed into one `isCallSummary`
- * entry client-side, since `BillingObserver` bills per usage stage, not per
- * call. Rows with no `call_id` (a try-agent charge, or any non-charge
- * entry) pass through individually.
+ * Hits ferry's `GET /v1/credits/history` (see
+ * ferry/src/http/handlers/credits.rs) — the grouping of per-stage
+ * (stt/mt/tts) charges into one row per call/session is a GROUP BY
+ * PostgREST's row-level API can't express, so this went the same route as
+ * `getRecentAgents`. `before` is the previous page's `nextBefore`, same
+ * cursor contract `getRecentCalls` uses.
  */
-export async function getCreditHistory(): Promise<CreditHistoryEntry[]> {
-  const userId = await currentUserId();
-  const { data, error } = await supabase
-    .from("credit_ledger")
-    .select(
-      "id, call_id, call_type, entry_type, amount_credits, note, created_at, calls ( agent_name, input_language, output_language )",
-    )
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(CREDIT_HISTORY_PAGE_SIZE);
-  if (error) throw error;
-
-  const rows = data as unknown as LedgerRow[];
-  const grouped = new Map<string, CreditHistoryEntry>();
-  const standalone: CreditHistoryEntry[] = [];
-
-  for (const row of rows) {
-    const call = oneCall(row.calls);
-    const entry: CreditHistoryEntry = {
-      id: String(row.id),
-      entryType: row.entry_type,
-      callType: row.call_type,
-      isCallSummary: false,
-      amountCredits: row.amount_credits,
-      agentName: call?.agent_name ?? null,
-      language: call
-        ? languageLabel(call.input_language, call.output_language)
-        : null,
-      // Raw BillingObserver note ("stt"/"mt"/"tts") for a standalone charge
-      // row; null for anything else — display labels live in
-      // lib/credits/format.ts, not here.
-      stage: row.entry_type === "charge" ? row.note : null,
-      createdAt: row.created_at,
-    };
-
-    if (!row.call_id) {
-      standalone.push(entry);
-      continue;
-    }
-
-    const existing = grouped.get(row.call_id);
-    if (!existing) {
-      grouped.set(row.call_id, {
-        ...entry,
-        id: `call:${row.call_id}`,
-        isCallSummary: true,
-        stage: null,
-      });
-      continue;
-    }
-    existing.amountCredits += entry.amountCredits;
-    // The group's own timestamp tracks the call's most recent charge, so
-    // the whole summary sorts (and displays a date/time) by that instead of
-    // whichever stage happened to be billed first.
-    if (entry.createdAt > existing.createdAt) {
-      existing.createdAt = entry.createdAt;
-    }
-  }
-
-  return [...grouped.values(), ...standalone].sort((a, b) =>
-    b.createdAt.localeCompare(a.createdAt),
+export function getCreditHistory(
+  before?: string,
+): Promise<CreditHistoryResponse> {
+  const query = before ? `?before=${encodeURIComponent(before)}` : "";
+  return ferry.get<CreditHistoryResponse>(
+    `/v1/credits/history${query}`,
+    authHeader(),
   );
 }

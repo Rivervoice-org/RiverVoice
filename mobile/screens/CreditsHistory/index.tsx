@@ -15,8 +15,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Rise, rowDelay } from "@/components/ui/rise";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
+import { languageLabel } from "@/lib/calls/format";
 import { entryTypeLabel, stageLabel } from "@/lib/credits/format";
 import { useCreditBalance, useCreditHistory } from "@/lib/credits/hooks";
 import type { CreditHistoryEntry } from "@/lib/credits/types";
@@ -95,7 +97,8 @@ function TransactionRow({
       </View>
     );
     title = entry.agentName ?? "Direct call";
-    subtitle = entry.language || "Phone call";
+    subtitle =
+      languageLabel(entry.inputLanguage, entry.outputLanguage) || "Phone call";
   } else {
     // Not a call summary — a try-agent charge (no call_id to group by), or
     // defensively, any other standalone charge shape.
@@ -136,15 +139,18 @@ export default function CreditsHistoryScreen() {
   const colors = useThemeColors();
   const { data: balance, isLoading: isBalanceLoading } = useCreditBalance();
   const {
-    data: history,
+    entries: history,
     isLoading: isHistoryLoading,
     isError,
     error,
     refetch,
     isRefetching,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
   } = useCreditHistory();
 
-  const sections = history ? groupByDate(history) : [];
+  const sections = groupByDate(history);
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
@@ -234,6 +240,17 @@ export default function CreditsHistoryScreen() {
         )}
         onRefresh={() => void refetch()}
         refreshing={isRefetching}
+        onEndReached={() => {
+          if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+        }}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          isFetchingNextPage ? (
+            <View className="items-center py-5">
+              <Spinner size={18} />
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           isHistoryLoading ? (
             <CreditsHistorySkeleton />

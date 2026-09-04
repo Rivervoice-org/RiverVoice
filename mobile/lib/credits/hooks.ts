@@ -1,5 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { getCreditBalance, getCreditHistory } from "@/lib/credits/api";
+import type { CreditHistoryEntry } from "@/lib/credits/types";
 import { useAuth } from "@/hooks/use-auth";
 
 export const creditBalanceQueryKey = ["credits", "balance"] as const;
@@ -23,16 +25,29 @@ export function useCreditBalance() {
 export const creditHistoryQueryKey = ["credits", "history"] as const;
 
 /**
- * The most recent `CREDIT_HISTORY_PAGE_SIZE` credits-history entries.
- * Not paginated like `useRecentCalls` — there's no cursor to page by yet,
- * just a fixed-size latest-first read (see `getCreditHistory`).
+ * Infinite-scrolling credits history — same shape as `useRecentCalls`.
+ * `getNextPageParam` returns undefined once ferry stops sending a cursor,
+ * which is what makes `hasNextPage` false and stops the list at the end.
  */
 export function useCreditHistory() {
   const { isAuthenticated } = useAuth();
 
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: creditHistoryQueryKey,
-    queryFn: getCreditHistory,
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+      getCreditHistory(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextBefore ?? undefined,
     enabled: isAuthenticated,
   });
+
+  // Flattened once per fetch rather than on every render — same reasoning
+  // `useRecentCalls` gives: this feeds a list, and a new array identity on
+  // every render would defeat its memoization on every unrelated state change.
+  const entries = useMemo<CreditHistoryEntry[]>(
+    () => query.data?.pages.flatMap((page) => page.entries) ?? [],
+    [query.data],
+  );
+
+  return { ...query, entries };
 }
