@@ -1,121 +1,27 @@
-import { useMemo } from "react";
 import { Pressable, SectionList, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { ChevronLeft, Coins } from "lucide-react-native";
-import { CallOutcome, CallOutcomeAvatar, CallRow } from "@/components/CallRow";
+import {
+  ChevronLeft,
+  CloudOff,
+  Coins,
+  Phone,
+  PlusCircle,
+  RotateCw,
+} from "lucide-react-native";
+import { CallRow } from "@/components/CallRow";
 import { Mascot } from "@/components/Mascot";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Rise, rowDelay } from "@/components/ui/rise";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
+import { entryTypeLabel, stageLabel } from "@/lib/credits/format";
+import { useCreditBalance, useCreditHistory } from "@/lib/credits/hooks";
+import type { CreditHistoryEntry } from "@/lib/credits/types";
 import { cn } from "@/lib/utils";
-
-// Mocked: nothing on ferry persists a usage ledger yet (BillingObserver
-// writes charges to credit_ledger, but there's no endpoint to page them from
-// — see ferry/src/observer/billing_observer.rs). This shape mirrors
-// credit_ledger's own columns: one row per charge, `callType` matching
-// credit_ledger.call_type ("phone_call" | "try_agent") since a try-agent
-// session bills credits too but was never a `calls` row — see
-// BillingObserver's call_id/call_type handling.
-const CREDITS = {
-  remaining: 3580,
-  total: 12000,
-  used: 8420,
-};
-
-type CreditTransaction = {
-  id: string;
-  callType: "phone_call" | "try_agent";
-  agentName: string | null;
-  /** Only meaningful for `callType: "phone_call"` — a try-agent session has
-   * no destination number. */
-  toNumber: string | null;
-  language: string;
-  duration: string;
-  credits: number;
-  /** Only meaningful for `callType: "phone_call"` — a try-agent session has
-   * no phone-call outcome to report. */
-  outcome: CallOutcome | null;
-  createdAt: string;
-  time: string;
-};
-
-const MOCK_TRANSACTIONS: CreditTransaction[] = [
-  {
-    id: "1",
-    callType: "phone_call",
-    agentName: "Support Line",
-    toNumber: "+91 98450 33120",
-    language: "English → Hindi",
-    duration: "4:12",
-    credits: 210,
-    outcome: CallOutcome.Resolved,
-    createdAt: new Date().toISOString(),
-    time: "10:42 AM",
-  },
-  {
-    id: "2",
-    callType: "try_agent",
-    agentName: "Sales Bot",
-    toNumber: null,
-    language: "English → Tamil",
-    duration: "1:05",
-    credits: 55,
-    outcome: null,
-    createdAt: new Date().toISOString(),
-    time: "9:15 AM",
-  },
-  {
-    id: "3",
-    callType: "phone_call",
-    agentName: null,
-    toNumber: "+91 99001 44556",
-    language: "English → Telugu",
-    duration: "0:00",
-    credits: 0,
-    outcome: CallOutcome.Missed,
-    createdAt: new Date(Date.now() - 86_400_000).toISOString(),
-    time: "6:50 PM",
-  },
-  {
-    id: "4",
-    callType: "phone_call",
-    agentName: "Support Line",
-    toNumber: "+91 98450 33120",
-    language: "English → Hindi",
-    duration: "7:48",
-    credits: 390,
-    outcome: CallOutcome.Resolved,
-    createdAt: new Date(Date.now() - 86_400_000).toISOString(),
-    time: "2:05 PM",
-  },
-  {
-    id: "5",
-    callType: "try_agent",
-    agentName: "Onboarding Guide",
-    toNumber: null,
-    language: "English → Kannada",
-    duration: "0:48",
-    credits: 20,
-    outcome: null,
-    createdAt: new Date(Date.now() - 86_400_000).toISOString(),
-    time: "11:58 AM",
-  },
-  {
-    id: "6",
-    callType: "phone_call",
-    agentName: "Onboarding Guide",
-    toNumber: "+91 98123 66789",
-    language: "English → Kannada",
-    duration: "3:30",
-    credits: 175,
-    outcome: CallOutcome.Resolved,
-    createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
-    time: "11:20 AM",
-  },
-];
+import { CreditsHistorySkeleton } from "./skeleton";
 
 function dateLabel(iso: string, now: number = Date.now()): string {
   const date = new Date(iso);
@@ -132,59 +38,91 @@ function dateLabel(iso: string, now: number = Date.now()): string {
   });
 }
 
-function groupByDate(transactions: CreditTransaction[]) {
+function clockTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function groupByDate(entries: CreditHistoryEntry[]) {
   const order: string[] = [];
-  const byLabel = new Map<string, CreditTransaction[]>();
-  for (const tx of transactions) {
-    const label = dateLabel(tx.createdAt);
-    if (!byLabel.has(label)) {
-      byLabel.set(label, []);
+  const byLabel = new Map<string, CreditHistoryEntry[]>();
+  for (const entry of entries) {
+    const label = dateLabel(entry.createdAt);
+    let group = byLabel.get(label);
+    if (!group) {
+      group = [];
+      byLabel.set(label, group);
       order.push(label);
     }
-    byLabel.get(label)!.push(tx);
+    group.push(entry);
   }
-  return order.map((label) => ({ title: label, data: byLabel.get(label)! }));
+  return order.map((label) => ({
+    title: label,
+    data: byLabel.get(label) ?? [],
+  }));
 }
 
 function TransactionRow({
-  tx,
+  entry,
   index,
   showDivider,
 }: {
-  tx: CreditTransaction;
+  entry: CreditHistoryEntry;
   index: number;
   showDivider: boolean;
 }) {
-  const noCharge = tx.credits === 0;
-  const isTryAgent = tx.callType === "try_agent";
+  const colors = useThemeColors();
+  const isCredit = entry.amountCredits > 0;
+
+  let avatar: React.ReactNode;
+  let title: string;
+  let subtitle: string | undefined;
+
+  if (entry.entryType !== "charge") {
+    avatar = (
+      <View className="h-8 w-8 items-center justify-center rounded-lg bg-green-tint">
+        <PlusCircle size={14} strokeWidth={1.75} color={colors.green} />
+      </View>
+    );
+    title = entryTypeLabel(entry.entryType);
+    subtitle = undefined;
+  } else if (entry.isCallSummary) {
+    avatar = (
+      <View className="h-8 w-8 items-center justify-center rounded-lg bg-secondary">
+        <Phone size={14} strokeWidth={1.75} color={colors.muted} />
+      </View>
+    );
+    title = entry.agentName ?? "Direct call";
+    subtitle = entry.language || "Phone call";
+  } else {
+    // Not a call summary — a try-agent charge (no call_id to group by), or
+    // defensively, any other standalone charge shape.
+    avatar = <Mascot seed="try-agent" size={32} />;
+    title = "Try agent";
+    subtitle = stageLabel(entry.stage);
+  }
 
   return (
     <Rise delay={rowDelay(1, index)}>
       <CallRow
-        avatar={
-          isTryAgent ? (
-            <Mascot seed={tx.agentName ?? "agent"} size={32} />
-          ) : (
-            <CallOutcomeAvatar outcome={tx.outcome ?? CallOutcome.Resolved} />
-          )
-        }
-        title={
-          isTryAgent
-            ? `Try agent · ${tx.agentName ?? "Agent"}`
-            : (tx.agentName ?? "Direct call")
-        }
-        subtitle={`${tx.language} · ${tx.duration}`}
+        avatar={avatar}
+        title={title}
+        subtitle={subtitle}
         trailing={
           <View className="items-end">
             <Text
               font="mono"
               className="text-sm font-semibold tabular-nums"
-              variant={noCharge ? "muted" : "destructive"}
+              variant={isCredit ? "default" : "destructive"}
+              style={isCredit ? { color: colors.green } : undefined}
             >
-              {noCharge ? "—" : `-${tx.credits.toLocaleString()}`}
+              {isCredit ? "+" : ""}
+              {entry.amountCredits.toLocaleString()}
             </Text>
             <Text variant="muted" className="mt-0.5 text-[11px]">
-              {tx.time}
+              {clockTime(entry.createdAt)}
             </Text>
           </View>
         }
@@ -196,7 +134,17 @@ function TransactionRow({
 
 export default function CreditsHistoryScreen() {
   const colors = useThemeColors();
-  const sections = useMemo(() => groupByDate(MOCK_TRANSACTIONS), []);
+  const { data: balance, isLoading: isBalanceLoading } = useCreditBalance();
+  const {
+    data: history,
+    isLoading: isHistoryLoading,
+    isError,
+    error,
+    refetch,
+    isRefetching,
+  } = useCreditHistory();
+
+  const sections = history ? groupByDate(history) : [];
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
@@ -234,22 +182,28 @@ export default function CreditsHistoryScreen() {
               </View>
 
               <View className="mt-3 flex-row items-baseline gap-1.5">
-                <Text font="mono" className="text-lg font-semibold">
-                  {CREDITS.remaining.toLocaleString()}
-                </Text>
+                {isBalanceLoading ? (
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                ) : (
+                  <Text font="mono" className="text-lg font-semibold">
+                    {(balance?.remaining ?? 0).toLocaleString()}
+                  </Text>
+                )}
                 <Text variant="muted" className="text-sm">
-                  of {CREDITS.total.toLocaleString()}
+                  credits remaining
                 </Text>
               </View>
 
-              <Progress
-                value={(CREDITS.remaining / CREDITS.total) * 100}
-                className="mt-2.5"
-              />
-
-              <Text variant="muted" className="mt-2 text-xs">
-                {CREDITS.used.toLocaleString()} credits used this month
-              </Text>
+              <Button
+                size="sm"
+                className="mt-4"
+                onPress={() => router.push("/recharge")}
+              >
+                <PlusCircle size={14} strokeWidth={2} color={colors.onInk} />
+                <Text className="text-xs font-medium text-primary-foreground">
+                  Recharge
+                </Text>
+              </Button>
             </Card>
           </Rise>
         }
@@ -272,12 +226,64 @@ export default function CreditsHistoryScreen() {
             )}
           >
             <TransactionRow
-              tx={item}
+              entry={item}
               index={index}
               showDivider={index < section.data.length - 1}
             />
           </View>
         )}
+        onRefresh={() => void refetch()}
+        refreshing={isRefetching}
+        ListEmptyComponent={
+          isHistoryLoading ? (
+            <CreditsHistorySkeleton />
+          ) : (
+            <View className="mx-5 mt-6 items-center rounded-xl border border-border bg-card px-5 py-12">
+              {isError ? (
+                <>
+                  <View className="h-11 w-11 items-center justify-center rounded-full bg-destructive/10">
+                    <CloudOff
+                      size={20}
+                      strokeWidth={1.75}
+                      color={colors.destructive}
+                    />
+                  </View>
+                  <Text className="mt-3 text-center text-sm font-medium">
+                    Couldn&apos;t load your credits history
+                  </Text>
+                  {error instanceof Error ? (
+                    <Text variant="muted" className="mt-1 text-center text-xs">
+                      {error.message}
+                    </Text>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-4"
+                    onPress={() => void refetch()}
+                  >
+                    <RotateCw size={14} strokeWidth={2} color={colors.muted} />
+                    <Text className="text-xs font-medium text-foreground">
+                      Try again
+                    </Text>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <View className="h-11 w-11 items-center justify-center rounded-full bg-border">
+                    <Coins size={20} strokeWidth={1.75} color={colors.faint} />
+                  </View>
+                  <Text className="mt-3 text-center text-sm font-medium">
+                    No credits activity yet
+                  </Text>
+                  <Text variant="muted" className="mt-1 text-center text-xs">
+                    Calls and recharges will show up here.
+                  </Text>
+                </>
+              )}
+            </View>
+          )
+        }
       />
     </SafeAreaView>
   );

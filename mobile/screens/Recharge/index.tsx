@@ -1,28 +1,29 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { CheckCircle2, ChevronLeft, Coins } from "lucide-react-native";
+import { ChevronLeft, Coins } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Rise } from "@/components/ui/rise";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useThemeColors } from "@/lib/theme";
+import { useCreditBalance } from "@/lib/credits/hooks";
 
-// Mocked: no payment provider is wired up yet — this just simulates a
-// recharge and, in a real build, would hand off to whatever gateway (Razorpay
-// et al.) actually charges the card/UPI and only then tells ferry to write a
-// `credit_ledger` row with entry_type: 'topup' (see the credits schema
-// discussion — ferry/src/db/entity/credit_ledger.rs).
+// The recharge action itself is still mocked: no payment provider is wired
+// up yet, so submitting here never actually writes a `credit_ledger` topup
+// row — the balance line at the top, though, is real (see useCreditBalance),
+// which is why the success screen counts up the amount just added rather
+// than claiming a specific new total: that total isn't actually persisted,
+// so showing one would contradict itself the moment this screen is left. In
+// a real build, submitting would hand off to whatever gateway (Razorpay et
+// al.) actually charges the card/UPI and only then tells ferry to write
+// that row.
 const MIN_RECHARGE_RUPEES = 10;
+// Real INR note denominations, not arbitrary round numbers.
 const QUICK_AMOUNTS = [50, 100, 200, 500, 1000];
-
-// 1 credit = ₹1 (see ferry/src/observer/billing_observer.rs's
-// MICROS_PER_CREDIT), so a recharge amount in rupees is the credit amount,
-// with no conversion needed.
-const CURRENT_BALANCE = 3580;
 
 function parseAmount(raw: string): number | null {
   if (!/^\d+$/.test(raw)) return null;
@@ -30,8 +31,35 @@ function parseAmount(raw: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+// Approximate advance width of one Geist Mono digit at the input's 60px
+// size — the input's width is sized to the digit count so a longer amount
+// grows the box instead of scrolling its leading digits out of view.
+const DIGIT_WIDTH = 38;
+
+/** Counts 0 -> `target` once `active`, eased out — the one deliberate
+ * motion on the success screen, answering the recharge with a number that
+ * visibly climbs to what was just added rather than a static readout. */
+function useCountUp(target: number, active: boolean, durationMs = 700) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    let raf: ReturnType<typeof requestAnimationFrame>;
+    const start = Date.now();
+    const tick = () => {
+      const t = Math.min(1, (Date.now() - start) / durationMs);
+      const eased = 1 - (1 - t) ** 3;
+      setValue(Math.round(eased * target));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, active, durationMs]);
+  return value;
+}
+
 export default function RechargeScreen() {
   const colors = useThemeColors();
+  const { data: balance, isLoading: isBalanceLoading } = useCreditBalance();
   const [amountInput, setAmountInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [rechargedAmount, setRechargedAmount] = useState<number | null>(null);
@@ -39,6 +67,7 @@ export default function RechargeScreen() {
   const amount = useMemo(() => parseAmount(amountInput), [amountInput]);
   const isValid = amount !== null && amount >= MIN_RECHARGE_RUPEES;
   const showMinError = amount !== null && amount < MIN_RECHARGE_RUPEES;
+  const tally = useCountUp(rechargedAmount ?? 0, rechargedAmount !== null);
 
   function handleRecharge() {
     if (!isValid) return;
@@ -55,22 +84,33 @@ export default function RechargeScreen() {
       <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
         <View className="flex-1 items-center justify-center px-8">
           <Rise index={0}>
-            <View className="h-16 w-16 items-center justify-center rounded-full bg-green-tint">
-              <CheckCircle2 size={30} strokeWidth={1.75} color={colors.green} />
+            <View className="h-20 w-20 items-center justify-center rounded-full bg-green-tint">
+              <Coins size={30} strokeWidth={1.75} color={colors.green} />
             </View>
           </Rise>
           <Rise index={1}>
-            <Text className="mt-5 text-center text-[20px] font-semibold">
-              Recharge successful
-            </Text>
-            <Text variant="muted" className="mt-1.5 text-center text-sm">
-              {rechargedAmount.toLocaleString()} credits added to your balance.
+            <View className="mt-6 flex-row items-baseline">
+              <Text
+                font="mono"
+                className="text-[15px] font-semibold text-green"
+              >
+                +
+              </Text>
+              <Text
+                font="mono"
+                className="text-[44px] font-semibold tabular-nums text-green"
+              >
+                {tally.toLocaleString()}
+              </Text>
+            </View>
+            <Text variant="muted" className="mt-1 text-center text-sm">
+              credits added to your balance
             </Text>
           </Rise>
           <Rise index={2}>
             <Button
               size="lg"
-              className="mt-8 w-full"
+              className="mt-10 w-full"
               onPress={() => router.back()}
             >
               Done
@@ -97,52 +137,74 @@ export default function RechargeScreen() {
         <View className="w-9" />
       </View>
 
-      <View className="flex-1 px-5">
-        <Rise index={0}>
-          <Card className="mt-1 flex-row items-center justify-between p-4">
+      <Rise index={0}>
+        <View className="flex-row items-center justify-center gap-1.5 pt-2">
+          <Coins size={12} strokeWidth={1.75} color={colors.muted} />
+          {isBalanceLoading ? (
+            <Skeleton className="h-3 w-20 rounded-full" />
+          ) : (
             <Text variant="muted" className="text-xs">
-              Current balance
+              {(balance?.remaining ?? 0).toLocaleString()} credits available
             </Text>
-            <View className="flex-row items-center gap-1.5">
-              <Coins size={14} strokeWidth={1.75} color={colors.muted} />
-              <Text font="mono" className="text-sm font-semibold">
-                {CURRENT_BALANCE.toLocaleString()}
-              </Text>
-            </View>
-          </Card>
-        </Rise>
+          )}
+        </View>
+      </Rise>
 
+      <View className="flex-1 items-center justify-center px-8">
         <Rise index={1}>
-          <Text
-            variant="muted"
-            className="mb-2 mt-6 text-[11px] font-medium uppercase tracking-[0.14em]"
-          >
-            Amount
-          </Text>
-          <View className="flex-row items-center rounded-lg border border-border bg-card px-3">
-            <Text className="text-lg font-semibold text-muted-foreground">
-              ₹
-            </Text>
-            <Input
-              className="h-14 flex-1 border-0 bg-transparent px-2 text-[22px] font-semibold"
-              value={amountInput}
-              onChangeText={(text) =>
-                setAmountInput(text.replace(/[^\d]/g, ""))
-              }
-              placeholder="0"
-              keyboardType="number-pad"
-              maxLength={6}
+          <View className="items-center">
+            <View className="flex-row items-end justify-center gap-1">
+              <Text
+                font="mono"
+                className={cn(
+                  "pb-2 text-[26px] font-semibold",
+                  isValid ? "text-river" : "text-muted-foreground",
+                )}
+              >
+                ₹
+              </Text>
+              <Input
+                className={cn(
+                  "h-20 border-0 bg-transparent px-1 text-center font-mono text-[60px] font-semibold tabular-nums",
+                  isValid ? "text-river" : "text-foreground",
+                )}
+                style={{
+                  width: Math.max(amountInput.length, 1) * DIGIT_WIDTH,
+                }}
+                value={amountInput}
+                onChangeText={(text) => {
+                  const digits = text
+                    .replace(/[^\d]/g, "")
+                    .replace(/^0+(?=\d)/, "");
+                  setAmountInput(digits);
+                }}
+                placeholder="0"
+                placeholderTextColor={colors.faint}
+                keyboardType="number-pad"
+                maxLength={6}
+                autoFocus
+              />
+            </View>
+            <View
+              className="mt-1 h-1 w-40 rounded-full"
+              style={{
+                backgroundColor: showMinError
+                  ? colors.destructive
+                  : isValid
+                    ? colors.river
+                    : colors.border,
+              }}
             />
+            {showMinError ? (
+              <Text variant="destructive" className="mt-3 text-xs">
+                Minimum recharge is ₹{MIN_RECHARGE_RUPEES}
+              </Text>
+            ) : null}
           </View>
-          {showMinError ? (
-            <Text variant="destructive" className="mt-1.5 text-xs">
-              Minimum recharge is ₹{MIN_RECHARGE_RUPEES}
-            </Text>
-          ) : null}
         </Rise>
 
         <Rise index={2}>
-          <View className="mt-4 flex-row flex-wrap gap-2">
+          <View className="mt-8 flex-row flex-wrap justify-center gap-2">
             {QUICK_AMOUNTS.map((value) => {
               const selected = amount === value;
               return (
@@ -152,15 +214,14 @@ export default function RechargeScreen() {
                   className={cn(
                     "rounded-full border px-4 py-2 active:opacity-80",
                     selected
-                      ? "border-foreground bg-foreground"
+                      ? "border-river bg-river"
                       : "border-border bg-card",
                   )}
                 >
                   <Text
-                    className={cn(
-                      "text-sm font-medium",
-                      selected ? "text-primary-foreground" : "text-foreground",
-                    )}
+                    font="mono"
+                    className="text-sm font-medium"
+                    style={selected ? { color: colors.onInk } : undefined}
                   >
                     ₹{value.toLocaleString()}
                   </Text>

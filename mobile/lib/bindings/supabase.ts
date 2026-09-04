@@ -202,6 +202,86 @@ export type Database = {
           },
         ]
       }
+      credit_balances: {
+        Row: {
+          balance_credits: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance_credits?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance_credits?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_balances_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_ledger: {
+        Row: {
+          amount_credits: number
+          call_id: string | null
+          call_type: Database["public"]["Enums"]["credit_call_type"] | null
+          cost_micros: number | null
+          created_at: string
+          entry_type: Database["public"]["Enums"]["credit_entry_type"]
+          id: number
+          note: string | null
+          provider_ref: string | null
+          user_id: string
+        }
+        Insert: {
+          amount_credits: number
+          call_id?: string | null
+          call_type?: Database["public"]["Enums"]["credit_call_type"] | null
+          cost_micros?: number | null
+          created_at?: string
+          entry_type: Database["public"]["Enums"]["credit_entry_type"]
+          id?: number
+          note?: string | null
+          provider_ref?: string | null
+          user_id: string
+        }
+        Update: {
+          amount_credits?: number
+          call_id?: string | null
+          call_type?: Database["public"]["Enums"]["credit_call_type"] | null
+          cost_micros?: number | null
+          created_at?: string
+          entry_type?: Database["public"]["Enums"]["credit_entry_type"]
+          id?: number
+          note?: string | null
+          provider_ref?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_ledger_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_ledger_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       seaql_migrations: {
         Row: {
           applied_at: number
@@ -265,8 +345,11 @@ export type Database = {
         | "failed"
         | "hung_up_by_a"
         | "hung_up_by_b"
+        | "credits_exhausted"
       call_speaker: "caller" | "callee"
       call_status: "dialing" | "ringing" | "connected" | "ended"
+      credit_call_type: "phone_call" | "try_agent"
+      credit_entry_type: "charge" | "topup" | "refund" | "bonus" | "adjustment"
       language: "en" | "hi" | "te" | "ta" | "kn"
     }
     CompositeTypes: {
@@ -409,9 +492,12 @@ export const Constants = {
         "failed",
         "hung_up_by_a",
         "hung_up_by_b",
+        "credits_exhausted",
       ],
       call_speaker: ["caller", "callee"],
       call_status: ["dialing", "ringing", "connected", "ended"],
+      credit_call_type: ["phone_call", "try_agent"],
+      credit_entry_type: ["charge", "topup", "refund", "bonus", "adjustment"],
       language: ["en", "hi", "te", "ta", "kn"],
     },
   },
