@@ -1,0 +1,68 @@
+{
+  "$comment": "Sarvam AI's own published rates, from https://docs.sarvam.ai/api-reference-docs/pricing (mirrored at https://www.sarvam.ai/api-pricing). Not a third-party aggregator. Every stage of the pipeline runs on Sarvam today, so this is the only pricing source needed right now — kept as one file per provider so adding a second provider later is a new file, not a rewrite of this one. Latest-wins, like LiteLLM's model_prices_and_context_window.json: a price change here is a plain overwrite, not a new dated row. What must never move is cost_micros already written into credit_ledger — that's resolved and snapshotted at charge time, so an edit here can never retroactively change a past charge.",
+  "provider": "sarvam",
+  "currency": "INR",
+  "last_verified": "2026-09-04",
+  "source_url": "https://docs.sarvam.ai/api-reference-docs/pricing",
+  "products": {
+    "stt": {
+      "label": "Speech to Text",
+      "unit": "per_hour",
+      "rate": 30,
+      "billing_note": "Billed per second of audio, rounded up."
+    },
+    "stt_diarization": {
+      "label": "Speech to Text + Diarization",
+      "unit": "per_hour",
+      "rate": 45,
+      "billing_note": "Billed per second of audio, rounded up. Adds speaker identification over plain STT."
+    },
+    "stt_translate": {
+      "label": "Speech to Text + Translate",
+      "unit": "per_hour",
+      "rate": 30,
+      "billing_note": "Billed per second of audio, rounded up. Transcription and translation in one call — could replace separate STT+MT stages if the pipeline switches to it."
+    },
+    "stt_translate_diarization": {
+      "label": "Speech to Text + Translate + Diarization",
+      "unit": "per_hour",
+      "rate": 45,
+      "billing_note": "Billed per second of audio, rounded up."
+    },
+    "tts_bulbul_v3": {
+      "label": "Text to Speech (Bulbul v3)",
+      "unit": "per_10k_characters",
+      "rate": 30,
+      "billing_note": "Billed per character, rounded up to the nearest 10K block."
+    },
+    "translate_sarvam_v1": {
+      "label": "Translate (Sarvam Translate v1)",
+      "unit": "per_10k_characters",
+      "rate": 20
+    },
+    "translate_mayura_v1": {
+      "label": "Translate (Mayura v1)",
+      "unit": "per_10k_characters",
+      "rate": 20
+    },
+    "transliterate": {
+      "label": "Transliterate",
+      "unit": "per_10k_characters",
+      "rate": 20
+    },
+    "language_identification": {
+      "label": "Language Identification",
+      "unit": "per_10k_characters",
+      "rate": 3.5
+    },
+    "chat_sarvam_105b": {
+      "label": "Chat (Sarvam 105B)",
+      "unit": "per_million_tokens",
+      "rate": {
+        "input": 29.28,
+        "cached_input": 10.98,
+        "output": 73.2
+      }
+    }
+  }
+}

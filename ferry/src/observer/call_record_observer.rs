@@ -754,5 +754,6 @@ fn map_end_reason(reason: LiveEndReason) -> calls::EndReason {
         LiveEndReason::Failed => calls::EndReason::Failed,
         LiveEndReason::HungUpByA => calls::EndReason::HungUpByA,
         LiveEndReason::HungUpByB => calls::EndReason::HungUpByB,
+        LiveEndReason::CreditsExhausted => calls::EndReason::CreditsExhausted,
     }
 }

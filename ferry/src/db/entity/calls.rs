@@ -87,6 +87,9 @@ pub enum EndReason {
     #[sea_orm(string_value = "hung_up_by_b")]
     #[serde(rename = "hung_up_by_b")]
     HungUpByB,
+    #[sea_orm(string_value = "credits_exhausted")]
+    #[serde(rename = "credits_exhausted")]
+    CreditsExhausted,
 }
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]

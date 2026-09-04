@@ -4,4 +4,6 @@
 pub mod agents;
 pub mod call_utterances;
 pub mod calls;
+pub mod credit_balances;
+pub mod credit_ledger;
 pub mod users;

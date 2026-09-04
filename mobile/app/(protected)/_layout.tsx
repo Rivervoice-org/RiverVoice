@@ -46,6 +46,8 @@ export default function ProtectedLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="call-detail" />
+      <Stack.Screen name="credits-history" />
+      <Stack.Screen name="recharge" />
       <Stack.Screen name="transcript" />
       <Stack.Screen name="agent-detail" />
       <Stack.Screen name="agent-new" />

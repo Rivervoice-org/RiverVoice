@@ -36,6 +36,7 @@ export function useFerryCall() {
   const [conversation, setConversation] = useState<ConversationLine[]>([]);
   const [interimCaption, setInterimCaption] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [creditsExhausted, setCreditsExhausted] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
   const [activeAudioDevice, setActiveAudioDevice] = useState<AudioDevice>(
@@ -61,6 +62,7 @@ export function useFerryCall() {
     setConversation([]);
     setInterimCaption("");
     setError(null);
+    setCreditsExhausted(false);
     setIsMuted(false);
     setAudioDevices([]);
     setActiveAudioDevice(AudioDevice.None);
@@ -88,6 +90,7 @@ export function useFerryCall() {
         ]);
       },
       onError: setError,
+      onCreditsExhausted: () => setCreditsExhausted(true),
       onAudioRouteChange: (devices, active) => {
         setAudioDevices(devices);
         setActiveAudioDevice(active);
@@ -135,6 +138,7 @@ export function useFerryCall() {
     conversation,
     interimCaption,
     error,
+    creditsExhausted,
     isMuted,
     audioDevices,
     activeAudioDevice,

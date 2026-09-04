@@ -28,6 +28,7 @@ import {
   Captions,
   Minimize2,
 } from "lucide-react-native";
+import { CreditsExhaustedDialog } from "@/components/CreditsExhaustedDialog";
 import { Mascot } from "@/components/Mascot";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { PulsingRing } from "@/components/PulsingRing";
@@ -66,11 +67,13 @@ const CallStatusLine = memo(function CallStatusLine({
   status,
   connectedAt,
   error,
+  creditsExhausted,
   missingAgent,
 }: {
   status: CallStatus;
   connectedAt: number | null;
   error: string | null;
+  creditsExhausted: boolean;
   missingAgent: boolean;
 }) {
   const duration = useElapsedSeconds(connectedAt);
@@ -83,7 +86,9 @@ const CallStatusLine = memo(function CallStatusLine({
     );
   }
 
-  const label = callStatusLabel(status, duration);
+  const label = creditsExhausted
+    ? "Out of credits"
+    : callStatusLabel(status, duration);
 
   return (
     <>
@@ -94,7 +99,7 @@ const CallStatusLine = memo(function CallStatusLine({
       >
         {label}
       </Text>
-      {error && status === CallStatus.Error ? (
+      {error && status === CallStatus.Error && !creditsExhausted ? (
         <Text
           variant="destructive"
           className="mt-1 text-[13px]"
@@ -230,6 +235,7 @@ export default function InCallScreen() {
     conversation,
     interimCaption,
     error,
+    creditsExhausted,
     isMuted,
     audioDevices,
     activeAudioDevice,
@@ -252,6 +258,11 @@ export default function InCallScreen() {
   const leavingRef = useRef(false);
   const sheetOpenRef = useRef(false);
   const [seenCount, setSeenCount] = useState(0);
+  const [showCreditsDialog, setShowCreditsDialog] = useState(false);
+
+  useEffect(() => {
+    if (creditsExhausted) setShowCreditsDialog(true);
+  }, [creditsExhausted]);
   const hasUnseen = !sheetOpenRef.current && conversation.length > seenCount;
 
   // A live call gives one language per line — your caption, then the
@@ -382,6 +393,7 @@ export default function InCallScreen() {
             status={status}
             connectedAt={connectedAt}
             error={error}
+            creditsExhausted={creditsExhausted}
             missingAgent={missingAgent}
           />
 
@@ -462,6 +474,11 @@ export default function InCallScreen() {
         devices={audioDevices}
         active={activeAudioDevice}
         onSelect={chooseAudioRoute}
+      />
+
+      <CreditsExhaustedDialog
+        open={showCreditsDialog}
+        onOpenChange={setShowCreditsDialog}
       />
     </View>
   );

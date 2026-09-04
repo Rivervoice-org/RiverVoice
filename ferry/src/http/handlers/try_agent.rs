@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::body::to_bytes;
 use axum::extract::{Extension, Request, State};
 use axum::http::StatusCode;
@@ -6,16 +8,20 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::auth::token::UserSession;
-use crate::call::{ActiveSession, MAX_LEASE_AGE, call_span};
+use crate::call::{ActiveSession, CallStatus, EndReason, MAX_LEASE_AGE, call_span};
 use crate::codec::transport::webrtc_dc::WebRtcSerializer;
 use crate::config;
 use crate::db;
 use crate::db::entity::agents;
+use crate::db::entity::credit_ledger::CallType;
 use crate::http::MAX_REQUEST_BODY_SIZE;
 use crate::http::response::ApiResponse;
 use crate::http::state::AppState;
+use crate::observer::billing_observer::BillingObserver;
+use crate::observer::frame_observer::FrameObserver;
 use crate::observer::turn_latency_observer::TurnLatencyRecorder;
 use crate::pipeline::build_translation_pipeline;
+use crate::pricing;
 use crate::transport::base::BaseTransport;
 use crate::transport::webrtc::transport::WebRtcClient;
 use tracing::Instrument;
@@ -81,6 +87,23 @@ pub async fn try_agent_offer(
         return Err(ApiResponse::fail(StatusCode::FORBIDDEN, "not authorized"));
     }
 
+    match crate::observer::billing_observer::user_credits_exhausted(session.user_id).await {
+        Ok(true) => {
+            return Err(ApiResponse::fail(
+                StatusCode::PAYMENT_REQUIRED,
+                "You're out of credits. Add credits to try an agent.",
+            ));
+        }
+        Ok(false) => {}
+        Err(e) => {
+            tracing::error!("try_agent_offer: failed to check credit balance: {e}");
+            return Err(ApiResponse::fail(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Something went wrong. Please try again.",
+            ));
+        }
+    }
+
     let call_id = Uuid::new_v4();
 
     // Reserve this user's one active session before doing any of the real
@@ -121,19 +144,40 @@ pub async fn try_agent_offer(
     // entry and no `calls` row to attach one to.
     let turn_latency = TurnLatencyRecorder::new();
     let turn_latency_observer = turn_latency.observer("solo");
+    // CallType::TryAgent, not PhoneCall: this call_id is never written to
+    // `calls` (see the comment above), so credit_ledger.call_id must stay
+    // null for it — BillingObserver keys off call_type to know that.
+    let billing = Arc::new(BillingObserver::new(
+        session.user_id,
+        call_id,
+        CallType::TryAgent,
+        pricing::SarvamModels::SarvamM.cost(),
+        pricing::SarvamSttModel::Stt.cost(),
+        pricing::SarvamTtsModels::BulbulV3.cost(),
+    ));
     let frame_io = build_translation_pipeline(
         config,
         Some(&agent),
         false,
         span.clone(),
-        vec![turn_latency_observer],
+        vec![
+            turn_latency_observer,
+            billing.clone() as Arc<dyn FrameObserver>,
+        ],
     );
     let serializer = WebRtcSerializer;
     let base = BaseTransport::new(frame_io, serializer);
 
+    // A minimal stand-in for what `CallHandle::watch_status` gives the
+    // two-leg call flow: try-agent has no registry entry to hang up through,
+    // so this exists purely so `accept_offer` has something to watch for
+    // `Ended` and close the session the moment `billing` reports the user
+    // out of credits.
+    let (status_tx, status_rx) = tokio::sync::watch::channel(CallStatus::Connected);
+
     tracing::debug!("try_agent_offer: accepting offer for agent {agent_id} with call_id {call_id}");
 
-    let (client, answer_sdp) = WebRtcClient::accept_offer(base, req.offer_sdp, None)
+    let (client, answer_sdp) = WebRtcClient::accept_offer(base, req.offer_sdp, Some(status_rx))
         .await
         .map_err(|e| {
             tracing::error!("try_agent_offer: accept_offer failed: {e:#}");
@@ -147,6 +191,16 @@ pub async fn try_agent_offer(
         "try_agent_offer: accepted offer for agent {agent_id} with call_id {call_id}, answer_sdp length: {}",
         answer_sdp.len()
     );
+
+    {
+        let mut exhausted = billing.watch_exhausted();
+        tokio::spawn(async move {
+            if exhausted.changed().await.is_ok() && *exhausted.borrow() {
+                let _ = status_tx.send(CallStatus::Ended(EndReason::CreditsExhausted));
+            }
+        });
+    }
+
     tokio::spawn(
         async move {
             // Held for the run's whole lifetime and dropped when it ends —

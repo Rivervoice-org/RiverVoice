@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { FlatList, RefreshControl, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import {
@@ -187,37 +187,49 @@ function HomeHeader({
           with. Reads as a balance rather than a usage meter — what is left
           is the number that decides whether you can place a call. */}
       <Rise index={1}>
-        <Card className="mx-5 mt-4 p-4">
-          <View className="flex-row items-center justify-between">
-            <Text
-              variant="muted"
-              className="text-[11px] font-medium uppercase tracking-[0.14em]"
-            >
-              Credits
-            </Text>
-            <Coins size={14} strokeWidth={1.75} color={colors.muted} />
-          </View>
+        <Pressable
+          onPress={() => router.push("/credits-history")}
+          className="mx-5 mt-4 active:opacity-80"
+        >
+          <Card className="p-4">
+            <View className="flex-row items-center justify-between">
+              <Text
+                variant="muted"
+                className="text-[11px] font-medium uppercase tracking-[0.14em]"
+              >
+                Credits
+              </Text>
+              <View className="flex-row items-center gap-1">
+                <Coins size={14} strokeWidth={1.75} color={colors.muted} />
+                <ChevronRight
+                  size={14}
+                  strokeWidth={1.75}
+                  color={colors.muted}
+                />
+              </View>
+            </View>
 
-          <View className="mt-3 flex-row items-baseline gap-1.5">
-            <Text font="mono" className="text-lg font-semibold">
-              {CREDITS.remaining.toLocaleString()}
-            </Text>
-            <Text variant="muted" className="text-sm">
-              of {CREDITS.total.toLocaleString()}
-            </Text>
-          </View>
+            <View className="mt-3 flex-row items-baseline gap-1.5">
+              <Text font="mono" className="text-lg font-semibold">
+                {CREDITS.remaining.toLocaleString()}
+              </Text>
+              <Text variant="muted" className="text-sm">
+                of {CREDITS.total.toLocaleString()}
+              </Text>
+            </View>
 
-          {/* Fills with what is left, not what is spent, so a nearly empty
-              balance reads as a nearly empty bar. */}
-          <Progress
-            value={(CREDITS.remaining / CREDITS.total) * 100}
-            className="mt-2.5"
-          />
+            {/* Fills with what is left, not what is spent, so a nearly empty
+                balance reads as a nearly empty bar. */}
+            <Progress
+              value={(CREDITS.remaining / CREDITS.total) * 100}
+              className="mt-2.5"
+            />
 
-          <Text variant="muted" className="mt-2 text-xs">
-            {CREDITS.used.toLocaleString()} credits used this month
-          </Text>
-        </Card>
+            <Text variant="muted" className="mt-2 text-xs">
+              {CREDITS.used.toLocaleString()} credits used this month
+            </Text>
+          </Card>
+        </Pressable>
       </Rise>
 
       <RecentAgentsSection />

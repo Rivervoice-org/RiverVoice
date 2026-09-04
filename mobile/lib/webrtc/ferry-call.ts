@@ -41,6 +41,10 @@ export type FerryCallEvents = {
   onTranscript: (message: TranscriptMessage) => void;
   onTranslation: (message: TranslationMessage) => void;
   onError: (message: string) => void;
+  /** The call never started because the account is out of credits (ferry
+   * answered 402 to the offer) — distinct from `onError` so the UI can show
+   * a recharge prompt instead of a generic failure message. */
+  onCreditsExhausted: () => void;
   onAudioRouteChange: (devices: AudioDevice[], active: AudioDevice) => void;
 };
 
@@ -338,6 +342,14 @@ export class FerryCall {
       }
       this.teardown();
       this.setStatus(CallStatus.Error);
+      // 402 specifically means "not this call's fault, the account is out
+      // of credits" (see ferry's user_credits_exhausted pre-flight check) —
+      // worth a distinct event so the UI can show a recharge prompt instead
+      // of a generic error string.
+      if (err instanceof SignalingError && err.status === 402) {
+        this.events.onCreditsExhausted();
+        return;
+      }
       this.events.onError(
         err instanceof SignalingError || err instanceof Error
           ? err.message

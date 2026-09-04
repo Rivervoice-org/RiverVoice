@@ -19,6 +19,7 @@ export interface ActiveCallContextValue {
   conversation: ConversationLine[];
   interimCaption: string;
   error: string | null;
+  creditsExhausted: boolean;
   isMuted: boolean;
   audioDevices: AudioDevice[];
   activeAudioDevice: AudioDevice;
