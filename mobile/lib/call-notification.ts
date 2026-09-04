@@ -73,14 +73,23 @@ export function initCallNotifications(): () => void {
 
 /** Shows (or updates in place — same `id`) the ongoing-call notification.
  * `showChronometer` + `timestamp` drive a native, live-ticking duration
- * once connected, so this doesn't need to be re-called every second. */
+ * once connected, so this doesn't need to be re-called every second.
+ *
+ * `isStale`, when given, is checked right before the notification is
+ * actually displayed — the two `await`s above it (channel setup, permission
+ * prompt) mean this call can still be in flight after the call it was
+ * syncing for has already ended and `endCallNotification` has already run.
+ * Without this check, that stale call would resurrect the notification for
+ * a call that's already over, with nothing left watching to clean it up. */
 export async function syncCallNotification(
   meta: ActiveCallMeta,
   status: CallStatus,
   connectedAt: number | null,
+  isStale?: () => boolean,
 ): Promise<void> {
   await ensureChannel();
   await notifee.requestPermission();
+  if (isStale?.()) return;
   const showChronometer =
     status === CallStatus.Connected && connectedAt !== null;
   // `timestamp` is declared as `number` (no `| undefined`) — omit the key

@@ -79,12 +79,24 @@ export function ActiveCallProvider({ children }: { children: ReactNode }) {
 
   // Keeps the Android ongoing-call notification/foreground service in sync
   // with the call, and ends it the moment `meta` clears.
+  //
+  // `syncCallNotification` awaits a permission prompt before it actually
+  // displays anything — if `meta` clears (call ends/errors) while that's
+  // still in flight, `endCallNotification` below can run first, and the
+  // stale call would otherwise resurrect the notification afterward with
+  // nothing left to clean it up. The cleanup flips `stale` for that run
+  // specifically, and `syncCallNotification` checks it right before
+  // displaying.
   useEffect(() => {
+    let stale = false;
     if (meta) {
-      void syncCallNotification(meta, call.status, connectedAt);
+      void syncCallNotification(meta, call.status, connectedAt, () => stale);
     } else {
       void endCallNotification();
     }
+    return () => {
+      stale = true;
+    };
   }, [meta, call.status, connectedAt]);
 
   const contextValue = useMemo(
