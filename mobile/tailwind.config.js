@@ -74,7 +74,7 @@ module.exports = {
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
         serif: ["Newsreader", "Georgia", "serif"],
-        mono: ["Geist Mono", "ui-monospace", "monospace"],
+        mono: ["ui-monospace", "monospace"],
       },
       fontSize: {
         "display-lg": [
