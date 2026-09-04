@@ -48,8 +48,8 @@ export function HowItWorks() {
             Point it at a number
           </h3>
           <p className="mt-3 max-w-md text-[15px] leading-7 text-muted-foreground">
-            Swipe on any number to call it, then choose which agent should answer. It's already on
-            the line, translating live, before the first ring ends.
+            Swipe on any number to call it, then choose which agent should answer. It&apos;s already
+            on the line, translating live, before the first ring ends.
           </p>
         </Reveal>
       </div>
