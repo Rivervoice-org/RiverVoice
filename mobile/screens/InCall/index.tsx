@@ -332,8 +332,19 @@ export default function InCallScreen() {
     safeGoBack();
   }, []);
 
+  // Tracks the *previous* status, not just the current one: on a second
+  // call, this screen remounts while `status` still holds `Ended` from the
+  // call that just finished — `startCall`'s own effect (above) hasn't yet
+  // had its status update land (that's next render, not this one). Firing
+  // on `status === Ended` alone would treat that leftover value as "this
+  // call just ended" and immediately bounce back out from under the new
+  // call as it's starting. Comparing against the previous value only fires
+  // on an actual transition into Ended, not on mounting into one.
+  const prevStatusRef = useRef(status);
   useEffect(() => {
-    if (status === CallStatus.Ended) {
+    const prevStatus = prevStatusRef.current;
+    prevStatusRef.current = status;
+    if (status === CallStatus.Ended && prevStatus !== CallStatus.Ended) {
       leaveScreen();
     }
   }, [status, leaveScreen]);

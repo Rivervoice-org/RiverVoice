@@ -52,10 +52,22 @@ export function ActiveCallProvider({ children }: { children: ReactNode }) {
   // from here — ferry hanging up, the other leg failing, WebRTC's transport
   // dying or coming up. Watched here rather than left to whichever screen
   // happens to be mounted, so the pill/timer stay right regardless.
+  //
+  // `Error` is just as terminal as `Ended` for this purpose — it's what a
+  // call that never got off the ground (mic permission denied, signaling
+  // never reached ferry, ...) reports instead, from `negotiate()`'s catch
+  // block in ferry-call.ts. `/in-call` still shows that error inline (it
+  // reads `status`/`error` from context directly, not `meta`), but without
+  // clearing `meta` here too, the failed call never counts as over: the
+  // minimized pill and the Android notification both key off `meta`, so
+  // they'd otherwise keep showing a call that's already dead.
   useEffect(() => {
     if (call.status === CallStatus.Connected) {
       setConnectedAt((prev) => prev ?? Date.now());
-    } else if (call.status === CallStatus.Ended) {
+    } else if (
+      call.status === CallStatus.Ended ||
+      call.status === CallStatus.Error
+    ) {
       setMeta(null);
       setConnectedAt(null);
     }
