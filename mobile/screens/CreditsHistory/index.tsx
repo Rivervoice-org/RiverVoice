@@ -203,14 +203,24 @@ export default function CreditsHistoryScreen() {
               <View className="mt-3 flex-row items-baseline gap-1.5">
                 {isBalanceLoading ? (
                   <Skeleton className="h-5 w-16 rounded-full" />
-                ) : (
+                ) : (balance?.remaining ?? 0) <= 0 ? (
+                  // Same reasoning as screens/Home/index.tsx's credits
+                  // card — a real negative balance is meaningful and isn't
+                  // clamped at the data layer (lib/credits/types.ts), but
+                  // "-2 credits remaining" reads as broken here.
                   <Text font="mono" className="text-lg font-semibold">
-                    {(balance?.remaining ?? 0).toLocaleString()}
+                    Out of credits
                   </Text>
+                ) : (
+                  <>
+                    <Text font="mono" className="text-lg font-semibold">
+                      {(balance?.remaining ?? 0).toLocaleString()}
+                    </Text>
+                    <Text variant="muted" className="text-sm">
+                      credits remaining
+                    </Text>
+                  </>
                 )}
-                <Text variant="muted" className="text-sm">
-                  credits remaining
-                </Text>
               </View>
 
               <Button

@@ -207,14 +207,25 @@ function HomeHeader({
             <View className="mt-3 flex-row items-baseline gap-1.5">
               {isBalanceLoading ? (
                 <Skeleton className="h-5 w-16 rounded-full" />
-              ) : (
+              ) : (balance?.remaining ?? 0) <= 0 ? (
+                // A real negative balance (a charge that landed after the
+                // pre-flight check already let a call start — see
+                // lib/credits/types.ts) is meaningful and shouldn't be
+                // clamped away at the data layer, but "-2 credits remaining"
+                // reads as broken here — this is just how it's displayed.
                 <Text font="mono" className="text-lg font-semibold">
-                  {(balance?.remaining ?? 0).toLocaleString()}
+                  Out of credits
                 </Text>
+              ) : (
+                <>
+                  <Text font="mono" className="text-lg font-semibold">
+                    {(balance?.remaining ?? 0).toLocaleString()}
+                  </Text>
+                  <Text variant="muted" className="text-sm">
+                    credits remaining
+                  </Text>
+                </>
               )}
-              <Text variant="muted" className="text-sm">
-                credits remaining
-              </Text>
             </View>
           </Card>
         </Pressable>
