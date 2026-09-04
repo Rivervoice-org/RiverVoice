@@ -5,6 +5,7 @@ import { Mascot } from "@/components/Mascot";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useAuth } from "@/hooks/use-auth";
+import { markJustSignedIn } from "@/lib/create-agent-prompt";
 import { useThemeColors } from "@/lib/theme";
 
 export default function WelcomeScreen() {
@@ -17,7 +18,8 @@ export default function WelcomeScreen() {
     setError("");
     setLoading(true);
     try {
-      await continueWithGoogle();
+      const signedIn = await continueWithGoogle();
+      if (signedIn) markJustSignedIn();
     } catch (err) {
       console.error("continueWithGoogle failed:", err);
       setError("Something went wrong. Please try again.");
@@ -30,8 +32,11 @@ export default function WelcomeScreen() {
     <View className="flex-1 bg-canvas px-6 pt-16 pb-10">
       {/* Top section - Logo and branding */}
       <View className="items-center">
-        <View className="h-12 w-12 items-center justify-center rounded-2xl border border-border bg-card shadow-float">
-          <Waves size={24} strokeWidth={2} color={colors.ink} />
+        <View
+          className="h-12 w-12 items-center justify-center rounded-2xl shadow-float"
+          style={{ backgroundColor: colors.ink }}
+        >
+          <Waves size={24} strokeWidth={2} color={colors.onInk} />
         </View>
         <Text className="mt-4 text-[17px] font-semibold tracking-[-0.02em]">
           Rivervoice
@@ -52,8 +57,12 @@ export default function WelcomeScreen() {
         <Text className="mt-8 text-center text-[26px] font-semibold leading-tight tracking-[-0.02em]">
           AI translation,{"\n"}on every call
         </Text>
-        <Text variant="muted" className="mt-4 max-w-xs text-center text-sm leading-6">
-          An AI agent answers in real time, translating any language into yours as the call happens.
+        <Text
+          variant="muted"
+          className="mt-4 max-w-xs text-center text-sm leading-6"
+        >
+          An AI agent answers in real time, translating any language into yours
+          as the call happens.
         </Text>
       </View>
 

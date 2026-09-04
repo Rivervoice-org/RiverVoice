@@ -15,7 +15,13 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { createAudioPlayer, type AudioPlayer } from "expo-audio";
-import { ChevronLeft, Check, PhoneCall, Play, Pause } from "lucide-react-native";
+import {
+  ChevronLeft,
+  Check,
+  PhoneCall,
+  Play,
+  Pause,
+} from "lucide-react-native";
 import { MascotPicker } from "@/components/MascotPicker";
 import { SaveChangesAlert } from "@/components/save-changes-alert";
 import { DEFAULT_MASCOT_REF } from "@/lib/mascots";
@@ -256,12 +262,24 @@ function VoiceGroupPicker({
               {isLoadingPreview ? (
                 <ActivityIndicator size="small" color={colors.ink} />
               ) : isPlayingPreview ? (
-                <Pause size={14} strokeWidth={1.75} color={colors.ink} fill={colors.ink} />
+                <Pause
+                  size={14}
+                  strokeWidth={1.75}
+                  color={colors.ink}
+                  fill={colors.ink}
+                />
               ) : (
-                <Play size={14} strokeWidth={1.75} color={colors.ink} fill={colors.ink} />
+                <Play
+                  size={14}
+                  strokeWidth={1.75}
+                  color={colors.ink}
+                  fill={colors.ink}
+                />
               )}
             </Pressable>
-            <Text className="flex-1 text-sm font-medium capitalize">{voice}</Text>
+            <Text className="flex-1 text-sm font-medium capitalize">
+              {voice}
+            </Text>
             {selected && <Check size={16} strokeWidth={2} color={colors.ink} />}
           </Pressable>
         );
@@ -284,7 +302,10 @@ export default function AgentNewScreen() {
   // with the right editingAgent already known.
   if (id && isPending) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["top"]}>
+      <SafeAreaView
+        className="flex-1 items-center justify-center bg-canvas"
+        edges={["top"]}
+      >
         <ActivityIndicator color={colors.muted} />
       </SafeAreaView>
     );
@@ -294,7 +315,10 @@ export default function AgentNewScreen() {
 
   if (id && !editingAgent) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["top"]}>
+      <SafeAreaView
+        className="flex-1 items-center justify-center bg-canvas"
+        edges={["top"]}
+      >
         <Text variant="muted">Agent not found</Text>
       </SafeAreaView>
     );
@@ -320,7 +344,10 @@ function isFormComplete(value: AgentValues): boolean {
  * leave that column untouched server-side (see UpdateAgentRequest on
  * ferry). Shared by the Save button and the Try-agent save-first flow so
  * they can't drift on what counts as "changed". */
-function buildPatch(value: AgentValues, editingAgent: AgentResponse): UpdateAgentRequest {
+function buildPatch(
+  value: AgentValues,
+  editingAgent: AgentResponse,
+): UpdateAgentRequest {
   const patch: UpdateAgentRequest = {};
   if (value.name.trim() !== editingAgent.name) {
     patch.name = value.name.trim();
@@ -373,14 +400,25 @@ function FormFooter({
   insets: ReturnType<typeof useSafeAreaInsets>;
   handleTryAgent: () => void;
 }) {
-  const values: AgentValues = useStore(form.store, (state: { values: AgentValues }) => state.values);
-  const canSubmit: boolean = useStore(form.store, (state: { canSubmit: boolean }) => state.canSubmit);
-  const isSubmitting: boolean = useStore(form.store, (state: { isSubmitting: boolean }) => state.isSubmitting);
+  const values: AgentValues = useStore(
+    form.store,
+    (state: { values: AgentValues }) => state.values,
+  );
+  const canSubmit: boolean = useStore(
+    form.store,
+    (state: { canSubmit: boolean }) => state.canSubmit,
+  );
+  const isSubmitting: boolean = useStore(
+    form.store,
+    (state: { isSubmitting: boolean }) => state.isSubmitting,
+  );
 
   // Editing an agent with no actual changes has nothing to save — Save
   // changes should be disabled, not fire a no-op PATCH. New agents have no
   // "unchanged" state to compare against, so this only applies once editing.
-  const hasChanges = !isEditing || (editingAgent && Object.keys(buildPatch(values, editingAgent)).length > 0);
+  const hasChanges =
+    !isEditing ||
+    (editingAgent && Object.keys(buildPatch(values, editingAgent)).length > 0);
 
   return (
     <View
@@ -401,9 +439,7 @@ function FormFooter({
           onPress={handleTryAgent}
         >
           <PhoneCall size={16} strokeWidth={1.75} color={colors.ink} />
-          <Text className="text-sm font-medium text-foreground">
-            Try agent
-          </Text>
+          <Text className="text-sm font-medium text-foreground">Try agent</Text>
         </Button>
         <Button
           size="lg"
@@ -421,7 +457,11 @@ function FormFooter({
   );
 }
 
-function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }) {
+function AgentForm({
+  editingAgent,
+}: {
+  editingAgent: AgentResponse | undefined;
+}) {
   const insets = useSafeAreaInsets();
   const colors = useThemeColors();
   const isEditing = !!editingAgent;
@@ -469,7 +509,11 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
       player.play();
       setPlayingVoice(voice);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't play that voice. Please try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Couldn't play that voice. Please try again.",
+      );
     } finally {
       setPreviewingVoice(null);
     }
@@ -492,8 +536,10 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
       // whether this returns undefined or not — so this just gates on
       // every required field being picked, checked on mount and on every
       // change since a field can go from picked back to empty.
-      onMount: ({ value }) => (isFormComplete(value) ? undefined : "Incomplete"),
-      onChange: ({ value }) => (isFormComplete(value) ? undefined : "Incomplete"),
+      onMount: ({ value }) =>
+        isFormComplete(value) ? undefined : "Incomplete",
+      onChange: ({ value }) =>
+        isFormComplete(value) ? undefined : "Incomplete",
     },
     onSubmit: async ({ value }) => {
       if (savingRef.current) return;
@@ -529,7 +575,11 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
         await queryClient.invalidateQueries({ queryKey: agentsQueryKey });
         router.back();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Something went wrong. Please try again.",
+        );
       } finally {
         savingRef.current = false;
         setIsSaving(false);
@@ -549,14 +599,20 @@ function AgentForm({ editingAgent }: { editingAgent: AgentResponse | undefined }
     // this only runs on tap, so there's no render to keep in sync.
     const currentValues = form.store.state.values as AgentValues;
     const hasChanges =
-      !isEditing || (editingAgent && Object.keys(buildPatch(currentValues, editingAgent)).length > 0);
+      !isEditing ||
+      (editingAgent &&
+        Object.keys(buildPatch(currentValues, editingAgent)).length > 0);
     if (!isEditing || !editingAgent || hasChanges) {
       setShowSaveFirst(true);
       return;
     }
     router.push({
       pathname: "/try-agent",
-      params: { id: editingAgent.id, name: editingAgent.name, mascot: editingAgent.mascot },
+      params: {
+        id: editingAgent.id,
+        name: editingAgent.name,
+        mascot: editingAgent.mascot,
+      },
     });
   }
 

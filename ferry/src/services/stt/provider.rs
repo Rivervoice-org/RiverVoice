@@ -15,6 +15,14 @@ pub struct Transcript {
     pub text: String,
     pub language: Option<Language>,
     pub is_final: bool,
+    /// Sarvam-only (`return_timestamps`), and only ever set on a final
+    /// transcript — seconds into the STT session's own audio stream, not
+    /// wall-clock time and not relative to `calls.connected_at`. Used only
+    /// to derive a turn's *duration* (`end_s - start_s`), which is immune to
+    /// whatever epoch this clock actually starts from; never used as an
+    /// absolute offset. `None` for every other provider.
+    pub start_s: Option<f64>,
+    pub end_s: Option<f64>,
 }
 
 pub enum SttEvent {

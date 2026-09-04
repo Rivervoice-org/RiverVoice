@@ -43,9 +43,15 @@ function Badge({
   ...props
 }: BadgeProps) {
   return (
-    <View ref={ref} className={cn(badgeVariants({ variant }), className)} {...props}>
+    <View
+      ref={ref}
+      className={cn(badgeVariants({ variant }), className)}
+      {...props}
+    >
       {typeof children === "string" ? (
-        <Text className={cn("text-xs font-medium", textColor[variant ?? "default"])}>
+        <Text
+          className={cn("text-xs font-medium", textColor[variant ?? "default"])}
+        >
           {children}
         </Text>
       ) : (

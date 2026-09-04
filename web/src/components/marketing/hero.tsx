@@ -29,22 +29,8 @@ export function Hero() {
           className="animate-rise mt-6 max-w-xl text-[15px] leading-7 text-balance text-muted-foreground sm:mt-8 sm:text-lg sm:leading-8"
           style={{ animationDelay: "0.08s" }}
         >
-          Your callers ring in from{" "}
-          {/* The three cities warm up in turn as the line settles — a whisper,
-              so the eye travels the sentence the way an accent would */}
-          {["Kanpur", "Kochi", "Coimbatore"].map((city, i) => (
-            <span key={city}>
-              <span
-                className="animate-city-warm text-foreground"
-                style={{ animationDelay: `${1.0 + i * 0.18}s` }}
-              >
-                {city}
-              </span>
-              {i === 0 ? ", " : i === 1 ? " and " : ""}
-            </span>
-          ))}{" "}
-          — half English, half not, changing language mid-sentence. Your agent keeps up, in all 5 of
-          them.
+          Place a call from the app, pick an agent, and talk. It answers back live, in whichever of
+          5 Indian languages the conversation is actually in — even if that changes mid-sentence.
         </p>
 
         <div

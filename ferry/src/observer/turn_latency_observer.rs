@@ -240,6 +240,7 @@ mod tests {
     fn turn_aggregation() -> Frame {
         Frame::new(FrameKind::UserTurnAggregation(UserTurnAggregationFrame {
             text: String::new(),
+            duration_ms: None,
         }))
     }
 

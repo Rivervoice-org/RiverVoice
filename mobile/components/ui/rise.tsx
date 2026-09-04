@@ -55,12 +55,15 @@ export function Rise({
 
   useFocusEffect(
     useCallback(() => {
-      progress.value = withDelay(resolvedDelay, withTiming(1, { duration: DURATION, easing: EASING }));
+      progress.value = withDelay(
+        resolvedDelay,
+        withTiming(1, { duration: DURATION, easing: EASING }),
+      );
       return () => {
         progress.value = 0;
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [resolvedDelay])
+    }, [resolvedDelay]),
   );
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -68,5 +71,7 @@ export function Rise({
     transform: [{ translateY: (1 - progress.value) * OFFSET }],
   }));
 
-  return <Animated.View style={[animatedStyle, style]}>{children}</Animated.View>;
+  return (
+    <Animated.View style={[animatedStyle, style]}>{children}</Animated.View>
+  );
 }

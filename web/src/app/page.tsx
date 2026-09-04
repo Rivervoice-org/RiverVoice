@@ -1,11 +1,12 @@
 import { Boot } from "@/components/marketing/boot";
+import { Demo } from "@/components/marketing/demo";
 import { Hero } from "@/components/marketing/hero";
 import { InView } from "@/components/marketing/in-view";
 import { Jaali } from "@/components/marketing/jaali";
 import { Languages } from "@/components/marketing/languages";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { SiteNav } from "@/components/marketing/site-nav";
-import { Steps } from "@/components/marketing/steps";
+import { HowItWorks } from "@/components/marketing/how-it-works";
 
 export const metadata = {
   // The one page that should not have the product name appended twice.
@@ -41,11 +42,13 @@ export default function LandingPage() {
           <Hero />
         </InView>
 
+        <Demo />
+
+        <HowItWorks />
+
         <InView>
           <Languages />
         </InView>
-
-        <Steps />
       </main>
 
       <SiteFooter />

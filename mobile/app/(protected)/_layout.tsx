@@ -1,6 +1,7 @@
-import { Redirect, Stack } from "expo-router";
+import { Redirect, Stack, usePathname } from "expo-router";
 import { View } from "react-native";
 import { useAuth } from "@/hooks/use-auth";
+import { useOnboardingSeen } from "@/lib/onboarding";
 import { useThemeColors } from "@/lib/theme";
 
 /**
@@ -12,17 +13,27 @@ import { useThemeColors } from "@/lib/theme";
 export default function ProtectedLayout() {
   const colors = useThemeColors();
   const { isAuthenticated, isBootstrapping } = useAuth();
+  const seenOnboarding = useOnboardingSeen();
+  const pathname = usePathname();
 
   // Restoring a session from the stored refresh token is asynchronous, and
   // isAuthenticated is false until it finishes. Redirecting during that
   // window would bounce a genuinely signed-in user out to Welcome on every
   // cold start, so hold on a blank canvas until the answer is real.
-  if (isBootstrapping) {
+  if (isBootstrapping || seenOnboarding === null) {
     return <View className="flex-1 bg-canvas" />;
   }
 
   if (!isAuthenticated) {
     return <Redirect href="/(auth)" />;
+  }
+
+  // First run after signing in: send a new user through the tour before
+  // anything else. Guarded on pathname so the redirect doesn't fire again
+  // once we're already there — it would otherwise loop instead of letting
+  // the Stack below ever mount the onboarding screen itself.
+  if (!seenOnboarding && pathname !== "/onboarding") {
+    return <Redirect href="/onboarding" />;
   }
 
   return (
@@ -33,6 +44,7 @@ export default function ProtectedLayout() {
       }}
     >
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="onboarding" />
       <Stack.Screen name="call-detail" />
       <Stack.Screen name="transcript" />
       <Stack.Screen name="agent-detail" />

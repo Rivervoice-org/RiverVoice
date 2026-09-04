@@ -20,7 +20,7 @@ import type { Database } from "@/lib/bindings/supabase";
  */
 export const supabase = createClient<Database>(
   config.supabaseUrl,
-  config.supabaseAnonKey,
+  config.supabasePublishableKey,
   {
     auth: {
       storage: AsyncStorage,

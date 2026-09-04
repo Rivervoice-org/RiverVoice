@@ -1,0 +1,156 @@
+name: ferry-deploy
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ferry-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # workflow_dispatch lets you pick any branch to run against in the
+    # Actions UI — this refuses to build/deploy anything but main, on top
+    # of (not instead of) the ferry-deploy-approval gate on the job below.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ferry
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      # No version tags exist for this action — `stable` is its documented,
+      # intended usage (it selects "whatever Rust stable currently is", not
+      # an action-code version). Pinned anyway for the same supply-chain
+      # reason as the others: a compromised push to this branch could inject
+      # malicious action code, not just a newer Rust. Trade-off: bumping
+      # Rust versions now requires manually updating this SHA rather than
+      # tracking new stable releases automatically.
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: ferry
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ferry-binary
+          path: ferry/target/release/ferry
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ferry-deploy-approval
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ferry-binary
+          path: .
+
+      - run: chmod +x ferry
+
+      # Without this, a failed health check below is too late — the scp step
+      # already overwrote the binary that was working, so the server would
+      # be left crash-looping the broken one with nothing to fall back to.
+      - name: Back up the currently-running binary
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ~/RiverVoice/ferry/target/release
+            if [ -f ferry ]; then cp ferry ferry.bak; fi
+
+      # Overwrites both dotenv files fresh from the FERRY_ENV_PRODUCTION
+      # secret every deploy — the instance's own copy is never hand-edited
+      # or treated as authoritative, this repo's secret is. ~/RiverVoice/.env
+      # only ever needs the one ENVIRONMENT line (see config.rs:load_dotenv),
+      # which isn't secret, so it's written literally rather than from a
+      # second secret.
+      - name: Write env files
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ~/RiverVoice
+            # Paired with the restore in the rollback branch below — a bad
+            # deploy isn't always a bad binary, it can be a bad
+            # FERRY_ENV_PRODUCTION value, so rolling back the binary alone
+            # would pair last-known-good code with this deploy's (possibly
+            # broken) config instead of actually restoring a known-good state.
+            if [ -f .env ]; then cp .env .env.bak; fi
+            if [ -f .env.production ]; then cp .env.production .env.production.bak; fi
+            echo "ENVIRONMENT=production" > .env
+            # NOT ferry/.env.production: config.rs's PROD_ENV_FILE is
+            # "../.env.production", resolved relative to ferry's
+            # WorkingDirectory (~/RiverVoice/ferry) — so the real file has to
+            # sit one level up, directly in ~/RiverVoice.
+            cat > .env.production <<'FERRY_ENV_EOF'
+            ${{ secrets.FERRY_ENV_PRODUCTION }}
+            FERRY_ENV_EOF
+
+      - name: Copy binary to the instance
+        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          source: ferry
+          target: ~/RiverVoice/ferry/target/release
+          overwrite: true
+
+      # On a failed health check, restores ferry.bak and restarts before
+      # failing the job — the workflow run still shows red (a real deploy
+      # problem happened, don't hide that), but the server itself ends up
+      # back on the last-known-good binary instead of crash-looping the new
+      # one indefinitely.
+      - name: Restart ferry, verify it came up, roll back on failure
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ~/RiverVoice/ferry/target/release
+            chmod +x ferry
+            # `|| true`: a failed restart here must still fall through to the
+            # health check and rollback below, not abort the script under
+            # `set -e` — the health check will correctly see it never came up.
+            sudo systemctl restart ferry || true
+            # Give it a moment to bind before checking it actually came up.
+            sleep 3
+            if curl -sf http://localhost:8085/health; then
+              echo "Deploy succeeded"
+              exit 0
+            fi
+
+            echo "Health check failed — rolling back to previous binary"
+            if [ -f ~/RiverVoice/.env.bak ]; then mv ~/RiverVoice/.env.bak ~/RiverVoice/.env; fi
+            if [ -f ~/RiverVoice/.env.production.bak ]; then mv ~/RiverVoice/.env.production.bak ~/RiverVoice/.env.production; fi
+            if [ -f ferry.bak ]; then
+              mv ferry.bak ferry
+              sudo systemctl restart ferry || true
+              sleep 3
+              if curl -sf http://localhost:8085/health; then
+                echo "Rolled back successfully"
+              else
+                echo "Rollback health check also failed — ferry may be down"
+              fi
+            else
+              echo "No backup binary found, cannot roll back"
+            fi
+            exit 1

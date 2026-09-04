@@ -11,7 +11,10 @@ function Card({
   return (
     <View
       ref={ref}
-      className={cn("rounded-xl border border-border bg-card shadow-float", className)}
+      className={cn(
+        "rounded-xl border border-border bg-card shadow-float",
+        className,
+      )}
       {...props}
     />
   );
@@ -22,22 +25,34 @@ function CardHeader({
   ref,
   ...props
 }: ViewProps & { ref?: React.Ref<View> }) {
-  return <View ref={ref} className={cn("px-4 pt-4 pb-2", className)} {...props} />;
+  return (
+    <View ref={ref} className={cn("px-4 pt-4 pb-2", className)} {...props} />
+  );
 }
 
 function CardTitle({
   className,
   ref,
   ...props
-}: React.ComponentProps<typeof Text> & { ref?: React.Ref<React.ElementRef<typeof Text>> }) {
-  return <Text ref={ref} className={cn("text-sm font-semibold", className)} {...props} />;
+}: React.ComponentProps<typeof Text> & {
+  ref?: React.Ref<React.ElementRef<typeof Text>>;
+}) {
+  return (
+    <Text
+      ref={ref}
+      className={cn("text-sm font-semibold", className)}
+      {...props}
+    />
+  );
 }
 
 function CardDescription({
   className,
   ref,
   ...props
-}: React.ComponentProps<typeof Text> & { ref?: React.Ref<React.ElementRef<typeof Text>> }) {
+}: React.ComponentProps<typeof Text> & {
+  ref?: React.Ref<React.ElementRef<typeof Text>>;
+}) {
   return (
     <Text
       ref={ref}

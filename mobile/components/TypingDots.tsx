@@ -60,7 +60,10 @@ export const TypingDots = memo(function TypingDots({
                 }),
               },
             ],
-            opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }),
+            opacity: value.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.5, 1],
+            }),
           }}
         />
       ))}

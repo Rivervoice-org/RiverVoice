@@ -18,9 +18,12 @@ supabase/.temp/
 build/
 dist/
 
-# env
+# env — file-based dev/prod separation: .env.dev / .env.prd (never commit), .env.example stays tracked
 .env
+.env.development
+.env.production
 .env*.local
+!.env.example
 
 # misc
 .DS_Store
@@ -47,3 +50,9 @@ yarn-error.log*
 
 # local scratch notes
 NOTES.md
+ferry/transcriptions.txt
+
+# opencode / skills — installed via `npx skills add`, not source
+.agents/
+.claude/
+skills-lock.json

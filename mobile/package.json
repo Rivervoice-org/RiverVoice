@@ -1,7 +1,7 @@
 {
   "name": "mobile",
-  "version": "1.0.0",
-  "main": "expo-router/entry",
+  "version": "0.2.2-dev.1",
+  "main": "index.js",
   "overrides": {
     "nativewind": {
       "react-native-css-interop": "$react-native-css-interop"
@@ -55,6 +55,7 @@
     "react-native-css-interop": "0.2.6",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-incall-manager": "^4.2.2",
+    "react-native-notify-kit": "^10.7.0",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",

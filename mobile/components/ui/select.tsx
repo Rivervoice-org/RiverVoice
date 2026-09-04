@@ -25,7 +25,7 @@ function SelectTrigger({
       ref={ref}
       className={cn(
         "h-10 flex-row items-center justify-between gap-2 rounded-lg border border-border bg-card px-3",
-        className
+        className,
       )}
       {...props}
     >
@@ -57,7 +57,7 @@ function SelectContent({
         className={cn(
           "rounded-lg border border-border bg-popover p-1 shadow-lift",
           open && "web:animate-in web:fade-in-0 web:zoom-in-95",
-          className
+          className,
         )}
         {...props}
       >
@@ -79,7 +79,7 @@ function SelectLabel({
       ref={ref}
       className={cn(
         "px-2 py-1.5 text-xs font-medium text-muted-foreground",
-        className
+        className,
       )}
       {...props}
     />
@@ -105,7 +105,7 @@ function SelectItem({
       value={value}
       className={cn(
         "flex-row items-center gap-2 rounded-md px-2 py-1.5 active:bg-secondary",
-        className
+        className,
       )}
       {...props}
     >

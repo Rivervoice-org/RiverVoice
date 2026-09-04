@@ -1,0 +1,97 @@
+const IS_DEV = process.env.APP_VARIANT === "development";
+
+const APP_ID = IS_DEV ? "com.rivervoice.app.dev" : "com.rivervoice.app";
+
+module.exports = {
+  expo: {
+    name: "Rivervoice",
+    slug: "rivervoice-mobile",
+    // Separate from prod's so expo-dev-client resolves to the right
+    // installed app when dev and prod are on the device side by side —
+    // two apps registering the same scheme makes that ambiguous.
+    scheme: IS_DEV ? "rivervoice-dev" : "rivervoice",
+    version: "0.2.2-dev.1",
+    orientation: "portrait",
+    icon: "./assets/icon.png",
+    userInterfaceStyle: "automatic",
+    plugins: [
+      "expo-router",
+      "expo-dev-client",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          microphonePermission:
+            "Allow $(PRODUCT_NAME) to access your microphone to place calls.",
+        },
+      ],
+      "expo-secure-store",
+      "expo-audio",
+      "@react-native-google-signin/google-signin",
+      [
+        "react-native-notify-kit",
+        {
+          android: {
+            // "microphone" over "phoneCall": phoneCall requires the app to
+            // register as a Telecom/ConnectionService calling app, which
+            // this app doesn't do — microphone matches what the foreground
+            // service is actually doing (ongoing call audio) without that
+            // extra native integration.
+            foregroundService: {
+              types: ["microphone"],
+            },
+          },
+        },
+      ],
+      [
+        "expo-splash-screen",
+        {
+          image: "./assets/splash-icon.png",
+          imageWidth: 200,
+          resizeMode: "contain",
+          backgroundColor: "#E6F4FE",
+        },
+      ],
+    ],
+    ios: {
+      supportsTablet: true,
+      bitcode: false,
+      bundleIdentifier: APP_ID,
+    },
+    android: {
+      adaptiveIcon: {
+        backgroundColor: "#FFFFFF",
+        foregroundImage: "./assets/android-icon-foreground.png",
+        backgroundImage: "./assets/android-icon-background.png",
+        monochromeImage: "./assets/android-icon-monochrome.png",
+      },
+      predictiveBackGestureEnabled: false,
+      permissions: [
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_CONNECT",
+        // Android 13+ requires this at runtime for any notification,
+        // including the ongoing-call foreground-service one below —
+        // react-native-notify-kit's plugin adds FOREGROUND_SERVICE and
+        // FOREGROUND_SERVICE_MICROPHONE itself, but not this one.
+        "android.permission.POST_NOTIFICATIONS",
+      ],
+      package: APP_ID,
+    },
+    web: {
+      favicon: "./assets/favicon.png",
+      bundler: "metro",
+    },
+    extra: {
+      router: {},
+      eas: {
+        projectId: "11b6f157-6a99-4132-9e04-428255a9b65f",
+      },
+    },
+  },
+};

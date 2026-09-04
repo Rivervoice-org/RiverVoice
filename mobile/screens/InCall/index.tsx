@@ -20,7 +20,14 @@ import {
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from "@gorhom/bottom-sheet";
-import { PhoneOff, Phone, Mic, MicOff, Captions } from "lucide-react-native";
+import {
+  PhoneOff,
+  Phone,
+  Mic,
+  MicOff,
+  Captions,
+  Minimize2,
+} from "lucide-react-native";
 import { Mascot } from "@/components/Mascot";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { PulsingRing } from "@/components/PulsingRing";
@@ -35,28 +42,38 @@ import {
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
 import { AudioDevice, CallStatus } from "@/lib/webrtc/ferry-call";
-import { callStatusLabel } from "@/lib/call-status";
+import { callStatusLabel, useElapsedSeconds } from "@/lib/call-status";
 import { AUDIO_ROUTE_ICONS, AUDIO_ROUTE_LABELS } from "@/lib/audio-route";
-import { LiveSpeaker, useFerryCall } from "@/hooks/use-ferry-call";
+import { LiveSpeaker } from "@/hooks/use-ferry-call";
+import { useActiveCall } from "@/hooks/use-active-call";
 import { recentCallsQueryKey } from "@/lib/calls/hooks";
 import { recentAgentsQueryKey } from "@/lib/agents/hooks";
 
+// Shared by both ways off this screen that leave the call running or ending
+// underneath — the hangup button (via `leaveScreen`) and the minimize
+// button. An immediate, synchronous `router.back()` can crash here (Fabric
+// "addViewAt: failed to insert view"): @gorhom/bottom-sheet registers each
+// BottomSheetModal's container with the root portal on mount, and popping
+// the screen in the same tick can race that registration's own pending
+// Fabric commit. Two RAFs (one to flush whatever's pending, one more
+// margin) is the standard workaround — see gorhom/react-native-bottom-sheet's
+// open issues on it.
+function safeGoBack(): void {
+  requestAnimationFrame(() => requestAnimationFrame(() => router.back()));
+}
+
 const CallStatusLine = memo(function CallStatusLine({
   status,
+  connectedAt,
   error,
   missingAgent,
 }: {
   status: CallStatus;
+  connectedAt: number | null;
   error: string | null;
   missingAgent: boolean;
 }) {
-  const [duration, setDuration] = useState(0);
-
-  useEffect(() => {
-    if (status !== CallStatus.Connected) return;
-    const interval = setInterval(() => setDuration((d) => d + 1), 1000);
-    return () => clearInterval(interval);
-  }, [status]);
+  const duration = useElapsedSeconds(connectedAt);
 
   if (missingAgent) {
     return (
@@ -136,7 +153,7 @@ const HandledByStrip = memo(function HandledByStrip({
     <View className="mt-7 flex-row items-center gap-2 rounded-full bg-secondary py-1.5 pl-1.5 pr-4">
       <Mascot ref={agentMascot || undefined} seed={agentName} size={26} />
       <Text variant="muted" className="text-[13px]">
-        Handled by <Text className="text-[13px] font-medium">{agentName}</Text>
+        Handling by <Text className="text-[13px] font-medium">{agentName}</Text>
       </Text>
     </View>
   );
@@ -204,6 +221,10 @@ export default function InCallScreen() {
   const agentName = params.agentName || "Agent";
   const missingAgent = !params.agentId;
 
+  // `useActiveCall` (not `useFerryCall` directly) so the call lives above
+  // this screen in `ActiveCallProvider` — navigating away from `/in-call`
+  // (back button, tapping the minimized pill's target elsewhere) no longer
+  // ends the call the way unmounting a locally-owned hook would have.
   const {
     status,
     conversation,
@@ -212,11 +233,12 @@ export default function InCallScreen() {
     isMuted,
     audioDevices,
     activeAudioDevice,
+    connectedAt,
     startCall,
     end,
     toggleMute,
     chooseAudioRoute,
-  } = useFerryCall();
+  } = useActiveCall();
   const callInProgress =
     status === CallStatus.Connecting ||
     status === CallStatus.Ringing ||
@@ -247,10 +269,27 @@ export default function InCallScreen() {
   );
 
   useEffect(() => {
-    if (params.agentId) {
-      startCall(params.agentId, params.phone);
+    // No-op if a call's already in progress (re-entering `/in-call` from the
+    // minimized pill re-runs this effect with the same params, and
+    // shouldn't restart anything) — see `createCall` in use-ferry-call.ts.
+    if (!params.agentId) {
+      return;
     }
-  }, [startCall, params.agentId, params.phone]);
+    startCall({
+      agentId: params.agentId,
+      phone: params.phone,
+      agentName,
+      agentMascot: params.agentMascot,
+      contactName,
+    });
+  }, [
+    startCall,
+    params.agentId,
+    params.phone,
+    agentName,
+    params.agentMascot,
+    contactName,
+  ]);
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
@@ -264,14 +303,23 @@ export default function InCallScreen() {
     // both of Home's lists are stale the moment this screen closes.
     void queryClient.invalidateQueries({ queryKey: recentCallsQueryKey });
     void queryClient.invalidateQueries({ queryKey: recentAgentsQueryKey });
-    captionsSheetRef.current?.dismiss();
-    requestAnimationFrame(() => router.back());
+    safeGoBack();
   }, [queryClient]);
 
   const endCall = useCallback(() => {
     end();
     leaveScreen();
   }, [end, leaveScreen]);
+
+  // Leaves the screen without touching the call — it (and, once connected,
+  // its duration) keeps running in `ActiveCallProvider`, and
+  // `CallMinimizedPill` is what gets the user back here. No `leavingRef`
+  // guard: unlike `leaveScreen`, nothing here needs to run only once, and
+  // the call staying up means there's no state this could double-trigger
+  // side effects against.
+  const minimize = useCallback(() => {
+    safeGoBack();
+  }, []);
 
   useEffect(() => {
     if (status === CallStatus.Ended) {
@@ -313,6 +361,16 @@ export default function InCallScreen() {
   return (
     <View className="flex-1 bg-canvas">
       <SafeAreaView className="flex-1" edges={["top", "bottom"]}>
+        <View className="flex-row items-center justify-start px-4 pt-2">
+          <Pressable
+            onPress={minimize}
+            hitSlop={8}
+            className="h-9 w-9 items-center justify-center rounded-lg active:bg-secondary"
+          >
+            <Minimize2 size={18} strokeWidth={2} color={colors.ink} />
+          </Pressable>
+        </View>
+
         <View className="flex-1 items-center justify-center px-8">
           <CallerIdentity
             contactName={contactName}
@@ -322,6 +380,7 @@ export default function InCallScreen() {
 
           <CallStatusLine
             status={status}
+            connectedAt={connectedAt}
             error={error}
             missingAgent={missingAgent}
           />
@@ -358,7 +417,7 @@ export default function InCallScreen() {
             />
             <CallControl
               icon={Captions}
-              label="Captions"
+              label="Transcript"
               disabled={!callInProgress}
               badge={hasUnseen}
               onPress={openCaptions}
@@ -391,7 +450,9 @@ export default function InCallScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 24 }}
         >
-          <Text className="mb-3 px-1 text-[15px] font-semibold">Captions</Text>
+          <Text className="mb-3 px-1 text-[15px] font-semibold">
+            Transcript
+          </Text>
           <CallTranscript lines={captionLines} interim={interimCaption} />
         </BottomSheetScrollView>
       </BottomSheetModal>

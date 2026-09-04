@@ -3,10 +3,7 @@ import { Separator } from "@/components/ui/separator";
 import { Wordmark } from "@/components/wordmark";
 
 /** In-page anchors only — this page has no wiring into the app behind sign-in. */
-const LINKS = [
-  { label: "Three steps", href: "#how" },
-  { label: "Languages", href: "#languages" },
-];
+const LINKS: { label: string; href: string }[] = [];
 
 export function SiteFooter() {
   return (
@@ -21,20 +18,22 @@ export function SiteFooter() {
           </p>
         </div>
 
-        <nav>
-          <ul className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            {LINKS.map((link) => (
-              <li key={link.label}>
-                <a
-                  href={link.href}
-                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {link.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        {LINKS.length > 0 && (
+          <nav>
+            <ul className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              {LINKS.map((link) => (
+                <li key={link.label}>
+                  <a
+                    href={link.href}
+                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
       </Reveal>
 
       <p className="mt-8 text-[11px] text-muted-foreground">

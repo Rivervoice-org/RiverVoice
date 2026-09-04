@@ -32,7 +32,8 @@ export function AgentDetailSkeleton() {
               key={width + index}
               className={cn(
                 "flex-row items-center justify-between px-4 py-3",
-                index < SETTING_ROW_WIDTHS.length - 1 && "border-b border-border",
+                index < SETTING_ROW_WIDTHS.length - 1 &&
+                  "border-b border-border",
               )}
             >
               <Skeleton className={cn("h-3 rounded-full", width)} />

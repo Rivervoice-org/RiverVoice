@@ -18,7 +18,7 @@ function Separator({
       className={cn(
         "bg-border",
         orientation === "horizontal" ? "h-px w-full" : "h-full w-px",
-        className
+        className,
       )}
       ref={ref}
       {...props}

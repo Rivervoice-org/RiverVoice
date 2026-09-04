@@ -1,7 +1,8 @@
-use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use uuid::Uuid;
+
+use super::jwks;
 
 #[derive(Debug)]
 pub enum AuthError {
@@ -17,53 +18,62 @@ pub struct UserSession {
 
 /// What Supabase Auth (GoTrue) actually puts in an access token — `sub` is
 /// the `auth.users.id` UUID, `aud` is always `"authenticated"` for a real
-/// user session (as opposed to e.g. a service-role key), and the profile
-/// fields GoTrue copies in from the Google ID token at sign-in live under
-/// `user_metadata`, not as top-level claims.
+/// user session (as opposed to e.g. a service-role key). Profile fields
+/// (email, name) aren't read here anymore — the `public.users` row is
+/// provisioned straight from `auth.users` by a database trigger (see
+/// migration `m20260831_000002_auth_user_trigger`), not from this token.
 #[derive(Debug, Serialize, Deserialize)]
 struct SupabaseClaims {
     sub: String,
     aud: String,
     exp: usize,
-    email: Option<String>,
-    #[serde(default)]
-    user_metadata: Value,
 }
 
-/// Everything `require_user` needs to know about the caller beyond their
-/// id, to lazily provision a `users` row the first time it sees them —
-/// there is no ferry-side sign-up step anymore, GoTrue owns that entirely.
+/// Everything `require_user` needs to know about the caller.
 pub struct VerifiedUser {
     pub user_id: Uuid,
-    pub email: Option<String>,
-    pub name: Option<String>,
 }
 
-/// Verifies a Supabase-issued access token against the project's shared JWT
-/// secret (the same `JWT_SECRET` GoTrue signs with — see docker-compose.yml)
-/// and recovers the caller's identity. HS256, not JWKS: self-hosted GoTrue
-/// signs with one shared secret rather than a rotating asymmetric key, so
-/// there's no key-fetching step the way Google ID token verification needed.
-pub fn verify_access_token(token: &str, secret: &[u8]) -> Result<VerifiedUser, AuthError> {
-    let mut validation = Validation::new(Algorithm::HS256);
+/// Verifies a Supabase-issued access token and recovers the caller's
+/// identity. Two signing schemes exist depending on how GoTrue is deployed:
+///
+/// - Self-hosted (this repo's docker-compose stack) signs HS256 with one
+///   shared secret — `hs256_secret`, the project's `JWT_SECRET`.
+/// - Supabase Cloud signs ES256 against a rotating per-project keypair,
+///   published as JWKS — verified here via `auth::jwks`, looked up by the
+///   token's `kid` header.
+///
+/// Which path runs is decided by the token's own `alg` header, not by
+/// environment — so a single ferry deployment can validate either kind of
+/// token.
+pub async fn verify_access_token(
+    token: &str,
+    hs256_secret: &[u8],
+) -> Result<VerifiedUser, AuthError> {
+    let header = decode_header(token).map_err(|_| AuthError::Invalid)?;
+
+    let mut validation = Validation::new(header.alg);
     validation.set_audience(&["authenticated"]);
     validation.set_required_spec_claims(&["exp", "sub", "aud"]);
 
-    let data = decode::<SupabaseClaims>(token, &DecodingKey::from_secret(secret), &validation)
-        .map_err(|_| AuthError::Invalid)?;
+    let claims = match header.alg {
+        Algorithm::ES256 => {
+            let kid = header.kid.as_deref().ok_or(AuthError::Invalid)?;
+            let jwk = jwks::get().key_for(kid).await.ok_or(AuthError::Invalid)?;
+            let key = DecodingKey::from_jwk(&jwk).map_err(|_| AuthError::Invalid)?;
+            decode::<SupabaseClaims>(token, &key, &validation)
+                .map_err(|_| AuthError::Invalid)?
+                .claims
+        }
+        Algorithm::HS256 => {
+            decode::<SupabaseClaims>(token, &DecodingKey::from_secret(hs256_secret), &validation)
+                .map_err(|_| AuthError::Invalid)?
+                .claims
+        }
+        _ => return Err(AuthError::Invalid),
+    };
 
-    let user_id = Uuid::parse_str(&data.claims.sub).map_err(|_| AuthError::Invalid)?;
-    let name = data
-        .claims
-        .user_metadata
-        .get("full_name")
-        .or_else(|| data.claims.user_metadata.get("name"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
+    let user_id = Uuid::parse_str(&claims.sub).map_err(|_| AuthError::Invalid)?;
 
-    Ok(VerifiedUser {
-        user_id,
-        email: data.claims.email,
-        name,
-    })
+    Ok(VerifiedUser { user_id })
 }

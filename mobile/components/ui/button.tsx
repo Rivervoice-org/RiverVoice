@@ -27,7 +27,7 @@ const buttonVariants = cva(
       },
     },
     defaultVariants: { variant: "default", size: "default" },
-  }
+  },
 );
 
 const textColor: Record<
@@ -75,7 +75,9 @@ function Button({
           }
         />
       ) : typeof children === "string" ? (
-        <Text className={cn("text-sm font-medium", textColor[variant ?? "default"])}>
+        <Text
+          className={cn("text-sm font-medium", textColor[variant ?? "default"])}
+        >
           {children}
         </Text>
       ) : (

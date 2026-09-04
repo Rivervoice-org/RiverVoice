@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { Appearance, View } from "react-native";
 import { vars } from "nativewind";
 
@@ -66,7 +73,9 @@ const DARK = {
 
 function toVars(tokens: Record<string, string>) {
   return vars(
-    Object.fromEntries(Object.entries(tokens).map(([key, value]) => [`--color-${key}`, value]))
+    Object.fromEntries(
+      Object.entries(tokens).map(([key, value]) => [`--color-${key}`, value]),
+    ),
   );
 }
 
@@ -142,12 +151,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ThemeContextValue>(
     () => ({ preference, setPreference, scheme, colors: themeColors[scheme] }),
-    [preference, scheme]
+    [preference, scheme],
   );
 
   return (
     <ThemeContext.Provider value={value}>
-      <View style={[{ flex: 1 }, scheme === "dark" ? darkVars : lightVars]}>{children}</View>
+      <View style={[{ flex: 1 }, scheme === "dark" ? darkVars : lightVars]}>
+        {children}
+      </View>
     </ThemeContext.Provider>
   );
 }

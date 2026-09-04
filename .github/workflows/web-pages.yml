@@ -52,7 +52,6 @@ jobs:
 
           const nextConfig: NextConfig = {
             output: "export",
-            basePath: "/RiverVoice",
             images: { unoptimized: true },
           };
 
@@ -63,6 +62,12 @@ jobs:
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+
+      # GitHub Pages runs Jekyll by default, which ignores any path
+      # starting with "_" — that includes Next's _next/static/css assets.
+      # Without this, the page deploys but loads with no CSS/JS.
+      - name: Disable Jekyll processing
+        run: touch out/.nojekyll
 
       - uses: actions/upload-pages-artifact@v3
         with:

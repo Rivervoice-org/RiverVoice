@@ -2,9 +2,9 @@ use ferry::{config, db, http, logging};
 
 #[tokio::main]
 async fn main() {
-    config::load_dotenv();
-
     logging::init();
+
+    config::load_dotenv();
     config::init();
     db::init().await;
 

@@ -3,7 +3,10 @@ export type MascotStyleId = "notionists" | "lorelei";
 const DEFAULT_STYLE: MascotStyleId = "notionists";
 
 /** Stored as "style:seed". A bare string is a seed in the default style. */
-export function parseMascot(ref: string): { style: MascotStyleId; seed: string } {
+export function parseMascot(ref: string): {
+  style: MascotStyleId;
+  seed: string;
+} {
   const split = ref.indexOf(":");
   const head = split > 0 ? ref.slice(0, split) : "";
   if (head === "notionists" || head === "lorelei") {
@@ -24,9 +27,15 @@ export const DEFAULT_MASCOT_REF = mascotRef(DEFAULT_STYLE, "new-agent");
 export const MASCOT_STYLE_IDS: MascotStyleId[] = ["notionists", "lorelei"];
 
 /** Annotated so the per-style literal types widen to one shape at the call site. */
-export function mascotStyle(id: MascotStyleId): { label: string; meta: { title: string; license?: { name: string } } } {
+export function mascotStyle(id: MascotStyleId): {
+  label: string;
+  meta: { title: string; license?: { name: string } };
+} {
   return id === "notionists"
-    ? { label: "Hand-drawn", meta: { title: "Notionists", license: { name: "CC0" } } }
+    ? {
+        label: "Hand-drawn",
+        meta: { title: "Notionists", license: { name: "CC0" } },
+      }
     : { label: "Inked", meta: { title: "Lorelei", license: { name: "CC0" } } };
 }
 
@@ -41,7 +50,7 @@ export function mascotStyle(id: MascotStyleId): { label: string; meta: { title: 
 export function avatarUrl(
   ref: string,
   size: number,
-  extraParams?: Record<string, string | number>
+  extraParams?: Record<string, string | number>,
 ) {
   const { style, seed } = parseMascot(ref);
   const params = new URLSearchParams({

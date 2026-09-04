@@ -9,6 +9,12 @@ mod m20260822_130000_require_agent_fields;
 mod m20260828_000000_google_auth_users;
 mod m20260829_000000_create_calls_tables;
 mod m20260831_000000_supabase_auth;
+mod m20260831_000001_recording_timing;
+mod m20260831_000002_auth_user_trigger;
+mod m20260831_000003_enable_rls;
+mod m20260901_000001_recording_storage_rls;
+mod m20260901_000002_rename_recording_columns;
+mod m20260901_000003_backfill_users;
 
 pub struct Migrator;
 
@@ -25,6 +31,12 @@ impl MigratorTrait for Migrator {
             Box::new(m20260828_000000_google_auth_users::Migration),
             Box::new(m20260829_000000_create_calls_tables::Migration),
             Box::new(m20260831_000000_supabase_auth::Migration),
+            Box::new(m20260831_000001_recording_timing::Migration),
+            Box::new(m20260831_000002_auth_user_trigger::Migration),
+            Box::new(m20260831_000003_enable_rls::Migration),
+            Box::new(m20260901_000001_recording_storage_rls::Migration),
+            Box::new(m20260901_000002_rename_recording_columns::Migration),
+            Box::new(m20260901_000003_backfill_users::Migration),
         ]
     }
 }

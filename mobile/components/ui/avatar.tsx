@@ -14,7 +14,10 @@ function Avatar({
     <AvatarPrimitive.Root
       alt={alt}
       ref={ref}
-      className={cn("h-9 w-9 overflow-hidden rounded-full bg-secondary", className)}
+      className={cn(
+        "h-9 w-9 overflow-hidden rounded-full bg-secondary",
+        className,
+      )}
       {...props}
     />
   );
@@ -48,7 +51,7 @@ function AvatarFallback({
       ref={ref}
       className={cn(
         "h-full w-full items-center justify-center rounded-full bg-secondary",
-        className
+        className,
       )}
       {...props}
     />

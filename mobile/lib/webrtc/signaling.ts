@@ -41,7 +41,10 @@ async function post<T extends { answerSdp: string }>(
 /** Posts our SDP offer for `agentId` (a persisted agent — the endpoint is
  * require_user-protected and looks the agent up server-side) to the one-way
  * try-agent demo, returns ferry's SDP answer. */
-export function postTryAgentOffer(offerSdp: string, agentId: string): Promise<string> {
+export function postTryAgentOffer(
+  offerSdp: string,
+  agentId: string,
+): Promise<string> {
   return post<TryAgentOfferResponse>("/v1/try-agent/offer", {
     offerSdp: offerSdp,
     agentId: agentId,

@@ -160,7 +160,14 @@ export function Splash({ onDone }: { onDone?: () => void }) {
               transformOrigin: "left",
             }}
           >
-            <Text style={{ fontSize: 28, lineHeight: 28, fontWeight: "600", letterSpacing: -0.8 }}>
+            <Text
+              style={{
+                fontSize: 28,
+                lineHeight: 28,
+                fontWeight: "600",
+                letterSpacing: -0.8,
+              }}
+            >
               Rivervoice
             </Text>
           </Animated.View>

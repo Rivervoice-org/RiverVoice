@@ -110,7 +110,10 @@ export function AgentPickerSheet({
       backgroundStyle={{ backgroundColor: colors.canvas }}
       handleIndicatorStyle={{ backgroundColor: colors.border }}
     >
-      <BottomSheetView style={{ paddingBottom: insets.bottom + 14 }} className="px-5 pt-1">
+      <BottomSheetView
+        style={{ paddingBottom: insets.bottom + 14 }}
+        className="px-5 pt-1"
+      >
         <Text className="mb-3 text-base font-semibold">Call with</Text>
 
         {isPending ? (
@@ -149,7 +152,13 @@ export function AgentPickerSheet({
             {agents.map((agent, index) => (
               <CallRow
                 key={agent.id}
-                avatar={<Mascot ref={agent.mascot ?? undefined} seed={agent.name} size={32} />}
+                avatar={
+                  <Mascot
+                    ref={agent.mascot ?? undefined}
+                    seed={agent.name}
+                    size={32}
+                  />
+                }
                 title={agent.name}
                 subtitle={`${agent.inputLanguage.toUpperCase()} → ${agent.outputLanguage.toUpperCase()}`}
                 showDivider={index !== agents.length - 1}
