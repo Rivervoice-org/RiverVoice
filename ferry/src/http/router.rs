@@ -79,6 +79,12 @@ fn agent_routes() -> Router<AppState> {
         .route_layer(middleware::from_fn(require_user))
 }
 
+fn credits_routes() -> Router<AppState> {
+    Router::new()
+        .route("/v1/credits/history", get(handlers::get_credit_history))
+        .route_layer(middleware::from_fn(require_user))
+}
+
 fn voice_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/voices/preview", post(handlers::preview_voice))
@@ -102,6 +108,7 @@ pub async fn start_server() -> anyhow::Result<()> {
         .merge(twilio_routes())
         .merge(agent_routes())
         .merge(voice_routes())
+        .merge(credits_routes())
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn(log_request))
         .layer(cors_layer())

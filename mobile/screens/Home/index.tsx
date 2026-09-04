@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { FlatList, RefreshControl, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import {
@@ -16,8 +16,8 @@ import { CallListItem, CallRow, type CallRowItem } from "@/components/CallRow";
 import { SwipeToCallRow } from "@/components/SwipeToCallRow";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Rise, rowDelay } from "@/components/ui/rise";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import { useThemeColors } from "@/lib/theme";
@@ -30,14 +30,9 @@ import {
 } from "@/lib/calls/format";
 import { useRecentAgents } from "@/lib/agents/hooks";
 import type { RecentAgent } from "@/lib/agents/types";
+import { useCreditBalance } from "@/lib/credits/hooks";
 import { useContacts } from "@/state/contacts";
 import { RecentAgentsSkeleton, RecentCallsSkeleton } from "./skeleton";
-
-const CREDITS = {
-  remaining: 3580,
-  total: 12000,
-  used: 8420,
-};
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -168,6 +163,7 @@ function HomeHeader({
   hasCalls: boolean;
 }) {
   const colors = useThemeColors();
+  const { data: balance, isLoading: isBalanceLoading } = useCreditBalance();
 
   return (
     <>
@@ -182,42 +178,46 @@ function HomeHeader({
         </View>
       </Rise>
 
-      {/* Credits. Mocked: nothing on ferry reports a balance yet, so these
-          figures are fixed until an endpoint exists to replace CREDITS
-          with. Reads as a balance rather than a usage meter — what is left
-          is the number that decides whether you can place a call. */}
+      {/* Credits balance, read from credit_balances (see
+          lib/credits/api.ts) — a running total, not a monthly quota, so
+          there's no "of N" ceiling or usage-bar to show against it. */}
       <Rise index={1}>
-        <Card className="mx-5 mt-4 p-4">
-          <View className="flex-row items-center justify-between">
-            <Text
-              variant="muted"
-              className="text-[11px] font-medium uppercase tracking-[0.14em]"
-            >
-              Credits
-            </Text>
-            <Coins size={14} strokeWidth={1.75} color={colors.muted} />
-          </View>
+        <Pressable
+          onPress={() => router.push("/credits-history")}
+          className="mx-5 mt-4 active:opacity-80"
+        >
+          <Card className="p-4">
+            <View className="flex-row items-center justify-between">
+              <Text
+                variant="muted"
+                className="text-[11px] font-medium uppercase tracking-[0.14em]"
+              >
+                Credits
+              </Text>
+              <View className="flex-row items-center gap-1">
+                <Coins size={14} strokeWidth={1.75} color={colors.muted} />
+                <ChevronRight
+                  size={14}
+                  strokeWidth={1.75}
+                  color={colors.muted}
+                />
+              </View>
+            </View>
 
-          <View className="mt-3 flex-row items-baseline gap-1.5">
-            <Text font="mono" className="text-lg font-semibold">
-              {CREDITS.remaining.toLocaleString()}
-            </Text>
-            <Text variant="muted" className="text-sm">
-              of {CREDITS.total.toLocaleString()}
-            </Text>
-          </View>
-
-          {/* Fills with what is left, not what is spent, so a nearly empty
-              balance reads as a nearly empty bar. */}
-          <Progress
-            value={(CREDITS.remaining / CREDITS.total) * 100}
-            className="mt-2.5"
-          />
-
-          <Text variant="muted" className="mt-2 text-xs">
-            {CREDITS.used.toLocaleString()} credits used this month
-          </Text>
-        </Card>
+            <View className="mt-3 flex-row items-baseline gap-1.5">
+              {isBalanceLoading ? (
+                <Skeleton className="h-5 w-16 rounded-full" />
+              ) : (
+                <Text font="mono" className="text-lg font-semibold">
+                  {(balance?.remaining ?? 0).toLocaleString()}
+                </Text>
+              )}
+              <Text variant="muted" className="text-sm">
+                credits remaining
+              </Text>
+            </View>
+          </Card>
+        </Pressable>
       </Rise>
 
       <RecentAgentsSection />

@@ -142,6 +142,13 @@ pub struct SttUsageFrame {
 
 #[derive(Clone, Copy, Default, serde::Deserialize)]
 pub struct MtUsageFrame {
+    /// Set by `SarvamMtProvider` (the pipeline's actual MT path) — Sarvam's
+    /// Translate endpoint bills per character, not per token, and reports no
+    /// usage of its own, so this is the input text's own length.
+    pub characters: u32,
+    /// Only ever set by `OpenRouterMtProvider`, an alternate `MtProvider`
+    /// impl not currently wired into `pipeline.rs` — left in place for a
+    /// possible future LLM-based MT provider swap.
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,

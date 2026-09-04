@@ -6,6 +6,7 @@ import {
 } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { X, PhoneOff, Mic, MicOff } from "lucide-react-native";
+import { CreditsExhaustedDialog } from "@/components/CreditsExhaustedDialog";
 import { Mascot } from "@/components/Mascot";
 import { PulsingRing } from "@/components/PulsingRing";
 import { TryAgentTranscript } from "@/components/try-agent-transcript";
@@ -55,6 +56,7 @@ export default function TryAgentScreen() {
     conversation,
     interimCaption,
     error,
+    creditsExhausted,
     isMuted,
     audioDevices,
     activeAudioDevice,
@@ -66,8 +68,13 @@ export default function TryAgentScreen() {
   const phase = callStatusToPhase(status);
 
   const [duration, setDuration] = useState(0);
+  const [showCreditsDialog, setShowCreditsDialog] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const audioRouteSheetRef = useRef<AudioRoutePickerHandle>(null);
+
+  useEffect(() => {
+    if (creditsExhausted) setShowCreditsDialog(true);
+  }, [creditsExhausted]);
 
   // Kick off the call as soon as the screen mounts — getUserMedia() below
   // handles the mic-permission prompt itself, no separate step needed.
@@ -147,7 +154,7 @@ export default function TryAgentScreen() {
               </>
             ) : status === CallStatus.Error ? (
               <Text className="text-[13px] text-destructive">
-                {error ?? "Call failed"}
+                {creditsExhausted ? "Out of credits" : (error ?? "Call failed")}
               </Text>
             ) : (
               <Text variant="muted" className="text-[13px]">
@@ -233,6 +240,11 @@ export default function TryAgentScreen() {
         devices={audioDevices}
         active={activeAudioDevice}
         onSelect={chooseAudioRoute}
+      />
+
+      <CreditsExhaustedDialog
+        open={showCreditsDialog}
+        onOpenChange={setShowCreditsDialog}
       />
     </>
   );

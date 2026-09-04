@@ -36,6 +36,7 @@ export function useFerryCall() {
   const [conversation, setConversation] = useState<ConversationLine[]>([]);
   const [interimCaption, setInterimCaption] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [creditsExhausted, setCreditsExhausted] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
   const [activeAudioDevice, setActiveAudioDevice] = useState<AudioDevice>(
@@ -61,6 +62,7 @@ export function useFerryCall() {
     setConversation([]);
     setInterimCaption("");
     setError(null);
+    setCreditsExhausted(false);
     setIsMuted(false);
     setAudioDevices([]);
     setActiveAudioDevice(AudioDevice.None);
@@ -88,6 +90,20 @@ export function useFerryCall() {
         ]);
       },
       onError: setError,
+      // By the time this fires, FerryCall's own negotiate() catch has
+      // already torn itself down (mic/peer connection released, status set
+      // to Error, not Ended — see ferry-call.ts) since this only ever
+      // follows a 402 on a call that never connected. Clearing the ref here
+      // (not via end(), which would flip status to Ended and trip
+      // InCallScreen's leaveScreen effect) is what lets a later
+      // createCall() succeed instead of silently no-op'ing forever — it
+      // bails out whenever callRef.current is already set, and this
+      // provider is mounted once for the whole app, so nothing else would
+      // ever clear it after a rejected call.
+      onCreditsExhausted: () => {
+        callRef.current = null;
+        setCreditsExhausted(true);
+      },
       onAudioRouteChange: (devices, active) => {
         setAudioDevices(devices);
         setActiveAudioDevice(active);
@@ -135,6 +151,7 @@ export function useFerryCall() {
     conversation,
     interimCaption,
     error,
+    creditsExhausted,
     isMuted,
     audioDevices,
     activeAudioDevice,

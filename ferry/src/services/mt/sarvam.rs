@@ -137,7 +137,13 @@ impl MtProvider for SarvamMtProvider {
             MtTextFrame {
                 text: result.translated_text,
             },
-            MtUsageFrame::default(),
+            // Sarvam's Translate response carries no usage block — billed
+            // per character of input, same convention `stages/tts.rs` uses
+            // for its own `characters` usage field.
+            MtUsageFrame {
+                characters: text.len() as u32,
+                ..Default::default()
+            },
         ))
     }
 }

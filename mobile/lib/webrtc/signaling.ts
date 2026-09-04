@@ -16,7 +16,18 @@ import type { TryAgentOfferResponse } from "@/lib/bindings/TryAgentOfferResponse
 import type { WebrtcOfferRequest } from "@/lib/bindings/WebrtcOfferRequest";
 import type { WebrtcOfferResponse } from "@/lib/bindings/WebrtcOfferResponse";
 
-export class SignalingError extends Error {}
+export class SignalingError extends Error {
+  /** The HTTP status ferry answered with, when this came from a real
+   * response (as opposed to a network/timeout failure) — e.g. 402 when the
+   * caller is out of credits (see `billing_observer::user_credits_exhausted`
+   * on the ferry side). `undefined` for anything that never got a response. */
+  status?: number | undefined;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.status = status;
+  }
+}
 
 /** Both endpoints answer with an SDP; `/v1/call/start` additionally returns a
  * `callId` that signaling has no use for, so the response type is a parameter
@@ -30,7 +41,7 @@ async function post<T extends { answerSdp: string }>(
     return result.answerSdp;
   } catch (err) {
     if (err instanceof FerryApiError) {
-      throw new SignalingError(err.message);
+      throw new SignalingError(err.message, err.status);
     }
     throw new SignalingError(
       `Could not reach the call server: ${err instanceof Error ? err.message : String(err)}`,

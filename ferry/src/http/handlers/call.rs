@@ -16,15 +16,18 @@ use crate::call::{
 use crate::codec::transport::webrtc_dc::WebRtcSerializer;
 use crate::config::{self, Config};
 use crate::db;
+use crate::db::entity::credit_ledger::CallType;
 use crate::db::entity::{agents, call_utterances, calls};
 use crate::http::MAX_REQUEST_BODY_SIZE;
 use crate::http::response::ApiResponse;
 use crate::http::state::AppState;
+use crate::observer::billing_observer::BillingObserver;
 use crate::observer::call_record_observer::CallRecorder;
 use crate::observer::frame_observer::FrameObserver;
 use crate::observer::log_observer::LogObserver;
 use crate::observer::turn_latency_observer::TurnLatencyRecorder;
 use crate::pipeline::build_translation_pipeline;
+use crate::pricing;
 use crate::processor::FrameIo;
 use crate::stages::stage::Stage;
 use crate::transport::base::BaseTransport;
@@ -101,6 +104,23 @@ pub async fn start_call(
         return Err(ApiResponse::fail(StatusCode::FORBIDDEN, "not authorized"));
     }
 
+    match crate::observer::billing_observer::user_credits_exhausted(session.user_id).await {
+        Ok(true) => {
+            return Err(ApiResponse::fail(
+                StatusCode::PAYMENT_REQUIRED,
+                "You're out of credits. Add credits to make a call.",
+            ));
+        }
+        Ok(false) => {}
+        Err(e) => {
+            tracing::error!("start_call: failed to check credit balance: {e}");
+            return Err(ApiResponse::fail(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Something went wrong. Please try again.",
+            ));
+        }
+    }
+
     let call_id = CallId::new();
 
     // Reserve this user's one active session before doing any of the real
@@ -166,6 +186,41 @@ pub async fn start_call(
     let a2b_turn_latency = turn_latency.observer("a2b");
     let b2a_turn_latency = turn_latency.observer("b2a");
 
+    // One observer per direction, same reasoning as the recorders above:
+    // each direction runs its own STT/MT/TTS chain and genuinely incurs its
+    // own cost, so each needs its own usage/charge stream rather than
+    // sharing one. Kept as the concrete type (not yet `Arc<dyn
+    // FrameObserver>`) so `watch_exhausted()` can still be reached below,
+    // once `handle` exists to actually hang the call up with.
+    //
+    // Only STT/MT/TTS usage is charged here — the PSTN leg's own minutes
+    // (pricing::TelephonyProviders::Twilio) aren't billed at all yet. Fine
+    // while Twilio is still on the trial account, but this needs to be
+    // added before a paid Twilio account is live, or telephony spend is
+    // pure loss. Twilio is also expected to be swapped for Vobiz down the
+    // line — see the comment on `TelephonyProviders` in pricing.rs.
+    //
+    // Always priced as SarvamTranslateV1: `SarvamMtProvider::model()` can
+    // actually pick MayuraV1 instead for a non-formal translate mode, but
+    // both are ₹20/10K chars in pricing/sarvam.json today, so this is exact
+    // either way — revisit if their rates ever diverge.
+    let a2b_billing = Arc::new(BillingObserver::new(
+        session.user_id,
+        call_id.as_uuid(),
+        CallType::PhoneCall,
+        pricing::SarvamTranslateModel::SarvamTranslateV1.cost(),
+        pricing::SarvamSttModel::Stt.cost(),
+        pricing::SarvamTtsModels::BulbulV3.cost(),
+    ));
+    let b2a_billing = Arc::new(BillingObserver::new(
+        session.user_id,
+        call_id.as_uuid(),
+        CallType::PhoneCall,
+        pricing::SarvamTranslateModel::SarvamTranslateV1.cost(),
+        pricing::SarvamSttModel::Stt.cost(),
+        pricing::SarvamTtsModels::BulbulV3.cost(),
+    ));
+
     // Two directional pipelines, not one self-looped pipeline: A's mic feeds
     // pipeline_a2b (STT in A's language -> MT -> TTS in B's language), and
     // its output is what B should hear. pipeline_b2a is the mirror, feeding
@@ -181,6 +236,7 @@ pub async fn start_call(
         vec![
             a2b_recorder.clone() as Arc<dyn FrameObserver>,
             a2b_turn_latency,
+            a2b_billing.clone() as Arc<dyn FrameObserver>,
         ],
     )
     .into_parts();
@@ -192,6 +248,7 @@ pub async fn start_call(
         vec![
             b2a_recorder.clone() as Arc<dyn FrameObserver>,
             b2a_turn_latency,
+            b2a_billing.clone() as Arc<dyn FrameObserver>,
         ],
     )
     .into_parts();
@@ -229,6 +286,8 @@ pub async fn start_call(
     // three separate handlers that trigger those transitions.
     recorder.spawn(call_id.as_uuid(), handle.clone());
     turn_latency.spawn(call_id.as_uuid(), handle.clone());
+    spawn_credits_watcher(a2b_billing, handle.clone());
+    spawn_credits_watcher(b2a_billing, handle.clone());
 
     let serializer = WebRtcSerializer;
     let base = BaseTransport::new(a_transport_io, serializer);
@@ -334,6 +393,25 @@ fn spawn_twilio_dial(
 
 fn observers(recorder: Arc<dyn FrameObserver>) -> Vec<Arc<dyn FrameObserver>> {
     vec![Arc::new(LogObserver), recorder]
+}
+
+/// Ends the call the moment `billing` reports its user out of credits.
+/// One of these per direction (both share the same user, so either can
+/// trip first) — `is_ended()` guards against a redundant `set_status` if
+/// the call already ended for some other reason in the meantime.
+fn spawn_credits_watcher(billing: Arc<BillingObserver>, handle: Arc<CallHandle>) {
+    let mut exhausted = billing.watch_exhausted();
+    tokio::spawn(async move {
+        loop {
+            if exhausted.changed().await.is_err() {
+                return; // `billing` dropped — the call ended some other way.
+            }
+            if *exhausted.borrow() && !handle.is_ended() {
+                handle.set_status(CallStatus::Ended(EndReason::CreditsExhausted));
+                return;
+            }
+        }
+    });
 }
 
 /// The one place a `calls` row is created. Everything after this is an UPDATE

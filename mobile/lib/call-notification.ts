@@ -90,6 +90,14 @@ export async function syncCallNotification(
   const chronometerFields = showChronometer
     ? { showChronometer: true, timestamp: connectedAt }
     : { showChronometer: false };
+  // A `microphone`-type foreground service requires RECORD_AUDIO to already
+  // be granted at start time, or Android throws (SecurityException) rather
+  // than just no-opping. `startCall`/`startTryAgent` request it via
+  // getUserMedia, but that grant is still in flight the instant `status`
+  // first flips to Connecting — so only ask for the foreground service once
+  // audio has actually connected (`connectedAt` set), meaning the grant has
+  // long since succeeded. Connecting/Ringing get a plain notification
+  // instead — that window is brief and the app is still in the foreground.
   await notifee.displayNotification({
     id: NOTIFICATION_ID,
     title: meta.contactName || meta.phone,
@@ -100,7 +108,7 @@ export async function syncCallNotification(
     data: inCallRouteParams(meta),
     android: {
       channelId: CHANNEL_ID,
-      asForegroundService: true,
+      asForegroundService: showChronometer,
       ongoing: true,
       pressAction: { id: "default" },
       ...chronometerFields,
@@ -109,7 +117,15 @@ export async function syncCallNotification(
 }
 
 /** Ends the foreground service and removes the notification — call once
- * `meta` clears (call ended, from any cause). */
+ * `meta` clears (call ended, from any cause).
+ *
+ * Both calls are needed: `stopForegroundService()` only tears down the
+ * foreground-service notification `syncCallNotification` shows once
+ * connected — a call that ends while still Connecting/Ringing (busy, no
+ * answer, credits exhausted before connecting, ...) only ever displayed a
+ * plain `ongoing: true` notification, which `stopForegroundService()` never
+ * touches and would otherwise be left behind indefinitely. */
 export async function endCallNotification(): Promise<void> {
   await notifee.stopForegroundService();
+  await notifee.cancelNotification(NOTIFICATION_ID);
 }

@@ -70,6 +70,9 @@ pub enum EndReason {
     Failed,
     HungUpByA,
     HungUpByB,
+    /// `BillingObserver::watch_exhausted` fired — the user's credit balance
+    /// hit zero mid-call, and this is what actually hangs the call up.
+    CreditsExhausted,
 }
 
 /// Everything shared between a call's two otherwise-independent legs: the
