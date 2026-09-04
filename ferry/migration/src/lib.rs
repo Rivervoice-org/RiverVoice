@@ -18,6 +18,7 @@ mod m20260901_000003_backfill_users;
 mod m20260904_000000_create_credit_tables;
 mod m20260904_000001_add_credits_exhausted_end_reason;
 mod m20260904_000002_create_try_agent_sessions;
+mod m20260904_000003_credit_balances_on_signup;
 
 pub struct Migrator;
 
@@ -43,6 +44,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260904_000000_create_credit_tables::Migration),
             Box::new(m20260904_000001_add_credits_exhausted_end_reason::Migration),
             Box::new(m20260904_000002_create_try_agent_sessions::Migration),
+            Box::new(m20260904_000003_credit_balances_on_signup::Migration),
         ]
     }
 }
