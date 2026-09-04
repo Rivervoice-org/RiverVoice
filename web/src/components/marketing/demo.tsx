@@ -30,13 +30,17 @@ export function Demo() {
 
       <Reveal delay={120} className="mt-10 sm:mt-14">
         <div className="overflow-hidden rounded-2xl border border-border shadow-(--shadow-lift)">
-          <iframe
-            className="aspect-video w-full"
-            src={YOUTUBE_SRC}
-            title="Rivervoice demo — a live translated call, start to finish"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
+          <video
+            // controls
+            width="100%"
+            autoPlay
+            muted
+            loop
+            playsInline
+            
+          >
+            <source src="/assets/demoVideo.mp4" type="video/mp4" />
+          </video>
         </div>
       </Reveal>
     </section>
