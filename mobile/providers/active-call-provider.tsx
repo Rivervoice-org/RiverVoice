@@ -52,10 +52,22 @@ export function ActiveCallProvider({ children }: { children: ReactNode }) {
   // from here — ferry hanging up, the other leg failing, WebRTC's transport
   // dying or coming up. Watched here rather than left to whichever screen
   // happens to be mounted, so the pill/timer stay right regardless.
+  //
+  // `Error` is just as terminal as `Ended` for this purpose — it's what a
+  // call that never got off the ground (mic permission denied, signaling
+  // never reached ferry, ...) reports instead, from `negotiate()`'s catch
+  // block in ferry-call.ts. `/in-call` still shows that error inline (it
+  // reads `status`/`error` from context directly, not `meta`), but without
+  // clearing `meta` here too, the failed call never counts as over: the
+  // minimized pill and the Android notification both key off `meta`, so
+  // they'd otherwise keep showing a call that's already dead.
   useEffect(() => {
     if (call.status === CallStatus.Connected) {
       setConnectedAt((prev) => prev ?? Date.now());
-    } else if (call.status === CallStatus.Ended) {
+    } else if (
+      call.status === CallStatus.Ended ||
+      call.status === CallStatus.Error
+    ) {
       setMeta(null);
       setConnectedAt(null);
     }
@@ -67,12 +79,24 @@ export function ActiveCallProvider({ children }: { children: ReactNode }) {
 
   // Keeps the Android ongoing-call notification/foreground service in sync
   // with the call, and ends it the moment `meta` clears.
+  //
+  // `syncCallNotification` awaits a permission prompt before it actually
+  // displays anything — if `meta` clears (call ends/errors) while that's
+  // still in flight, `endCallNotification` below can run first, and the
+  // stale call would otherwise resurrect the notification afterward with
+  // nothing left to clean it up. The cleanup flips `stale` for that run
+  // specifically, and `syncCallNotification` checks it right before
+  // displaying.
   useEffect(() => {
+    let stale = false;
     if (meta) {
-      void syncCallNotification(meta, call.status, connectedAt);
+      void syncCallNotification(meta, call.status, connectedAt, () => stale);
     } else {
       void endCallNotification();
     }
+    return () => {
+      stale = true;
+    };
   }, [meta, call.status, connectedAt]);
 
   const contextValue = useMemo(

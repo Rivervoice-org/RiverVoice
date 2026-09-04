@@ -328,7 +328,7 @@ pub async fn start_call(
         );
     }
 
-    spawn_twilio_dial(app.clone(), call_id, handle.clone(), config, to_number);
+    spawn_twilio_dial(app, call_id, handle, config, to_number);
 
     Ok(ApiResponse::ok(
         StatusCode::OK,

@@ -200,7 +200,7 @@ pub async fn get_credit_history(
                 max(l.id) as ledger_id,
                 max(l.entry_type::text) as entry_type,
                 max(l.call_type::text) as call_type,
-                sum(l.amount_credits) as amount_credits,
+                sum(l.amount_credits)::bigint as amount_credits,
                 max(l.created_at) as created_at,
                 max(l.note) filter (where l.call_id is null) as stage,
                 max(c.agent_name) as agent_name,
