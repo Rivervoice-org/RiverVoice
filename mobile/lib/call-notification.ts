@@ -117,7 +117,15 @@ export async function syncCallNotification(
 }
 
 /** Ends the foreground service and removes the notification — call once
- * `meta` clears (call ended, from any cause). */
+ * `meta` clears (call ended, from any cause).
+ *
+ * Both calls are needed: `stopForegroundService()` only tears down the
+ * foreground-service notification `syncCallNotification` shows once
+ * connected — a call that ends while still Connecting/Ringing (busy, no
+ * answer, credits exhausted before connecting, ...) only ever displayed a
+ * plain `ongoing: true` notification, which `stopForegroundService()` never
+ * touches and would otherwise be left behind indefinitely. */
 export async function endCallNotification(): Promise<void> {
   await notifee.stopForegroundService();
+  await notifee.cancelNotification(NOTIFICATION_ID);
 }

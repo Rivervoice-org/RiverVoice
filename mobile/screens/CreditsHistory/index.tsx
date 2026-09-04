@@ -25,6 +25,14 @@ import type { CreditHistoryEntry } from "@/lib/credits/types";
 import { cn } from "@/lib/utils";
 import { CreditsHistorySkeleton } from "./skeleton";
 
+/** Local calendar-date grouping key — year included, unlike `dateLabel`'s
+ * display string, so two entries a whole number of years apart (same
+ * weekday, day, and month) don't collide into one section. */
+function dateKey(iso: string): string {
+  const date = new Date(iso);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
 function dateLabel(iso: string, now: number = Date.now()): string {
   const date = new Date(iso);
   const days = Math.floor(
@@ -33,10 +41,12 @@ function dateLabel(iso: string, now: number = Date.now()): string {
   );
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
+  const sameYear = date.getFullYear() === new Date(now).getFullYear();
   return date.toLocaleDateString(undefined, {
     weekday: "long",
     day: "numeric",
     month: "short",
+    ...(sameYear ? {} : { year: "numeric" as const }),
   });
 }
 
@@ -49,21 +59,24 @@ function clockTime(iso: string): string {
 
 function groupByDate(entries: CreditHistoryEntry[]) {
   const order: string[] = [];
-  const byLabel = new Map<string, CreditHistoryEntry[]>();
+  const byKey = new Map<
+    string,
+    { label: string; data: CreditHistoryEntry[] }
+  >();
   for (const entry of entries) {
-    const label = dateLabel(entry.createdAt);
-    let group = byLabel.get(label);
+    const key = dateKey(entry.createdAt);
+    let group = byKey.get(key);
     if (!group) {
-      group = [];
-      byLabel.set(label, group);
-      order.push(label);
+      group = { label: dateLabel(entry.createdAt), data: [] };
+      byKey.set(key, group);
+      order.push(key);
     }
-    group.push(entry);
+    group.data.push(entry);
   }
-  return order.map((label) => ({
-    title: label,
-    data: byLabel.get(label) ?? [],
-  }));
+  return order.map((key) => {
+    const group = byKey.get(key);
+    return { title: group?.label ?? key, data: group?.data ?? [] };
+  });
 }
 
 function TransactionRow({

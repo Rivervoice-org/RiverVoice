@@ -199,11 +199,16 @@ pub async fn start_call(
     // added before a paid Twilio account is live, or telephony spend is
     // pure loss. Twilio is also expected to be swapped for Vobiz down the
     // line — see the comment on `TelephonyProviders` in pricing.rs.
+    //
+    // Always priced as SarvamTranslateV1: `SarvamMtProvider::model()` can
+    // actually pick MayuraV1 instead for a non-formal translate mode, but
+    // both are ₹20/10K chars in pricing/sarvam.json today, so this is exact
+    // either way — revisit if their rates ever diverge.
     let a2b_billing = Arc::new(BillingObserver::new(
         session.user_id,
         call_id.as_uuid(),
         CallType::PhoneCall,
-        pricing::SarvamModels::SarvamM.cost(),
+        pricing::SarvamTranslateModel::SarvamTranslateV1.cost(),
         pricing::SarvamSttModel::Stt.cost(),
         pricing::SarvamTtsModels::BulbulV3.cost(),
     ));
@@ -211,7 +216,7 @@ pub async fn start_call(
         session.user_id,
         call_id.as_uuid(),
         CallType::PhoneCall,
-        pricing::SarvamModels::SarvamM.cost(),
+        pricing::SarvamTranslateModel::SarvamTranslateV1.cost(),
         pricing::SarvamSttModel::Stt.cost(),
         pricing::SarvamTtsModels::BulbulV3.cost(),
     ));

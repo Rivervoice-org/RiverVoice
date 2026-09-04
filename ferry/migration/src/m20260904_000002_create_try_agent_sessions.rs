@@ -97,37 +97,24 @@ impl MigrationTrait for Migration {
             .map(|_| ())
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        let db = manager.get_connection();
-
-        db.execute_unprepared(
-            r#"
-            CREATE UNIQUE INDEX credit_ledger_charge_call_idx
-              ON credit_ledger (call_id) WHERE entry_type = 'charge';
-            "#,
-        )
-        .await?;
-
-        db.execute_unprepared(
-            r#"
-            ALTER TABLE credit_ledger
-              ADD CONSTRAINT credit_ledger_call_id_fkey
-              FOREIGN KEY (call_id) REFERENCES calls (id) ON DELETE SET NULL;
-            "#,
-        )
-        .await?;
-
-        db.execute_unprepared(
-            r#"
-            drop policy if exists try_agent_sessions_owner_select on public.try_agent_sessions;
-            alter table public.try_agent_sessions disable row level security;
-            "#,
-        )
-        .await?;
-
-        manager
-            .drop_table(Table::drop().table(TryAgentSessions::Table).to_owned())
-            .await
+    /// Not implemented, same reasoning as
+    /// `m20260904_000001_add_credits_exhausted_end_reason::down`: reversing
+    /// this migration means recreating `credit_ledger_charge_call_idx` and
+    /// `credit_ledger_call_id_fkey` exactly as they were, but by the time
+    /// `down()` runs there may be real data that violates both — a phone
+    /// call with more than one charge row (the unique index's whole reason
+    /// for going away), or a try-agent charge whose `call_id` points into
+    /// `try_agent_sessions` rather than `calls` (which the old FK never
+    /// allowed). Recreating them unconditionally would either fail outright
+    /// or silently constrain future writes against data that already
+    /// breaks the constraint.
+    async fn down(&self, _manager: &SchemaManager) -> Result<(), DbErr> {
+        Err(DbErr::Migration(
+            "down migration not supported: would require recreating \
+             credit_ledger_charge_call_idx and credit_ledger_call_id_fkey, \
+             which data written under this migration may already violate"
+                .to_string(),
+        ))
     }
 }
 

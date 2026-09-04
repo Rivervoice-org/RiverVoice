@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicI64, Ordering};
+
 use chrono::Utc;
 use sea_orm::ActiveValue::{NotSet, Set};
 use sea_orm::{
@@ -12,7 +14,7 @@ use crate::db::entity::credit_balances;
 use crate::db::entity::credit_ledger::{self, CallType, EntryType};
 use crate::frames::{Frame, FrameKind};
 use crate::observer::frame_observer::FrameObserver;
-use crate::pricing::{self, Per10KCost, PerMillionCost, PerMinuteCost};
+use crate::pricing::{self, Per10KCost, PerMinuteCost};
 use crate::stages::stage::Stage;
 
 /// `pricing::dollars_to_micros` already expresses cost in INR micros
@@ -20,8 +22,32 @@ use crate::stages::stage::Stage;
 /// left between "real money charged" and "credits deducted".
 const MICROS_PER_CREDIT: i64 = 100_000;
 
-fn micros_to_credits(cost_micros: i64) -> i64 {
-    (cost_micros + MICROS_PER_CREDIT / 2) / MICROS_PER_CREDIT
+/// Splits `total_micros` into whole credits and a sub-credit remainder to
+/// carry forward — floor division, not round-half-up: rounding each charge
+/// independently would discard a little cost every time and, worse, drop a
+/// charge entirely whenever it alone rounds to 0 (any single usage frame
+/// under ₹0.5). Carrying the remainder into the next charge means only the
+/// unavoidable final fractional credit (< ₹1) is ever left unbilled.
+fn split_micros_to_credits(total_micros: i64) -> (i64, i64) {
+    let credits = total_micros / MICROS_PER_CREDIT;
+    (credits, total_micros - credits * MICROS_PER_CREDIT)
+}
+
+/// What a charge's `units` count is measured in — purely for the
+/// `charge_usage` trace log below, never persisted (that's `note`'s job).
+#[derive(Clone, Copy)]
+enum UsageUnit {
+    AudioSecond,
+    Character,
+}
+
+impl std::fmt::Display for UsageUnit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::AudioSecond => "audio_second",
+            Self::Character => "character",
+        })
+    }
 }
 
 /// One resolved charge, handed off to `run_writer`. `on_push` (below) never
@@ -42,10 +68,15 @@ pub struct BillingObserver {
     user_id: Uuid,
     call_id: Uuid,
     call_type: CallType,
-    mt_cost: PerMillionCost,
+    mt_cost: Per10KCost,
     stt_cost: PerMinuteCost,
     tts_cost: Per10KCost,
 
+    /// Sub-credit micros left over from the last charge, carried into the
+    /// next one instead of being rounded away — see `split_micros_to_credits`.
+    /// Atomic rather than requiring `&mut self`: `charge()` runs on the
+    /// audio path via the shared `&self` `FrameObserver::on_push`.
+    remainder_micros: AtomicI64,
     exhausted_tx: watch::Sender<bool>,
     tx: UnboundedSender<ChargeEvent>,
 }
@@ -55,7 +86,7 @@ impl BillingObserver {
         user_id: Uuid,
         call_id: Uuid,
         call_type: CallType,
-        mt_cost: PerMillionCost,
+        mt_cost: Per10KCost,
         stt_cost: PerMinuteCost,
         tts_cost: Per10KCost,
     ) -> Self {
@@ -70,6 +101,7 @@ impl BillingObserver {
             mt_cost,
             stt_cost,
             tts_cost,
+            remainder_micros: AtomicI64::new(0),
             exhausted_tx,
             tx,
         }
@@ -90,13 +122,30 @@ impl BillingObserver {
         self.exhausted_tx.subscribe()
     }
 
-    fn charge(&self, cost_usd: f64, unit: &'static str, units: f64, note: &'static str) {
+    fn charge(&self, cost_usd: f64, unit: UsageUnit, units: f64, note: &'static str) {
         if cost_usd <= 0.0 {
             return;
         }
 
         let cost_micros = pricing::dollars_to_micros(cost_usd);
-        let amount_credits = micros_to_credits(cost_micros);
+
+        // CAS loop, not load-then-store: this observer is held as
+        // `Arc<dyn FrameObserver>` and `charge()` only takes `&self`, so the
+        // read-modify-write on the shared remainder has to be atomic
+        // end-to-end rather than racing between a separate load and store.
+        let mut current = self.remainder_micros.load(Ordering::Relaxed);
+        let amount_credits = loop {
+            let (credits, remainder) = split_micros_to_credits(current + cost_micros);
+            match self.remainder_micros.compare_exchange_weak(
+                current,
+                remainder,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break credits,
+                Err(actual) => current = actual,
+            }
+        };
         if amount_credits <= 0 {
             return;
         }
@@ -104,22 +153,19 @@ impl BillingObserver {
         tracing::info!(
             target: "ferry::billing",
             user_id = %self.user_id, call_id = %self.call_id,
-            amount_credits, cost_micros, unit, units, note,
+            amount_credits, cost_micros, %unit, units, note,
             "charge_usage"
         );
 
-        // try-agent (see http::handlers::try_agent) mints its own call_id
-        // but never writes a `calls` row for it — credit_ledger.call_id has
-        // a foreign key into `calls`, so a try-agent charge must leave this
-        // null and rely on call_type to say what it was instead.
-        let call_id = match self.call_type {
-            CallType::PhoneCall => Some(self.call_id),
-            CallType::TryAgent => None,
-        };
-
         let _ = self.tx.send(ChargeEvent {
             user_id: self.user_id,
-            call_id,
+            // Both call types get a real call_id now: PhoneCall points at
+            // `calls`, TryAgent at `try_agent_sessions` (written by
+            // `http::handlers::try_agent` before this observer is ever
+            // constructed) — call_type alone says which, since call_id
+            // isn't backed by a single foreign key anymore (see
+            // credit_ledger::Model::call_id).
+            call_id: Some(self.call_id),
             call_type: self.call_type.clone(),
             amount_credits: -amount_credits,
             cost_micros,
@@ -134,29 +180,23 @@ impl FrameObserver for BillingObserver {
             FrameKind::SttUsage(usage) if stage == Stage::Stt => {
                 self.charge(
                     self.stt_cost.charge(usage.audio_seconds),
-                    "audio_second",
+                    UsageUnit::AudioSecond,
                     usage.audio_seconds,
                     "stt",
                 );
             }
             FrameKind::MtUsage(usage) if stage == Stage::Mt => {
                 self.charge(
-                    self.mt_cost.charge_prompt(usage.prompt_tokens),
-                    "prompt_token",
-                    usage.prompt_tokens as f64,
-                    "mt",
-                );
-                self.charge(
-                    self.mt_cost.charge_completion(usage.completion_tokens),
-                    "completion_token",
-                    usage.completion_tokens as f64,
+                    self.mt_cost.charge(usage.characters),
+                    UsageUnit::Character,
+                    usage.characters as f64,
                     "mt",
                 );
             }
             FrameKind::TtsUsage(usage) if stage == Stage::Tts => {
                 self.charge(
                     self.tts_cost.charge(usage.characters),
-                    "character",
+                    UsageUnit::Character,
                     usage.characters as f64,
                     "tts",
                 );

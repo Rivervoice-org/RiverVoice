@@ -261,7 +261,7 @@ export default function InCallScreen() {
   const [showCreditsDialog, setShowCreditsDialog] = useState(false);
 
   useEffect(() => {
-    if (creditsExhausted) setShowCreditsDialog(true);
+    setShowCreditsDialog(creditsExhausted);
   }, [creditsExhausted]);
   const hasUnseen = !sheetOpenRef.current && conversation.length > seenCount;
 

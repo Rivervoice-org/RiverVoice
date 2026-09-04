@@ -3,7 +3,9 @@ use std::sync::Arc;
 use axum::body::to_bytes;
 use axum::extract::{Extension, Request, State};
 use axum::http::StatusCode;
-use sea_orm::EntityTrait;
+use chrono::Utc;
+use sea_orm::ActiveValue::Set;
+use sea_orm::{ActiveModelTrait, EntityTrait};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -14,6 +16,7 @@ use crate::config;
 use crate::db;
 use crate::db::entity::agents;
 use crate::db::entity::credit_ledger::CallType;
+use crate::db::entity::try_agent_sessions;
 use crate::http::MAX_REQUEST_BODY_SIZE;
 use crate::http::response::ApiResponse;
 use crate::http::state::AppState;
@@ -149,16 +152,35 @@ pub async fn try_agent_offer(
     // db footprint at all is for tracking how many credits got debited
     // during a session, so Credits History can show it: just call_id and
     // agent_id, nothing more.
+    let session_row = try_agent_sessions::ActiveModel {
+        id: Set(call_id),
+        user_id: Set(session.user_id),
+        agent_id: Set(agent_id),
+        created_at: Set(Utc::now().fixed_offset()),
+        connected_at: Set(None),
+        ended_at: Set(None),
+    };
+    if let Err(e) = session_row.insert(db::get()).await {
+        tracing::error!("try_agent_offer: failed to write try_agent_sessions row: {e}");
+        return Err(ApiResponse::fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Something went wrong. Please try again.",
+        ));
+    }
+
     let turn_latency = TurnLatencyRecorder::new();
     let turn_latency_observer = turn_latency.observer("solo");
-    // CallType::TryAgent, not PhoneCall: this call_id is never written to
-    // `calls` (see the comment above), so credit_ledger.call_id must stay
-    // null for it — BillingObserver keys off call_type to know that.
+    // CallType::TryAgent charges now get a real call_id too — it points at
+    // the try_agent_sessions row just written above, not `calls` (see
+    // BillingObserver::charge and credit_ledger::Model::call_id).
     let billing = Arc::new(BillingObserver::new(
         session.user_id,
         call_id,
         CallType::TryAgent,
-        pricing::SarvamModels::SarvamM.cost(),
+        // Always priced as SarvamTranslateV1 — see the matching comment in
+        // http::handlers::call for why that's exact even though
+        // SarvamMtProvider::model() can pick MayuraV1 instead.
+        pricing::SarvamTranslateModel::SarvamTranslateV1.cost(),
         pricing::SarvamSttModel::Stt.cost(),
         pricing::SarvamTtsModels::BulbulV3.cost(),
     ));
@@ -202,8 +224,19 @@ pub async fn try_agent_offer(
     {
         let mut exhausted = billing.watch_exhausted();
         tokio::spawn(async move {
-            if exhausted.changed().await.is_ok() && *exhausted.borrow() {
-                let _ = status_tx.send(CallStatus::Ended(EndReason::CreditsExhausted));
+            // run_writer sends on every charge write, not just when it
+            // flips to true — the first `changed()` almost always still
+            // sees `false` (the session's first charge, long before
+            // exhaustion). Loop until exhaustion is actually observed, same
+            // pattern http::handlers::call's spawn_credits_watcher uses.
+            loop {
+                if exhausted.changed().await.is_err() {
+                    return;
+                }
+                if *exhausted.borrow() {
+                    let _ = status_tx.send(CallStatus::Ended(EndReason::CreditsExhausted));
+                    return;
+                }
             }
         });
     }

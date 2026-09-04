@@ -1,5 +1,6 @@
 use axum::extract::{Extension, Query};
 use axum::http::StatusCode;
+use chrono::DateTime;
 use sea_orm::prelude::DateTimeWithTimeZone;
 use sea_orm::{ConnectionTrait, DatabaseBackend, QueryResult, Statement};
 use serde::{Deserialize, Serialize};
@@ -168,7 +169,22 @@ pub async fn get_credit_history(
     // (created_at, tiebreak) cursor rather than an offset: new charges land
     // at the head of this list too, and an offset would skip or repeat rows
     // as the user scrolls.
-    let cursor = query.before.as_deref().and_then(decode_cursor);
+    // Split successfully (has a `|`) isn't the same as valid — `created_at`
+    // gets cast to timestamptz straight in SQL below, and a malformed value
+    // (e.g. `bad|key`) would otherwise surface as a generic 500 from
+    // Postgres rejecting the cast rather than a clean "your cursor is bad".
+    let cursor = match query.before.as_deref().map(decode_cursor) {
+        Some(Some((created_at, group_key))) => {
+            if DateTime::parse_from_rfc3339(created_at).is_err() {
+                return Err(ApiResponse::fail(StatusCode::BAD_REQUEST, "invalid cursor"));
+            }
+            Some((created_at, group_key))
+        }
+        Some(None) => {
+            return Err(ApiResponse::fail(StatusCode::BAD_REQUEST, "invalid cursor"));
+        }
+        None => None,
+    };
     let cursor_created_at = cursor.map(|(created_at, _)| created_at);
     let cursor_group_key = cursor.map(|(_, group_key)| group_key).unwrap_or("");
 
@@ -180,7 +196,7 @@ pub async fn get_credit_history(
               select
                 coalesce(l.call_id::text, 'row:' || l.id::text) as group_key,
                 bool_or(l.call_id is not null) as is_call_summary,
-                max(l.call_id) as call_id,
+                max(l.call_id::text)::uuid as call_id,
                 max(l.id) as ledger_id,
                 max(l.entry_type::text) as entry_type,
                 max(l.call_type::text) as call_type,
